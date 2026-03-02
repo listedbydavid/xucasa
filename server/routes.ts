@@ -6,6 +6,7 @@ import { z } from "zod";
 import { registerAuthRoutes } from "./replit_integrations/auth";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { getPublicRecords } from "./publicRecords";
+import { getZoningData } from "./zoningData";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -119,6 +120,39 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Public records error:", err);
       res.status(500).json({ message: "Failed to fetch public records" });
+    }
+  });
+
+  app.get("/api/properties/:id/zoning", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+
+      const prop = await storage.getProperty(id);
+      if (!prop) return res.status(404).json({ message: "Property not found" });
+
+      const streetNumber = prop.addressStreetNumber || "";
+      const streetName = prop.addressStreetName || "";
+      const city = prop.addressCity || prop.location?.split(",")[0]?.trim() || "";
+      const state = (prop.addressState || prop.location?.split(",")[1]?.trim() || "").trim();
+      const zip = prop.addressZip || "";
+
+      // We need geocoordinates — reuse the public records geocoder
+      const { geocodeAddress } = await import("./publicRecords");
+      const geocoded = await geocodeAddress(streetNumber, streetName, city, state, zip);
+
+      if (!geocoded) {
+        return res.status(200).json({
+          landUse: null, buildingContext: { typicalLevels: null, maxLevels: null, sampleBuildings: [], dominantBuildingType: null },
+          elevation: null, activeConstruction: [], historicDesignations: [], zappLink: null,
+        });
+      }
+
+      const data = await getZoningData(streetNumber, streetName, city, state, zip, geocoded.lat, geocoded.lng);
+      res.status(200).json(data);
+    } catch (err) {
+      console.error("Zoning data error:", err);
+      res.status(500).json({ message: "Failed to fetch zoning data" });
     }
   });
 

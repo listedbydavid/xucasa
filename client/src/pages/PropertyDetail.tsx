@@ -5,6 +5,7 @@ import { BedDouble, Bath, Maximize, MapPin, Heart, Sparkles, Building, Briefcase
 import { useAuth } from "@/hooks/use-auth";
 import { MapView } from "@/components/MapView";
 import { PublicRecordsPanel } from "@/components/PublicRecordsPanel";
+import { ZoningPanel } from "@/components/ZoningPanel";
 
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -167,6 +168,9 @@ export default function PropertyDetail() {
               </div>
             </div>
           </div>
+
+          {/* Zoning & Development Intelligence */}
+          <ZoningPanel propertyId={property.id} />
 
           {/* Public Records & Neighborhood Data */}
           <PublicRecordsPanel propertyId={property.id} />
