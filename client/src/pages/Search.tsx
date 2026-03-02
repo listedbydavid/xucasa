@@ -4,6 +4,7 @@ import { PropertyCard } from "@/components/PropertyCard";
 import { useProperties } from "@/hooks/use-properties";
 import { useCreateSavedSearch } from "@/hooks/use-saved";
 import { Search as SearchIcon, Filter, MapPin, Map, BookmarkPlus } from "lucide-react";
+import { MapView } from "@/components/MapView";
 import queryString from "query-string";
 
 export default function Search() {
@@ -129,25 +130,9 @@ export default function Search() {
           )}
         </div>
 
-        {/* Right Map Pane - Placeholder */}
-        <div className="hidden lg:flex lg:w-2/5 xl:w-1/2 bg-muted relative border-l border-border">
-          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1524661135-423995f22d0b?w=1000&q=80')] bg-cover bg-center opacity-40"></div>
-          <div className="absolute inset-0 bg-blue-500/10 mix-blend-overlay"></div>
-          
-          <div className="relative w-full h-full flex flex-col items-center justify-center">
-            <div className="glass-panel p-6 rounded-3xl flex flex-col items-center text-center max-w-sm shadow-2xl">
-              <div className="bg-primary/10 text-primary p-4 rounded-full mb-4">
-                <Map className="w-8 h-8" />
-              </div>
-              <h3 className="font-display font-bold text-xl mb-2 text-foreground">Interactive Map View</h3>
-              <p className="text-muted-foreground text-sm font-medium mb-6">
-                Map integration would appear here, showing pins for all {properties?.length || 0} active results.
-              </p>
-              <button className="bg-foreground text-background px-6 py-2.5 rounded-full font-bold text-sm shadow-md hover:bg-primary transition-colors">
-                Explore Area
-              </button>
-            </div>
-          </div>
+        {/* Right Map Pane */}
+        <div className="hidden lg:flex lg:w-2/5 xl:w-1/2 bg-muted relative border-l border-border overflow-hidden">
+          <MapView properties={properties || []} />
         </div>
       </div>
     </div>

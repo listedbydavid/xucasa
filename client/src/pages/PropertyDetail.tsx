@@ -3,6 +3,7 @@ import { useProperty } from "@/hooks/use-properties";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
 import { BedDouble, Bath, Maximize, MapPin, Heart, Sparkles, Building, Briefcase } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { MapView } from "@/components/MapView";
 
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -158,6 +159,10 @@ export default function PropertyDetail() {
                 <button className="w-full bg-foreground text-background py-3.5 rounded-xl font-bold hover:bg-primary transition-colors shadow-md hover:shadow-xl active:scale-95">
                   Contact Agent
                 </button>
+              </div>
+
+              <div className="mt-8 bg-muted rounded-3xl border border-border overflow-hidden h-64">
+                <MapView properties={[property]} zoom={15} />
               </div>
             </div>
           </div>
