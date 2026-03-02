@@ -23,12 +23,12 @@ export const properties = pgTable("properties", {
   sqft: integer("sqft").notNull(),
   lotSize: integer("lot_size"),
   hoaFee: integer("hoa_fee"),
-  isOffMarket: boolean("is_off_market").default(false).notNull(), // For the make me move feature
+  isOffMarket: boolean("is_off_market").default(false).notNull(),
   agentId: varchar("agent_id").references(() => users.id),
   lat: decimal("lat"),
   lng: decimal("lng"),
   imageUrl: text("image_url"),
-  status: text("status").default("active").notNull(), // active, pending, sold
+  status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -43,41 +43,64 @@ export const savedSearches = pgTable("saved_searches", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id").references(() => users.id).notNull(),
   name: text("name").notNull(),
-  criteria: jsonb("criteria").notNull(), // e.g., { minPrice, maxPrice, beds, location }
+  criteria: jsonb("criteria").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const searchHistory = pgTable("search_history", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  query: text("query").notNull(),
+  criteria: jsonb("criteria").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const userHomes = pgTable("user_homes", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  nickname: text("nickname").notNull(),
+  addressStreetNumber: text("address_street_number"),
+  addressStreetName: text("address_street_name"),
+  addressUnitNumber: text("address_unit_number"),
+  addressCity: text("address_city"),
+  addressState: text("address_state"),
+  addressZip: text("address_zip"),
+  notes: text("notes"),
+  lat: decimal("lat"),
+  lng: decimal("lng"),
+  imageUrl: text("image_url"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Relations
 export const propertiesRelations = relations(properties, ({ one, many }) => ({
-  agent: one(users, {
-    fields: [properties.agentId],
-    references: [users.id],
-  }),
+  agent: one(users, { fields: [properties.agentId], references: [users.id] }),
   savedBy: many(savedProperties),
 }));
 
 export const savedPropertiesRelations = relations(savedProperties, ({ one }) => ({
-  user: one(users, {
-    fields: [savedProperties.userId],
-    references: [users.id],
-  }),
-  property: one(properties, {
-    fields: [savedProperties.propertyId],
-    references: [properties.id],
-  }),
+  user: one(users, { fields: [savedProperties.userId], references: [users.id] }),
+  property: one(properties, { fields: [savedProperties.propertyId], references: [properties.id] }),
 }));
 
 export const savedSearchesRelations = relations(savedSearches, ({ one }) => ({
-  user: one(users, {
-    fields: [savedSearches.userId],
-    references: [users.id],
-  }),
+  user: one(users, { fields: [savedSearches.userId], references: [users.id] }),
 }));
 
-// Schemas
+export const searchHistoryRelations = relations(searchHistory, ({ one }) => ({
+  user: one(users, { fields: [searchHistory.userId], references: [users.id] }),
+}));
+
+export const userHomesRelations = relations(userHomes, ({ one }) => ({
+  user: one(users, { fields: [userHomes.userId], references: [users.id] }),
+}));
+
+// Insert Schemas
 export const insertPropertySchema = createInsertSchema(properties).omit({ id: true, createdAt: true });
 export const insertSavedPropertySchema = createInsertSchema(savedProperties).omit({ id: true, createdAt: true });
 export const insertSavedSearchSchema = createInsertSchema(savedSearches).omit({ id: true, createdAt: true });
+export const insertSearchHistorySchema = createInsertSchema(searchHistory).omit({ id: true, createdAt: true });
+export const insertUserHomeSchema = createInsertSchema(userHomes).omit({ id: true, createdAt: true });
 
 // Types
 export type Property = typeof properties.$inferSelect;
@@ -86,6 +109,10 @@ export type SavedProperty = typeof savedProperties.$inferSelect;
 export type InsertSavedProperty = z.infer<typeof insertSavedPropertySchema>;
 export type SavedSearch = typeof savedSearches.$inferSelect;
 export type InsertSavedSearch = z.infer<typeof insertSavedSearchSchema>;
+export type SearchHistory = typeof searchHistory.$inferSelect;
+export type InsertSearchHistory = z.infer<typeof insertSearchHistorySchema>;
+export type UserHome = typeof userHomes.$inferSelect;
+export type InsertUserHome = z.infer<typeof insertUserHomeSchema>;
 
 // Request Types
 export type CreatePropertyRequest = InsertProperty;
@@ -93,6 +120,8 @@ export type UpdatePropertyRequest = Partial<InsertProperty>;
 export type PropertyResponse = Property & { agent?: typeof users.$inferSelect | null };
 export type SavedPropertyResponse = SavedProperty & { property: Property };
 export type SavedSearchResponse = SavedSearch;
+export type SearchHistoryResponse = SearchHistory;
+export type UserHomeResponse = UserHome;
 
 // Criteria JSON type
 export const searchCriteriaSchema = z.object({

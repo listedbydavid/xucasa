@@ -6,10 +6,10 @@ Redstate is a Redfin-inspired real estate web application that allows users to b
 
 Key features:
 - Property search with filters (location, price, beds, baths, sqft, HOA fee, off-market)
-- Interactive Google Maps view with property markers and Street View
-- Property detail pages with neighborhood stats, flood zone info, and nearby places (pulled from public APIs)
-- User dashboard for saved homes and saved searches
-- Agent dashboard for creating, editing, and deleting listings
+- Interactive Google Maps view with property markers (real geocoordinates) and Street View
+- Property detail pages with neighborhood stats, flood zone info, and nearby places (public APIs)
+- **Client Dashboard** — profile editor, My Home tracker with property intelligence, favorites, saved searches, search history
+- Agent dashboard for creating, editing, and deleting listings with Street View auto-photo
 - Authentication via Replit Auth (OpenID Connect)
 
 ## User Preferences
@@ -33,8 +33,8 @@ Preferred communication style: Simple, everyday language.
 - `/` — Home with hero search and featured listings
 - `/search` — Property search with filters + split map/list view
 - `/property/:id` — Property detail with map, public records panel
-- `/dashboard` — User saved homes + saved searches
-- `/agent` — Agent dashboard (list/create/edit/delete own properties)
+- `/dashboard` — Client dashboard: profile, My Home tracker, favorites, saved searches, search history
+- `/agent` — Agent dashboard (list/create/edit/delete own properties with Street View photo)
 
 ### Backend
 
@@ -52,9 +52,11 @@ Preferred communication style: Simple, everyday language.
 - **Schema** (`shared/schema.ts`):
   - `users` — auth user profiles (id, email, firstName, lastName, profileImageUrl)
   - `sessions` — server-side session storage for Replit Auth (mandatory, managed by `connect-pg-simple`)
-  - `properties` — listings with address fields, price, beds, baths, sqft, lotSize, hoaFee, status, agentId, imageUrl, isOffMarket flag
+  - `properties` — listings with address fields, price, beds, baths, sqft, lotSize, hoaFee, status, agentId, imageUrl, isOffMarket, lat, lng
   - `savedProperties` — join table: userId + propertyId
   - `savedSearches` — userId + name + JSONB criteria
+  - `searchHistory` — userId + query string + JSONB criteria (auto-logged from Search page, last 50 per user)
+  - `userHomes` — userId + address fields + nickname + notes + lat/lng + imageUrl (Street View auto-photo)
 - **Migrations**: `./migrations/` directory, applied with `drizzle-kit push`
 
 ### Authentication

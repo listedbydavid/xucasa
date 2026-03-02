@@ -3,6 +3,8 @@ import { useLocation } from "wouter";
 import { PropertyCard } from "@/components/PropertyCard";
 import { useProperties } from "@/hooks/use-properties";
 import { useCreateSavedSearch } from "@/hooks/use-saved";
+import { useAddSearchHistory } from "@/hooks/use-client-dashboard";
+import { useAuth } from "@/hooks/use-auth";
 import { Search as SearchIcon, MapPin, Map, BookmarkPlus, X } from "lucide-react";
 import { MapView } from "@/components/MapView";
 import { useJsApiLoader } from "@react-google-maps/api";
@@ -90,6 +92,17 @@ export default function Search() {
 
   const { data: properties, isLoading } = useProperties(activeQuery);
   const { mutate: saveSearch, isPending: isSavingSearch } = useCreateSavedSearch();
+  const { isAuthenticated } = useAuth();
+  const { mutate: addHistory } = useAddSearchHistory();
+
+  // Log search history when user searches (debounced 2s, authenticated only)
+  useEffect(() => {
+    if (!isAuthenticated || !locationInput || locationInput.length < 3) return;
+    const timer = setTimeout(() => {
+      addHistory({ query: locationInput, criteria: activeQuery });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [locationInput, isAuthenticated]);
 
   const handleSaveSearch = () => {
     const name = locationInput ? `Search in ${locationInput}` : "General Search";

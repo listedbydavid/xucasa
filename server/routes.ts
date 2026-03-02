@@ -279,6 +279,158 @@ export async function registerRoutes(
     }
   });
 
+  // Profile update
+  app.patch("/api/auth/user", isAuthenticated, async (req: any, res) => {
+    try {
+      const { authStorage } = await import("./replit_integrations/auth/storage");
+      const userId = req.user.claims.sub;
+      const { firstName, lastName } = req.body;
+      const updated = await authStorage.updateUser(userId, { firstName, lastName });
+      res.status(200).json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
+  // Search History
+  app.get("/api/search-history", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const history = await storage.getSearchHistory(userId);
+      res.status(200).json(history);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.post("/api/search-history", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { query, criteria } = req.body;
+      if (!query) return res.status(400).json({ message: "query required" });
+      const entry = await storage.addSearchHistory(userId, query, criteria || {});
+      res.status(201).json(entry);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.delete("/api/search-history/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      await storage.deleteSearchHistory(id, userId);
+      res.status(204).end();
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.delete("/api/search-history", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      await storage.clearSearchHistory(userId);
+      res.status(204).end();
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  // My Homes (user-tracked properties)
+  app.get("/api/my-homes", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const homes = await storage.getUserHomes(userId);
+      res.status(200).json(homes);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.post("/api/my-homes", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { nickname, addressStreetNumber, addressStreetName, addressUnitNumber, addressCity, addressState, addressZip, notes } = req.body;
+      if (!nickname) return res.status(400).json({ message: "nickname required" });
+
+      const home = await storage.createUserHome(userId, {
+        nickname, addressStreetNumber, addressStreetName, addressUnitNumber,
+        addressCity, addressState, addressZip, notes, userId,
+      });
+
+      // Geocode in background
+      (async () => {
+        try {
+          const { geocodeAddress } = await import("./publicRecords");
+          const geo = await geocodeAddress(addressStreetNumber || "", addressStreetName || "", addressCity || "", addressState || "", addressZip || "");
+          if (geo) {
+            await storage.updateUserHome(home.id, userId, { lat: String(geo.lat), lng: String(geo.lng) } as any);
+            // Generate Street View image URL
+            const MAPS_KEY = process.env.VITE_GOOGLE_MAPS_API_KEY || "";
+            if (MAPS_KEY) {
+              const svUrl = `https://maps.googleapis.com/maps/api/streetview?size=800x500&location=${geo.lat},${geo.lng}&fov=90&pitch=5&key=${MAPS_KEY}`;
+              await storage.updateUserHome(home.id, userId, { imageUrl: svUrl } as any);
+            }
+          }
+        } catch { /* non-fatal */ }
+      })();
+
+      res.status(201).json(home);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.delete("/api/my-homes/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      await storage.deleteUserHome(id, userId);
+      res.status(204).end();
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  // My Home intelligence: public records + zoning for user-tracked homes
+  app.get("/api/my-homes/:id/intelligence", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+
+      const homes = await storage.getUserHomes(userId);
+      const home = homes.find(h => h.id === id);
+      if (!home) return res.status(404).json({ message: "Home not found" });
+
+      const streetNumber = home.addressStreetNumber || "";
+      const streetName = home.addressStreetName || "";
+      const city = home.addressCity || "";
+      const state = home.addressState || "";
+      const zip = home.addressZip || "";
+
+      const { geocodeAddress, getPublicRecords: fetchPublicRecords } = await import("./publicRecords");
+      const { getZoningData } = await import("./zoningData");
+
+      const [geocoded, publicRecords] = await Promise.all([
+        geocodeAddress(streetNumber, streetName, city, state, zip),
+        fetchPublicRecords(streetNumber, streetName, city, state, zip),
+      ]);
+
+      let zoning = null;
+      if (geocoded) {
+        zoning = await getZoningData(streetNumber, streetName, city, state, zip, geocoded.lat, geocoded.lng);
+      }
+
+      res.status(200).json({ publicRecords, zoning, geocoded });
+    } catch (err) {
+      console.error("My home intelligence error:", err);
+      res.status(500).json({ message: "Failed to fetch home data" });
+    }
+  });
+
   // Seed data function to be called on startup
   seedDatabase().catch(console.error);
 

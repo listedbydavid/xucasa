@@ -34,8 +34,8 @@ export function Navbar() {
           {isAuthenticated ? (
             <>
               <Link href="/dashboard" className="hidden sm:flex px-4 py-2 text-sm font-medium text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-full transition-colors items-center gap-2">
-                <Heart className="w-4 h-4" />
-                Saved Homes
+                <User className="w-4 h-4" />
+                My Dashboard
               </Link>
               <div className="h-6 w-px bg-border mx-1 hidden sm:block"></div>
               <div className="flex items-center gap-3 pl-2">
