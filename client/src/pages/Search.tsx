@@ -19,6 +19,8 @@ export default function Search() {
   });
 
   const [activeQuery, setActiveQuery] = useState({});
+  const [mapCenter, setMapCenter] = useState<[number, number]>([37.7749, -122.4194]);
+  const [mapZoom, setMapZoom] = useState(12);
 
   useEffect(() => {
     const query: any = {};
@@ -27,6 +29,27 @@ export default function Search() {
     if (filters.beds) query.minBeds = Number(filters.beds);
     if (filters.isOffMarket) query.isOffMarket = filters.isOffMarket;
     setActiveQuery(query);
+
+    // Geocoding logic for zip codes (mock or simple logic)
+    if (filters.location.match(/^\d{5}$/)) {
+      // In a real app, we'd use a geocoding service. 
+      // For now, we'll jitter the center to show movement if it's a valid-looking zip
+      const zip = parseInt(filters.location);
+      // Roughly map US zip codes to some coordinates (very simplified mock logic)
+      if (zip >= 90000 && zip <= 96162) { // CA
+        setMapCenter([36.7783, -119.4179]);
+      } else if (zip >= 10001 && zip <= 14905) { // NY
+        setMapCenter([40.7128, -74.0060]);
+      } else if (zip >= 60601 && zip <= 60699) { // Chicago
+        setMapCenter([41.8781, -87.6298]);
+      } else if (zip >= 33101 && zip <= 33299) { // Miami
+        setMapCenter([25.7617, -80.1918]);
+      } else {
+        // Fallback or randomish jitter to show it's "searching"
+        setMapCenter([39.8283 + (Math.random() - 0.5) * 5, -98.5795 + (Math.random() - 0.5) * 5]);
+      }
+      setMapZoom(12);
+    }
   }, [filters]);
 
   const { data: properties, isLoading } = useProperties(activeQuery);
@@ -132,7 +155,7 @@ export default function Search() {
 
         {/* Right Map Pane */}
         <div className="hidden lg:flex lg:w-2/5 xl:w-1/2 bg-muted relative border-l border-border overflow-hidden">
-          <MapView properties={properties || []} />
+          <MapView properties={properties || []} center={mapCenter} zoom={mapZoom} />
         </div>
       </div>
     </div>

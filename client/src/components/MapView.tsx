@@ -1,7 +1,8 @@
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Property } from '@shared/schema';
+import { useEffect } from 'react';
 
 // Fix for default marker icon in Leaflet + React
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -15,6 +16,15 @@ let DefaultIcon = L.icon({
 });
 
 L.Marker.prototype.options.icon = DefaultIcon;
+
+// Helper to center map when location changes
+function ChangeView({ center, zoom }: { center: [number, number], zoom: number }) {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(center, zoom);
+  }, [center, zoom, map]);
+  return null;
+}
 
 interface MapViewProps {
   properties: Property[];
@@ -30,6 +40,7 @@ export function MapView({ properties, center = [37.7749, -122.4194], zoom = 12 }
       style={{ height: '100%', width: '100%' }}
       scrollWheelZoom={true}
     >
+      <ChangeView center={center} zoom={zoom} />
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://www.openstreetmap.org/{z}/{x}/{y}.png"
