@@ -1,0 +1,155 @@
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
+import { PropertyCard } from "@/components/PropertyCard";
+import { useProperties } from "@/hooks/use-properties";
+import { useCreateSavedSearch } from "@/hooks/use-saved";
+import { Search as SearchIcon, Filter, MapPin, Map, BookmarkPlus } from "lucide-react";
+import queryString from "query-string";
+
+export default function Search() {
+  const [location] = useLocation();
+  const searchParams = new URLSearchParams(window.location.search);
+  
+  const [filters, setFilters] = useState({
+    location: searchParams.get("location") || "",
+    minPrice: searchParams.get("minPrice") || "",
+    beds: searchParams.get("beds") || "",
+    isOffMarket: searchParams.get("isOffMarket") || "",
+  });
+
+  const [activeQuery, setActiveQuery] = useState({});
+
+  useEffect(() => {
+    const query: any = {};
+    if (filters.location) query.location = filters.location;
+    if (filters.minPrice) query.minPrice = Number(filters.minPrice);
+    if (filters.beds) query.minBeds = Number(filters.beds);
+    if (filters.isOffMarket) query.isOffMarket = filters.isOffMarket;
+    setActiveQuery(query);
+  }, [filters]);
+
+  const { data: properties, isLoading } = useProperties(activeQuery);
+  const { mutate: saveSearch, isPending: isSavingSearch } = useCreateSavedSearch();
+
+  const handleSaveSearch = () => {
+    const name = filters.location 
+      ? `Search in ${filters.location}` 
+      : "General Search";
+    saveSearch({ name, criteria: activeQuery });
+  };
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
+      {/* Search Header Bar */}
+      <div className="bg-card border-b border-border p-4 z-10 shadow-sm">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center gap-4">
+          <div className="flex-1 flex items-center bg-muted rounded-xl px-4 py-2 border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+            <SearchIcon className="w-5 h-5 text-muted-foreground mr-2" />
+            <input 
+              type="text" 
+              placeholder="Search location..."
+              className="w-full bg-transparent border-none outline-none font-medium text-foreground"
+              value={filters.location}
+              onChange={(e) => setFilters(prev => ({ ...prev, location: e.target.value }))}
+            />
+          </div>
+          
+          <div className="flex items-center gap-3 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
+            <select 
+              className="bg-background border border-border rounded-xl px-4 py-2.5 font-medium text-sm outline-none focus:border-primary hover:border-primary/50 transition-colors"
+              value={filters.minPrice}
+              onChange={(e) => setFilters(prev => ({ ...prev, minPrice: e.target.value }))}
+            >
+              <option value="">Any Price</option>
+              <option value="500000">$500k+</option>
+              <option value="1000000">$1M+</option>
+              <option value="1500000">$1.5M+</option>
+            </select>
+
+            <select 
+              className="bg-background border border-border rounded-xl px-4 py-2.5 font-medium text-sm outline-none focus:border-primary hover:border-primary/50 transition-colors"
+              value={filters.beds}
+              onChange={(e) => setFilters(prev => ({ ...prev, beds: e.target.value }))}
+            >
+              <option value="">Beds</option>
+              <option value="1">1+ Beds</option>
+              <option value="2">2+ Beds</option>
+              <option value="3">3+ Beds</option>
+              <option value="4">4+ Beds</option>
+            </select>
+
+            <select 
+              className="bg-background border border-border rounded-xl px-4 py-2.5 font-medium text-sm outline-none focus:border-primary hover:border-primary/50 transition-colors"
+              value={filters.isOffMarket}
+              onChange={(e) => setFilters(prev => ({ ...prev, isOffMarket: e.target.value }))}
+            >
+              <option value="">All Types</option>
+              <option value="false">Active Only</option>
+              <option value="true">Make Me Move Only</option>
+            </select>
+
+            <button 
+              onClick={handleSaveSearch}
+              disabled={isSavingSearch}
+              className="ml-auto sm:ml-0 flex items-center gap-2 bg-primary/10 text-primary hover:bg-primary hover:text-white px-4 py-2.5 rounded-xl font-bold text-sm transition-colors"
+            >
+              <BookmarkPlus className="w-4 h-4" />
+              <span className="hidden lg:inline">Save Search</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left List Pane */}
+        <div className="w-full lg:w-3/5 xl:w-1/2 h-full overflow-y-auto p-4 sm:p-6 bg-background">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-display font-bold text-xl text-foreground">
+              {isLoading ? "Searching..." : `${properties?.length || 0} Homes for Sale`}
+            </h2>
+          </div>
+
+          {isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {[1,2,3,4].map(i => <div key={i} className="h-80 bg-muted animate-pulse rounded-2xl"></div>)}
+            </div>
+          ) : properties?.length === 0 ? (
+            <div className="h-64 flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-border rounded-3xl mt-8">
+              <MapPin className="w-12 h-12 text-muted-foreground mb-4 opacity-50" />
+              <h3 className="font-display font-bold text-lg text-foreground mb-2">No exact matches</h3>
+              <p className="text-muted-foreground max-w-sm">Try changing or removing some of your filters to see more homes.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {properties?.map(property => (
+                <PropertyCard key={property.id} property={property} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Right Map Pane - Placeholder */}
+        <div className="hidden lg:flex lg:w-2/5 xl:w-1/2 bg-muted relative border-l border-border">
+          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1524661135-423995f22d0b?w=1000&q=80')] bg-cover bg-center opacity-40"></div>
+          <div className="absolute inset-0 bg-blue-500/10 mix-blend-overlay"></div>
+          
+          <div className="relative w-full h-full flex flex-col items-center justify-center">
+            <div className="glass-panel p-6 rounded-3xl flex flex-col items-center text-center max-w-sm shadow-2xl">
+              <div className="bg-primary/10 text-primary p-4 rounded-full mb-4">
+                <Map className="w-8 h-8" />
+              </div>
+              <h3 className="font-display font-bold text-xl mb-2 text-foreground">Interactive Map View</h3>
+              <p className="text-muted-foreground text-sm font-medium mb-6">
+                Map integration would appear here, showing pins for all {properties?.length || 0} active results.
+              </p>
+              <button className="bg-foreground text-background px-6 py-2.5 rounded-full font-bold text-sm shadow-md hover:bg-primary transition-colors">
+                Explore Area
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
