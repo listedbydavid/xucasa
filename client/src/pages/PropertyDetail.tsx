@@ -4,6 +4,7 @@ import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
 import { BedDouble, Bath, Maximize, MapPin, Heart, Sparkles, Building, Briefcase } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { MapView } from "@/components/MapView";
+import { PublicRecordsPanel } from "@/components/PublicRecordsPanel";
 
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -166,6 +167,9 @@ export default function PropertyDetail() {
               </div>
             </div>
           </div>
+
+          {/* Public Records & Neighborhood Data */}
+          <PublicRecordsPanel propertyId={property.id} />
         </div>
       </div>
     </div>

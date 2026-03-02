@@ -5,6 +5,7 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import { registerAuthRoutes } from "./replit_integrations/auth";
 import { isAuthenticated } from "./replit_integrations/auth";
+import { getPublicRecords } from "./publicRecords";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -94,6 +95,33 @@ export async function registerRoutes(
     }
   });
 
+  // Public Records API — fetches from Census, FEMA, OpenStreetMap
+  app.get("/api/properties/:id/public-records", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+
+      const prop = await storage.getProperty(id);
+      if (!prop) return res.status(404).json({ message: "Property not found" });
+
+      const streetNumber = prop.addressStreetNumber || "";
+      const streetName = prop.addressStreetName || "";
+      const city = prop.addressCity || prop.location?.split(",")[0]?.trim() || "";
+      const state = prop.addressState || prop.location?.split(",")[1]?.trim() || "";
+      const zip = prop.addressZip || "";
+
+      if (!city || !state) {
+        return res.status(200).json({ geocoded: null, neighborhood: null, flood: null, nearby: { schools: [], parks: [], hospitals: [], transit: [], groceries: [] } });
+      }
+
+      const records = await getPublicRecords(streetNumber, streetName, city, state, zip);
+      res.status(200).json(records);
+    } catch (err) {
+      console.error("Public records error:", err);
+      res.status(500).json({ message: "Failed to fetch public records" });
+    }
+  });
+
   // Saved Properties API
   app.get(api.savedProperties.list.path, isAuthenticated, async (req: any, res) => {
     try {
@@ -180,6 +208,20 @@ export async function registerRoutes(
 
 async function seedDatabase() {
   const existing = await storage.getProperties();
+
+  // Backfill address fields for seed properties that have null addresses
+  const addressMap: Record<number, { addressStreetNumber: string; addressStreetName: string; addressCity: string; addressState: string; addressZip: string }> = {
+    1: { addressStreetNumber: "123", addressStreetName: "Market St", addressCity: "San Francisco", addressState: "CA", addressZip: "94103" },
+    2: { addressStreetNumber: "456", addressStreetName: "Oak Ave", addressCity: "San Mateo", addressState: "CA", addressZip: "94401" },
+    3: { addressStreetNumber: "789", addressStreetName: "Mission St", addressCity: "San Francisco", addressState: "CA", addressZip: "94103" },
+    4: { addressStreetNumber: "101", addressStreetName: "University Ave", addressCity: "Palo Alto", addressState: "CA", addressZip: "94301" },
+  };
+  for (const prop of existing) {
+    if (!prop.addressCity && addressMap[prop.id]) {
+      await storage.updateProperty(prop.id, addressMap[prop.id]);
+    }
+  }
+
   if (existing.length === 0) {
     await storage.createProperty({
       title: "Beautiful Modern Home",
