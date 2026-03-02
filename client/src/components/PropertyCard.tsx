@@ -177,7 +177,7 @@ export function PropertyCard({ property }: PropertyCardProps) {
             {property.isOffMarket && (
               <span className="bg-foreground text-background text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-lg">
                 <Sparkles className="w-3 h-3 text-yellow-400" />
-                Make Me Move
+                Buy it Now
               </span>
             )}
             {property.openHouseDate && new Date(property.openHouseDate) > new Date() && (
@@ -187,12 +187,16 @@ export function PropertyCard({ property }: PropertyCardProps) {
             )}
             <span
               className={`text-xs font-bold px-3 py-1.5 rounded-full shadow-lg ${
-                property.status === "active"
+                property.isOffMarket
+                  ? "bg-yellow-500/90 text-white"
+                  : property.status === "active"
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground"
               }`}
             >
-              {property.status === "active"
+              {property.isOffMarket
+                ? "Private Listing"
+                : property.status === "active"
                 ? "Active"
                 : property.status.toUpperCase()}
             </span>

@@ -68,7 +68,7 @@ export default function PropertyDetail() {
           {property.isOffMarket && (
             <span className="bg-foreground text-background px-4 py-2 rounded-full font-bold text-sm shadow-xl backdrop-blur-md flex items-center gap-1">
               <Sparkles className="w-4 h-4 text-yellow-400" />
-              Make Me Move
+              Buy it Now
             </span>
           )}
         </div>

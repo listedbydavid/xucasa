@@ -148,7 +148,7 @@ export default function AgentDashboard() {
                       <td className="p-4 font-bold text-foreground">${property.price.toLocaleString()}</td>
                       <td className="p-4">
                         {property.isOffMarket ? (
-                          <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-bold">Make Me Move</span>
+                          <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-bold">Buy it Now</span>
                         ) : (
                           <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-bold">Active</span>
                         )}
@@ -798,7 +798,7 @@ function PropertyFormModal({
               className="w-5 h-5 accent-yellow-500 rounded cursor-pointer"
             />
             <label htmlFor="isOffMarket" className="font-bold text-yellow-800 dark:text-yellow-400 cursor-pointer">
-              Mark as "Make Me Move" (Off-Market)
+              Mark as "Buy it Now" (Private Listing)
             </label>
           </div>
 

@@ -190,7 +190,7 @@ export default function Search() {
             >
               <option value="">All Types</option>
               <option value="false">Active Only</option>
-              <option value="true">Make Me Move Only</option>
+              <option value="true">Buy it Now Only</option>
             </select>
 
             <button
