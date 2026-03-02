@@ -1,8 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
 import { Plus, Edit3, Trash2, Home, X, Search, Loader2 } from "lucide-react";
 import type { PropertyResponse, CreatePropertyRequest } from "@shared/schema";
+import { useJsApiLoader, Autocomplete } from "@react-google-maps/api";
+
+const GOOGLE_MAPS_LIBRARIES: ('places' | 'geometry')[] = ['places'];
 
 export default function AgentDashboard() {
   const { user, isAuthenticated } = useAuth();
@@ -153,6 +156,13 @@ function PropertyFormModal({
   onSubmit: (data: any) => void,
   isPending: boolean 
 }) {
+  const { isLoaded } = useJsApiLoader({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
+    libraries: GOOGLE_MAPS_LIBRARIES,
+  });
+
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+
   const [formData, setFormData] = useState({
     title: property?.title || "",
     description: property?.description || "",
@@ -171,63 +181,50 @@ function PropertyFormModal({
     isOffMarket: property?.isOffMarket || false,
   });
 
-  const [addressInput, setAddressInput] = useState("");
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const onAutocompleteLoad = (autocomplete: google.maps.places.Autocomplete) => {
+    autocompleteRef.current = autocomplete;
+  };
 
-  useEffect(() => {
-    const searchAddress = async () => {
-      if (addressInput.length < 3) {
-        setSuggestions([]);
-        return;
-      }
+  const onPlaceChanged = () => {
+    if (!autocompleteRef.current) return;
+    const place = autocompleteRef.current.getPlace();
+    if (!place.address_components) return;
 
-      setIsSearching(true);
-      try {
-        // Use Mapbox Geocoding API if token is available, or fallback to mock
-        const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(addressInput)}.json?access_token=${import.meta.env.VITE_MAPBOX_TOKEN}&country=us&limit=5`);
-        const data = await res.json();
-        setSuggestions(data.features || []);
-      } catch (err) {
-        console.error("Geocoding error:", err);
-      } finally {
-        setIsSearching(false);
-      }
-    };
+    let streetNumber = "";
+    let streetName = "";
+    let city = "";
+    let state = "";
+    let zip = "";
 
-    const timer = setTimeout(searchAddress, 300);
-    return () => clearTimeout(timer);
-  }, [addressInput]);
+    for (const comp of place.address_components) {
+      const types = comp.types;
+      if (types.includes("street_number")) streetNumber = comp.long_name;
+      if (types.includes("route")) streetName = comp.long_name;
+      if (types.includes("locality")) city = comp.long_name;
+      if (types.includes("administrative_area_level_1")) state = comp.short_name;
+      if (types.includes("postal_code")) zip = comp.long_name;
+    }
 
-  const handleSelectSuggestion = (feature: any) => {
-    const context = feature.context || [];
-    const streetInfo = feature.text;
-    const houseNumber = feature.address;
-    
-    const zip = context.find((c: any) => c.id.startsWith('postcode'))?.text || "";
-    const city = context.find((c: any) => c.id.startsWith('place'))?.text || "";
-    const state = context.find((c: any) => c.id.startsWith('region'))?.text || "";
-
-    setFormData({
-      ...formData,
-      addressStreetNumber: houseNumber || "",
-      addressStreetName: streetInfo || "",
+    setFormData(prev => ({
+      ...prev,
+      addressStreetNumber: streetNumber,
+      addressStreetName: streetName,
       addressCity: city,
       addressState: state,
       addressZip: zip,
       location: `${city}, ${state}`,
-      title: feature.place_name.split(',')[0],
-    });
-    setSuggestions([]);
-    setAddressInput("");
+      title: prev.title || (place.name || ""),
+    }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const fullLocation = `${formData.addressStreetNumber} ${formData.addressStreetName}, ${formData.addressCity}, ${formData.addressState} ${formData.addressZip}`;
+    const fullLocation = formData.addressCity
+      ? `${formData.addressCity}, ${formData.addressState}`
+      : formData.location;
     onSubmit({
       ...formData,
-      location: formData.location || fullLocation,
+      location: fullLocation,
       price: Number(formData.price),
       beds: Number(formData.beds),
       baths: Number(formData.baths),
@@ -248,32 +245,29 @@ function PropertyFormModal({
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           <div className="space-y-4">
             <div className="relative">
-              <label className="block text-sm font-bold text-muted-foreground mb-2">Search Address (Mapbox Autocomplete)</label>
+              <label className="block text-sm font-bold text-muted-foreground mb-2">Search Address (Google Autocomplete)</label>
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <input 
-                  value={addressInput}
-                  onChange={e => setAddressInput(e.target.value)}
-                  className="w-full bg-background border-2 border-border rounded-xl pl-12 pr-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all" 
-                  placeholder="Start typing an address..." 
-                />
-                {isSearching && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-primary animate-spin" />}
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground z-10 pointer-events-none" />
+                {isLoaded ? (
+                  <Autocomplete
+                    onLoad={onAutocompleteLoad}
+                    onPlaceChanged={onPlaceChanged}
+                    options={{ componentRestrictions: { country: "us" }, types: ["address"] }}
+                  >
+                    <input
+                      className="w-full bg-background border-2 border-border rounded-xl pl-12 pr-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all"
+                      placeholder="Start typing an address..."
+                      type="text"
+                    />
+                  </Autocomplete>
+                ) : (
+                  <input
+                    className="w-full bg-background border-2 border-border rounded-xl pl-12 pr-4 py-3 outline-none"
+                    placeholder="Loading address search..."
+                    disabled
+                  />
+                )}
               </div>
-              
-              {suggestions.length > 0 && (
-                <div className="absolute z-20 w-full mt-2 bg-card border border-border rounded-xl shadow-xl overflow-hidden">
-                  {suggestions.map((s, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => handleSelectSuggestion(s)}
-                      className="w-full text-left px-4 py-3 hover:bg-muted transition-colors border-b border-border last:border-0"
-                    >
-                      <div className="font-bold text-sm">{s.place_name}</div>
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
             <div className="grid md:grid-cols-3 gap-4">
