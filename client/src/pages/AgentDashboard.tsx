@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
 import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link } from "lucide-react";
+import { IdxSyncPanel } from "@/components/IdxSyncPanel";
 import type { PropertyResponse, CreatePropertyRequest } from "@shared/schema";
 import { useJsApiLoader, Autocomplete } from "@react-google-maps/api";
 
@@ -132,6 +133,11 @@ export default function AgentDashboard() {
             </table>
           </div>
         )}
+
+        {/* MLS / IDX Sync Panel */}
+        <div className="mt-10">
+          <IdxSyncPanel />
+        </div>
       </div>
 
       {isModalOpen && (

@@ -119,12 +119,36 @@ All API routes are defined in `shared/routes.ts` with typed paths and Zod schema
 | `vite` | Frontend build tool and dev server |
 | `memoizee` | Memoize OIDC config fetch |
 
+### IDX Broker / MLS Sync
+
+`server/idxSync.ts` is a complete IDX Broker REST API sync engine. When activated it:
+- Fetches all active MLS listings (paginated, 500/page)
+- Upserts them into the `properties` table with `source = 'idx'` and a unique `idx_id`
+- Marks listings removed from the feed as `status = 'removed'`
+- Auto-syncs every 4 hours in the background
+- Also supports RESO Web API (OAuth2 / OData) as an alternative
+
+**To activate:**
+1. Sign up at idxbroker.com and get MLS-approved
+2. Copy API key from: Account → API → Access Key
+3. Add `IDX_BROKER_API_KEY` as an environment secret
+4. Server auto-syncs on startup and every 4 hours
+
+**Admin UI:** The IDX Sync Panel is visible at the bottom of the Agent Dashboard (`/agent`).
+
+**API routes:**
+- `GET /api/idx/status` — sync status, last run, history, listing count
+- `POST /api/idx/sync` — trigger manual sync
+
 ### Environment Variables Required
 
 ```
-DATABASE_URL        # PostgreSQL connection string
-SESSION_SECRET      # Secret for signing session cookies
-REPL_ID             # Replit app ID (for OIDC client)
-ISSUER_URL          # OIDC issuer (defaults to https://replit.com/oidc)
+DATABASE_URL          # PostgreSQL connection string
+SESSION_SECRET        # Secret for signing session cookies
+REPL_ID               # Replit app ID (for OIDC client)
+ISSUER_URL            # OIDC issuer (defaults to https://replit.com/oidc)
 VITE_GOOGLE_MAPS_API_KEY  # Google Maps JS API key (client-side)
+IDX_BROKER_API_KEY    # (optional) IDX Broker API key — activates MLS sync
+IDX_RESO_URL          # (optional) RESO Web API base URL — alternative to IDX Broker
+IDX_RESO_TOKEN        # (optional) RESO Web API Bearer token
 ```

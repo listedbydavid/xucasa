@@ -29,7 +29,26 @@ export const properties = pgTable("properties", {
   lng: decimal("lng"),
   imageUrl: text("image_url"),
   status: text("status").default("active").notNull(),
+  // IDX / MLS sync fields
+  source: text("source").default("manual").notNull(),   // 'manual' | 'idx'
+  idxId: text("idx_id").unique(),                       // IDX Broker listingID
+  mlsNumber: text("mls_number"),                        // MLS # displayed to users
+  listDate: timestamp("list_date"),                     // When listed on MLS
+  idxUpdatedAt: timestamp("idx_updated_at"),            // Last sync from IDX
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Tracks each IDX sync run for admin visibility
+export const idxSyncLog = pgTable("idx_sync_log", {
+  id: serial("id").primaryKey(),
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+  status: text("status").notNull().default("running"), // 'running' | 'success' | 'error'
+  added: integer("added").default(0),
+  updated: integer("updated").default(0),
+  removed: integer("removed").default(0),
+  total: integer("total").default(0),
+  error: text("error"),
 });
 
 export const savedProperties = pgTable("saved_properties", {

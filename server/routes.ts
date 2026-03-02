@@ -7,6 +7,7 @@ import { registerAuthRoutes } from "./replit_integrations/auth";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { getPublicRecords } from "./publicRecords";
 import { getZoningData } from "./zoningData";
+import { runIdxSync, isSyncInProgress, idxConfigured, getLastSyncLog, getSyncLogs, startIdxAutoSync } from "./idxSync";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -431,8 +432,42 @@ export async function registerRoutes(
     }
   });
 
+  // ── IDX / MLS Sync Routes ────────────────────────────────────────────────────
+
+  // Status — is IDX configured, last sync result, sync history
+  app.get("/api/idx/status", isAuthenticated, async (_req, res) => {
+    try {
+      const configured = idxConfigured();
+      const inProgress = isSyncInProgress();
+      const last = await getLastSyncLog();
+      const logs = await getSyncLogs(5);
+      const idxCount = await storage.getProperties().then(p => p.filter(x => x.source === "idx").length);
+      res.json({ configured, inProgress, last, logs, idxCount });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Manually trigger a sync
+  app.post("/api/idx/sync", isAuthenticated, async (_req, res) => {
+    if (!idxConfigured()) {
+      return res.status(400).json({
+        message: "IDX not configured. Add IDX_BROKER_API_KEY (from your IDX Broker account dashboard) as an environment variable.",
+      });
+    }
+    if (isSyncInProgress()) {
+      return res.status(409).json({ message: "Sync already running. Check back in a moment." });
+    }
+    // Run async — respond immediately
+    res.json({ message: "Sync started" });
+    runIdxSync().catch(e => console.error("[IDX] Manual sync error:", e.message));
+  });
+
   // Seed data function to be called on startup
   seedDatabase().catch(console.error);
+
+  // Start scheduled IDX auto-sync (no-op if not configured)
+  startIdxAutoSync();
 
   return httpServer;
 }
