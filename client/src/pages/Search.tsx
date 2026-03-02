@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { PropertyCard } from "@/components/PropertyCard";
 import { useProperties } from "@/hooks/use-properties";
 import { useCreateSavedSearch } from "@/hooks/use-saved";
-import { Search as SearchIcon, Filter, MapPin, Map, BookmarkPlus } from "lucide-react";
+import { Search as SearchIcon, Filter, MapPin, Map, BookmarkPlus, X } from "lucide-react";
 import { MapView } from "@/components/MapView";
 import queryString from "query-string";
 
@@ -57,6 +57,7 @@ export default function Search() {
 
   const { data: properties, isLoading } = useProperties(activeQuery);
   const { mutate: saveSearch, isPending: isSavingSearch } = useCreateSavedSearch();
+  const [isMapVisible, setIsMapVisible] = useState(true);
 
   const handleSaveSearch = () => {
     const name = filters.location 
@@ -130,30 +131,54 @@ export default function Search() {
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left List Pane */}
-        <div className="w-full lg:w-3/5 xl:w-1/2 h-full overflow-y-auto p-4 sm:p-6 bg-background">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-display font-bold text-xl text-foreground">
-              {isLoading ? "Searching..." : `${properties?.length || 0} Homes for Sale`}
-            </h2>
+        <div className="w-full lg:w-3/5 xl:w-1/2 h-full overflow-y-auto bg-background">
+          {/* Map Preview for Mobile/Top of Page */}
+          <div className={`relative transition-all duration-500 ease-in-out border-b border-border overflow-hidden ${isMapVisible ? 'h-64 sm:h-80' : 'h-0'}`}>
+            <MapView properties={properties || []} center={mapCenter} zoom={mapZoom} />
+            <button 
+              onClick={() => setIsMapVisible(false)}
+              className="absolute top-4 right-4 bg-white/90 backdrop-blur-md p-2 rounded-full shadow-lg border border-border hover:bg-white transition-colors z-[10]"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
 
-          {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {[1,2,3,4].map(i => <div key={i} className="h-80 bg-muted animate-pulse rounded-2xl"></div>)}
+          <div className="p-4 sm:p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <h2 className="font-display font-bold text-xl text-foreground">
+                  {isLoading ? "Searching..." : `${properties?.length || 0} Homes for Sale`}
+                </h2>
+                {!isMapVisible && (
+                  <button 
+                    onClick={() => setIsMapVisible(true)}
+                    className="flex items-center gap-2 text-sm font-bold text-primary hover:underline"
+                  >
+                    <Map className="w-4 h-4" />
+                    Show Map
+                  </button>
+                )}
+              </div>
             </div>
-          ) : properties?.length === 0 ? (
-            <div className="h-64 flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-border rounded-3xl mt-8">
-              <MapPin className="w-12 h-12 text-muted-foreground mb-4 opacity-50" />
-              <h3 className="font-display font-bold text-lg text-foreground mb-2">No exact matches</h3>
-              <p className="text-muted-foreground max-w-sm">Try changing or removing some of your filters to see more homes.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {properties?.map(property => (
-                <PropertyCard key={property.id} property={property} />
-              ))}
-            </div>
-          )}
+
+            {isLoading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                {[1,2,3,4].map(i => <div key={i} className="h-80 bg-muted animate-pulse rounded-2xl"></div>)}
+              </div>
+            ) : properties?.length === 0 ? (
+              <div className="h-64 flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-border rounded-3xl mt-8">
+                <MapPin className="w-12 h-12 text-muted-foreground mb-4 opacity-50" />
+                <h3 className="font-display font-bold text-lg text-foreground mb-2">No exact matches</h3>
+                <p className="text-muted-foreground max-w-sm">Try changing or removing some of your filters to see more homes.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                {properties?.map(property => (
+                  <PropertyCard key={property.id} property={property} />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right Map Pane */}
