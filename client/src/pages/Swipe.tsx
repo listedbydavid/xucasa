@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import {
   Heart, X, RotateCcw, MapPin, BedDouble, Bath,
-  Maximize, ChevronRight, Sparkles,
+  Maximize, ChevronRight, ChevronLeft, Sparkles,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -20,6 +20,7 @@ export default function Swipe() {
 
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [photoIndex, setPhotoIndex] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [dragX, setDragX] = useState(0);
   const [dragY, setDragY] = useState(0);
@@ -33,6 +34,9 @@ export default function Swipe() {
   const activeProps = properties.filter(p => p.status === "active");
   const current = activeProps[currentIndex];
   const isSaved = savedProps.some(sp => sp.propertyId === current?.id);
+
+  // Reset photo index when card changes
+  useEffect(() => { setPhotoIndex(0); }, [currentIndex]);
 
   // Flash the action badge briefly
   const flashAction = (action: "liked" | "passed") => {
@@ -217,13 +221,67 @@ export default function Swipe() {
               onPointerUp={isTop ? onPointerUp : undefined}
               onPointerCancel={isTop ? onPointerUp : undefined}
             >
-              {/* Photo */}
-              <img
-                src={prop.imageUrl || FALLBACK}
-                className="w-full h-full object-cover"
-                alt={prop.title}
-                draggable={false}
-              />
+              {/* Photo carousel */}
+              {(() => {
+                const photos: string[] =
+                  prop.photos && (prop.photos as string[]).length > 0
+                    ? (prop.photos as string[])
+                    : [prop.imageUrl || FALLBACK];
+                const pIdx = isTop ? photoIndex : 0;
+                return (
+                  <>
+                    <div
+                      className="absolute inset-0 flex"
+                      style={{
+                        width: `${photos.length * 100}%`,
+                        transform: `translateX(-${(pIdx / photos.length) * 100}%)`,
+                        transition: "transform 0.25s cubic-bezier(0.4,0,0.2,1)",
+                      }}
+                    >
+                      {photos.map((url, i) => (
+                        <img
+                          key={i}
+                          src={url}
+                          className="object-cover h-full"
+                          style={{ width: `${100 / photos.length}%` }}
+                          alt={prop.title}
+                          draggable={false}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Story-bar dots at the top */}
+                    {isTop && photos.length > 1 && (
+                      <div className="absolute top-3 left-4 right-4 flex gap-1 z-10 pointer-events-none">
+                        {photos.map((_, i) => (
+                          <div
+                            key={i}
+                            className={`h-[3px] flex-1 rounded-full transition-all duration-200 ${i <= pIdx ? "bg-white" : "bg-white/35"}`}
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Left / right tap zones for photos */}
+                    {isTop && photos.length > 1 && (
+                      <>
+                        <button
+                          className="absolute left-0 top-0 h-full w-1/3 z-10"
+                          onPointerDown={e => e.stopPropagation()}
+                          onClick={e => { e.stopPropagation(); setPhotoIndex(i => Math.max(0, i - 1)); }}
+                          aria-label="Previous photo"
+                        />
+                        <button
+                          className="absolute right-0 top-0 h-full w-1/3 z-10"
+                          onPointerDown={e => e.stopPropagation()}
+                          onClick={e => { e.stopPropagation(); setPhotoIndex(i => Math.min(photos.length - 1, i + 1)); }}
+                          aria-label="Next photo"
+                        />
+                      </>
+                    )}
+                  </>
+                );
+              })()}
 
               {/* Gradient */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent pointer-events-none" />

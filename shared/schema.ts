@@ -28,6 +28,7 @@ export const properties = pgTable("properties", {
   lat: decimal("lat"),
   lng: decimal("lng"),
   imageUrl: text("image_url"),
+  photos: text("photos").array(),
   status: text("status").default("active").notNull(),
   // IDX / MLS sync fields
   source: text("source").default("manual").notNull(),   // 'manual' | 'idx'
