@@ -181,8 +181,16 @@ export function PropertyCard({ property }: PropertyCardProps) {
               </span>
             )}
             {property.openHouseDate && new Date(property.openHouseDate) > new Date() && (
-              <span className="bg-green-500 text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-lg">
-                🏠 Open House
+              <span className="bg-green-500 text-white text-xs font-bold px-3 py-2 rounded-2xl flex flex-col gap-0.5 shadow-lg leading-tight">
+                <span className="flex items-center gap-1">
+                  🏠 Open House
+                </span>
+                <span className="font-semibold opacity-90 pl-0.5">
+                  {new Date(property.openHouseDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                </span>
+                {property.openHouseTime && (
+                  <span className="font-semibold opacity-90 pl-0.5">{property.openHouseTime}</span>
+                )}
               </span>
             )}
             <span
