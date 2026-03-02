@@ -25,6 +25,8 @@ export const properties = pgTable("properties", {
   hoaFee: integer("hoa_fee"),
   isOffMarket: boolean("is_off_market").default(false).notNull(), // For the make me move feature
   agentId: varchar("agent_id").references(() => users.id),
+  lat: decimal("lat"),
+  lng: decimal("lng"),
   imageUrl: text("image_url"),
   status: text("status").default("active").notNull(), // active, pending, sold
   createdAt: timestamp("created_at").defaultNow(),

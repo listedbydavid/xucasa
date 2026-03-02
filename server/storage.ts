@@ -36,7 +36,17 @@ export class DatabaseStorage implements IStorage {
     let conditions = [];
 
     if (filters) {
-      if (filters.location) conditions.push(sql`${properties.location} ILIKE ${`%${filters.location}%`}`);
+      if (filters.location) {
+        const q = `%${filters.location}%`;
+        conditions.push(sql`(
+          ${properties.location} ILIKE ${q}
+          OR ${properties.addressCity} ILIKE ${q}
+          OR ${properties.addressStreetName} ILIKE ${q}
+          OR ${properties.addressZip} ILIKE ${q}
+          OR CONCAT(${properties.addressStreetNumber}, ' ', ${properties.addressStreetName}) ILIKE ${q}
+          OR CONCAT(${properties.addressStreetNumber}, ' ', ${properties.addressStreetName}, ', ', ${properties.addressCity}) ILIKE ${q}
+        )`);
+      }
       if (filters.minPrice) conditions.push(sql`${properties.price} >= ${filters.minPrice}`);
       if (filters.maxPrice) conditions.push(sql`${properties.price} <= ${filters.maxPrice}`);
       if (filters.minBeds) conditions.push(sql`${properties.beds} >= ${filters.minBeds}`);

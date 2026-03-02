@@ -15,6 +15,25 @@ export async function registerRoutes(
   // Register auth routes first
   registerAuthRoutes(app);
 
+  // Backfill missing lat/lng for all existing properties (runs once on startup)
+  (async () => {
+    try {
+      const { geocodeAddress } = await import("./publicRecords");
+      const allProps = await storage.getProperties();
+      const needsGeo = allProps.filter(p => !p.lat || !p.lng);
+      for (const prop of needsGeo) {
+        const city = prop.addressCity || prop.location?.split(",")[0]?.trim() || "";
+        const state = (prop.addressState || prop.location?.split(",")[1]?.trim() || "").trim();
+        if (!city || !state) continue;
+        const geo = await geocodeAddress(prop.addressStreetNumber || "", prop.addressStreetName || "", city, state, prop.addressZip || "");
+        if (geo) {
+          await storage.updateProperty(prop.id, { lat: String(geo.lat), lng: String(geo.lng) } as any);
+        }
+        await new Promise(r => setTimeout(r, 200)); // be gentle with Census API
+      }
+    } catch { /* non-fatal startup task */ }
+  })();
+
   // Properties API
   app.get(api.properties.list.path, async (req, res) => {
     try {
@@ -36,12 +55,30 @@ export async function registerRoutes(
     res.status(200).json(prop);
   });
 
+  // Background geocoding: adds lat/lng to a property if address fields are present
+  async function geocodeAndPatch(id: number, streetNumber: string, streetName: string, city: string, state: string, zip: string) {
+    try {
+      const { geocodeAddress } = await import("./publicRecords");
+      const geocoded = await geocodeAddress(streetNumber, streetName, city, state, zip);
+      if (geocoded) {
+        await storage.updateProperty(id, { lat: String(geocoded.lat), lng: String(geocoded.lng) } as any);
+      }
+    } catch { /* non-fatal */ }
+  }
+
   app.post(api.properties.create.path, isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user.claims;
       const input = api.properties.create.input.parse(req.body);
       const prop = await storage.createProperty({ ...input, agentId: user.sub });
       res.status(201).json(prop);
+
+      // Geocode in background after response is sent
+      const city = input.addressCity || input.location?.split(",")[0]?.trim() || "";
+      const state = (input.addressState || input.location?.split(",")[1]?.trim() || "").trim();
+      if (city && state) {
+        geocodeAndPatch(prop.id, input.addressStreetNumber || "", input.addressStreetName || "", city, state, input.addressZip || "");
+      }
     } catch (err) {
       if (err instanceof z.ZodError) {
         res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
@@ -67,6 +104,14 @@ export async function registerRoutes(
       const input = api.properties.update.input.parse(req.body);
       const updatedProp = await storage.updateProperty(id, input);
       res.status(200).json(updatedProp);
+
+      // Re-geocode if address changed
+      const merged = { ...prop, ...input };
+      const city = merged.addressCity || merged.location?.split(",")[0]?.trim() || "";
+      const state = (merged.addressState || merged.location?.split(",")[1]?.trim() || "").trim();
+      if (city && state) {
+        geocodeAndPatch(id, merged.addressStreetNumber || "", merged.addressStreetName || "", city, state, merged.addressZip || "");
+      }
     } catch (err) {
       if (err instanceof z.ZodError) {
         res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });

@@ -7,7 +7,7 @@ const GOOGLE_MAPS_LIBRARIES: ('places' | 'marker')[] = ['places', 'marker'];
 
 interface MapViewProps {
   properties: Property[];
-  center?: [number, number]; // [lng, lat] — same convention as before
+  center?: [number, number]; // [lng, lat]
   zoom?: number;
 }
 
@@ -25,29 +25,35 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
 
-  // Convert [lng, lat] → {lat, lng}
   const googleCenter = { lat: center[1], lng: center[0] };
 
-  const getMarkerPosition = (index: number): google.maps.LatLngLiteral => ({
-    lat: center[1] + (Math.sin(index * 2.3) * 0.018),
-    lng: center[0] + (Math.cos(index * 2.3) * 0.018),
-  });
+  // Use real lat/lng from property if available, otherwise place near center with small offset
+  const getMarkerPosition = (property: Property, index: number): google.maps.LatLngLiteral => {
+    const lat = property.lat ? parseFloat(property.lat as string) : null;
+    const lng = property.lng ? parseFloat(property.lng as string) : null;
+    if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
+      return { lat, lng };
+    }
+    // Fallback: scatter around center so markers are at least visible
+    return {
+      lat: center[1] + (Math.sin(index * 2.3) * 0.018),
+      lng: center[0] + (Math.cos(index * 2.3) * 0.018),
+    };
+  };
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
   }, []);
 
-  // Manage AdvancedMarkerElements imperatively
   useEffect(() => {
     if (!mapRef.current || !isLoaded) return;
     if (!window.google?.maps?.marker?.AdvancedMarkerElement) return;
 
-    // Remove old markers
     markersRef.current.forEach(m => { m.map = null; });
     markersRef.current = [];
 
     properties.forEach((property, index) => {
-      const position = getMarkerPosition(index);
+      const position = getMarkerPosition(property, index);
 
       const pin = document.createElement('div');
       pin.style.cssText = `
@@ -82,7 +88,6 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }
     };
   }, [properties, center, isLoaded]);
 
-  // Fly to new center when it changes
   useEffect(() => {
     if (!mapRef.current) return;
     mapRef.current.panTo(googleCenter);
