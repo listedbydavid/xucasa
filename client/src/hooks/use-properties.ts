@@ -36,6 +36,14 @@ export function useProperty(id: number | null) {
   });
 }
 
+async function throwOnError(res: Response, fallback: string) {
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || fallback);
+  }
+  return res.json();
+}
+
 // POST /api/properties
 export function useCreateProperty() {
   const queryClient = useQueryClient();
@@ -49,15 +57,14 @@ export function useCreateProperty() {
         body: JSON.stringify(data),
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Failed to create property");
-      return res.json();
+      return throwOnError(res, "Failed to create property");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.properties.list.path] });
       toast({ title: "Property Listed", description: "Your property is now live!" });
     },
-    onError: (err) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    onError: (err: Error) => {
+      toast({ title: "Could not create listing", description: err.message, variant: "destructive" });
     }
   });
 }
@@ -76,16 +83,15 @@ export function useUpdateProperty() {
         body: JSON.stringify(data),
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Failed to update property");
-      return res.json();
+      return throwOnError(res, "Failed to update property");
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [api.properties.list.path] });
       queryClient.invalidateQueries({ queryKey: [api.properties.get.path, variables.id] });
       toast({ title: "Property Updated", description: "Changes saved successfully." });
     },
-    onError: (err) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    onError: (err: Error) => {
+      toast({ title: "Could not update listing", description: err.message, variant: "destructive" });
     }
   });
 }
@@ -99,13 +105,16 @@ export function useDeleteProperty() {
     mutationFn: async (id: number) => {
       const url = buildUrl(api.properties.delete.path, { id });
       const res = await fetch(url, { method: "DELETE", credentials: "include" });
-      if (!res.ok) throw new Error("Failed to delete property");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || "Failed to delete property");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.properties.list.path] });
       toast({ title: "Property Deleted", description: "The listing has been removed." });
     },
-    onError: (err) => {
+    onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
   });

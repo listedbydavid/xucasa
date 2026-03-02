@@ -166,7 +166,7 @@ function PropertyFormModal({
   const [formData, setFormData] = useState({
     title: property?.title || "",
     description: property?.description || "",
-    price: property?.price || "",
+    price: property?.price?.toString() || "",
     addressStreetNumber: property?.addressStreetNumber || "",
     addressStreetName: property?.addressStreetName || "",
     addressUnitNumber: property?.addressUnitNumber || "",
@@ -174,9 +174,11 @@ function PropertyFormModal({
     addressState: property?.addressState || "",
     addressZip: property?.addressZip || "",
     location: property?.location || "",
-    beds: property?.beds || "",
-    baths: property?.baths || "",
-    sqft: property?.sqft || "",
+    beds: property?.beds?.toString() || "",
+    baths: property?.baths?.toString() || "",
+    sqft: property?.sqft?.toString() || "",
+    lotSize: property?.lotSize?.toString() || "",
+    hoaFee: property?.hoaFee?.toString() || "",
     imageUrl: property?.imageUrl || "",
     isOffMarket: property?.isOffMarket || false,
   });
@@ -223,13 +225,24 @@ function PropertyFormModal({
       ? `${formData.addressCity}, ${formData.addressState}`
       : formData.location;
     onSubmit({
-      ...formData,
-      location: fullLocation,
+      title: formData.title,
+      description: formData.description,
       price: Number(formData.price),
+      addressStreetNumber: formData.addressStreetNumber || undefined,
+      addressStreetName: formData.addressStreetName || undefined,
+      addressUnitNumber: formData.addressUnitNumber || undefined,
+      addressCity: formData.addressCity || undefined,
+      addressState: formData.addressState || undefined,
+      addressZip: formData.addressZip || undefined,
+      location: fullLocation || formData.location,
       beds: Number(formData.beds),
-      baths: Number(formData.baths),
+      baths: formData.baths, // kept as string — decimal column expects string
       sqft: Number(formData.sqft),
-      status: "active"
+      lotSize: formData.lotSize ? Number(formData.lotSize) : undefined,
+      hoaFee: formData.hoaFee ? Number(formData.hoaFee) : undefined,
+      imageUrl: formData.imageUrl || undefined,
+      isOffMarket: formData.isOffMarket,
+      status: "active",
     });
   };
 
@@ -320,15 +333,26 @@ function PropertyFormModal({
           <div className="grid grid-cols-3 gap-4 md:col-span-2">
             <div>
               <label className="block text-sm font-bold text-muted-foreground mb-2">Beds</label>
-              <input required type="number" value={formData.beds} onChange={e => setFormData({...formData, beds: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
+              <input required type="number" min="0" value={formData.beds} onChange={e => setFormData({...formData, beds: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
             </div>
             <div>
               <label className="block text-sm font-bold text-muted-foreground mb-2">Baths</label>
-              <input required type="number" step="0.5" value={formData.baths} onChange={e => setFormData({...formData, baths: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
+              <input required type="number" step="0.5" min="0" value={formData.baths} onChange={e => setFormData({...formData, baths: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
             </div>
             <div>
               <label className="block text-sm font-bold text-muted-foreground mb-2">Sq Ft</label>
-              <input required type="number" value={formData.sqft} onChange={e => setFormData({...formData, sqft: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
+              <input required type="number" min="0" value={formData.sqft} onChange={e => setFormData({...formData, sqft: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-bold text-muted-foreground mb-2">Lot Size (sq ft)</label>
+              <input type="number" min="0" value={formData.lotSize} onChange={e => setFormData({...formData, lotSize: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="e.g. 5000" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-muted-foreground mb-2">HOA Fee ($/mo)</label>
+              <input type="number" min="0" value={formData.hoaFee} onChange={e => setFormData({...formData, hoaFee: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="0 if none" />
             </div>
           </div>
 

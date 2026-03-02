@@ -1,0 +1,128 @@
+# Redstate — Real Estate Listing Platform
+
+## Overview
+
+Redstate is a Redfin-inspired real estate web application that allows users to browse, search, save, and list properties. It features a buyer-facing interface with map integration, property detail pages with public records data, and an agent portal for managing listings.
+
+Key features:
+- Property search with filters (location, price, beds, baths, sqft, HOA fee, off-market)
+- Interactive Google Maps view with property markers and Street View
+- Property detail pages with neighborhood stats, flood zone info, and nearby places (pulled from public APIs)
+- User dashboard for saved homes and saved searches
+- Agent dashboard for creating, editing, and deleting listings
+- Authentication via Replit Auth (OpenID Connect)
+
+## User Preferences
+
+Preferred communication style: Simple, everyday language.
+
+## System Architecture
+
+### Frontend
+
+- **Framework**: React 18 with TypeScript, bundled by Vite
+- **Routing**: `wouter` (lightweight client-side routing)
+- **State/Data Fetching**: TanStack React Query v5 — all server data is fetched and cached via custom hooks (`use-properties`, `use-saved`, `use-auth`)
+- **UI Components**: shadcn/ui (New York style) built on Radix UI primitives, styled with Tailwind CSS
+- **Styling**: Tailwind CSS with CSS custom properties for theming. Redfin-inspired red primary color. Fonts: DM Sans (body) + Outfit (headings)
+- **Forms**: React Hook Form + Zod resolvers
+- **Maps**: Google Maps JavaScript API via `@react-google-maps/api` — uses AdvancedMarkerElements and Street View Panorama. Requires `VITE_GOOGLE_MAPS_API_KEY` env var
+- **URL Params**: `query-string` for serializing search filters into query strings
+
+**Pages:**
+- `/` — Home with hero search and featured listings
+- `/search` — Property search with filters + split map/list view
+- `/property/:id` — Property detail with map, public records panel
+- `/dashboard` — User saved homes + saved searches
+- `/agent` — Agent dashboard (list/create/edit/delete own properties)
+
+### Backend
+
+- **Framework**: Express.js (TypeScript, ESM)
+- **Entry**: `server/index.ts` → registers routes, sets up Vite dev middleware or static serving
+- **API Design**: Route paths and Zod validation schemas are defined in `shared/routes.ts`, shared between client and server
+- **Storage Layer**: `server/storage.ts` — `DatabaseStorage` class implementing `IStorage` interface; all DB queries go through Drizzle ORM
+- **Public Records**: `server/publicRecords.ts` fetches from Census Geocoder, ACS, FEMA NFHL, and OpenStreetMap Overpass APIs to enrich property detail pages
+- **Build**: Custom `script/build.ts` — runs Vite build for the client, then esbuild for the server into `dist/`
+
+### Database
+
+- **Database**: PostgreSQL
+- **ORM**: Drizzle ORM (`drizzle-orm/node-postgres`) with `drizzle-kit` for migrations
+- **Schema** (`shared/schema.ts`):
+  - `users` — auth user profiles (id, email, firstName, lastName, profileImageUrl)
+  - `sessions` — server-side session storage for Replit Auth (mandatory, managed by `connect-pg-simple`)
+  - `properties` — listings with address fields, price, beds, baths, sqft, lotSize, hoaFee, status, agentId, imageUrl, isOffMarket flag
+  - `savedProperties` — join table: userId + propertyId
+  - `savedSearches` — userId + name + JSONB criteria
+- **Migrations**: `./migrations/` directory, applied with `drizzle-kit push`
+
+### Authentication
+
+- **Provider**: Replit Auth via OpenID Connect (OIDC), implemented in `server/replit_integrations/auth/`
+- **Strategy**: `openid-client` + `passport` with a custom strategy; OIDC config is memoized for 1 hour
+- **Sessions**: `express-session` backed by PostgreSQL (`connect-pg-simple`) using the `sessions` table; 1-week TTL; secure/httpOnly cookies
+- **Required env vars**: `DATABASE_URL`, `SESSION_SECRET`, `REPL_ID`, `ISSUER_URL` (defaults to `https://replit.com/oidc`)
+- **Client side**: `useAuth` hook fetches `/api/auth/user`; unauthenticated users are redirected to `/api/login`; protected routes show a login prompt
+
+### API Structure
+
+All API routes are defined in `shared/routes.ts` with typed paths and Zod schemas:
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/properties` | Public | List/search properties |
+| GET | `/api/properties/:id` | Public | Get single property |
+| POST | `/api/properties` | Required | Create listing |
+| PUT | `/api/properties/:id` | Required | Update listing |
+| DELETE | `/api/properties/:id` | Required | Delete listing |
+| GET | `/api/saved-properties` | Required | Get user's saved homes |
+| POST | `/api/saved-properties` | Required | Save a property |
+| DELETE | `/api/saved-properties/:propertyId` | Required | Unsave a property |
+| GET | `/api/saved-searches` | Required | Get saved searches |
+| POST | `/api/saved-searches` | Required | Save a search |
+| DELETE | `/api/saved-searches/:id` | Required | Delete a saved search |
+| GET | `/api/public-records/:id` | Public | Fetch public records for a property |
+| GET | `/api/auth/user` | Required | Get current user |
+| GET | `/api/login` | — | Initiate Replit Auth |
+| GET | `/api/logout` | — | Log out |
+
+## External Dependencies
+
+### APIs & Services
+
+- **Google Maps JavaScript API** — Map display, AdvancedMarkerElements, Street View, Places Autocomplete (for agent address input). Requires `VITE_GOOGLE_MAPS_API_KEY` (client-side).
+- **US Census Geocoder** (`geocoding.geo.census.gov`) — Geocode property addresses to lat/lng + FIPS codes. No API key needed.
+- **US Census ACS5** (`api.census.gov/data/2023/acs/acs5`) — Neighborhood statistics: median income, home value, population, owner-occupancy rate by census tract. No API key needed.
+- **FEMA NFHL** (`hazards.fema.gov`) — Flood zone data (Special Flood Hazard Area classification). No API key needed.
+- **OpenStreetMap Overpass API** (`overpass-api.de`) — Nearby places: schools, parks, hospitals, transit, grocery stores within a radius. No API key needed.
+- **Replit Auth / OIDC** (`replit.com/oidc`) — User authentication. Requires `REPL_ID` env var.
+
+### Key npm Packages
+
+| Package | Purpose |
+|---------|---------|
+| `drizzle-orm` + `pg` | PostgreSQL ORM and driver |
+| `drizzle-kit` | DB schema push/migrations |
+| `express` + `express-session` | HTTP server and session management |
+| `passport` + `openid-client` | OIDC authentication |
+| `connect-pg-simple` | PostgreSQL session store |
+| `@tanstack/react-query` | Server state management |
+| `wouter` | Client-side routing |
+| `@react-google-maps/api` | Google Maps React wrapper |
+| `react-hook-form` + `zod` | Form validation |
+| `query-string` | URL query param serialization |
+| `shadcn/ui` + Radix UI | Accessible UI primitives |
+| `tailwindcss` | Utility-first CSS framework |
+| `vite` | Frontend build tool and dev server |
+| `memoizee` | Memoize OIDC config fetch |
+
+### Environment Variables Required
+
+```
+DATABASE_URL        # PostgreSQL connection string
+SESSION_SECRET      # Secret for signing session cookies
+REPL_ID             # Replit app ID (for OIDC client)
+ISSUER_URL          # OIDC issuer (defaults to https://replit.com/oidc)
+VITE_GOOGLE_MAPS_API_KEY  # Google Maps JS API key (client-side)
+```
