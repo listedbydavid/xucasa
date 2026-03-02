@@ -3,9 +3,8 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Property } from '@shared/schema';
 
-// NOTE: In a real app, you should use an environment variable for the token.
-// For this demo, we can use a public token or ask the user for one.
-// mapboxgl.accessToken = 'YOUR_MAPBOX_ACCESS_TOKEN';
+// Public token for demonstration - in production, use VITE_MAPBOX_TOKEN
+mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
 interface MapViewProps {
   properties: Property[];
@@ -19,11 +18,8 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 12 }
   const markers = useRef<mapboxgl.Marker[]>([]);
 
   useEffect(() => {
-    if (map.current) return; // Initialize only once
+    if (map.current) return;
     if (!mapContainer.current) return;
-
-    // Default public token for demonstration if none provided
-    // mapboxgl.accessToken = '...'; 
 
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
@@ -33,6 +29,13 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 12 }
     });
 
     map.current.addControl(new mapboxgl.NavigationControl());
+
+    return () => {
+      if (map.current) {
+        map.current.remove();
+        map.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -74,7 +77,7 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 12 }
       
       markers.current.push(marker);
     });
-  }, [properties]);
+  }, [properties, center]); // Added center to deps to refresh markers if center shifts significantly in this mock
 
   return <div ref={mapContainer} className="w-full h-full" />;
 }
