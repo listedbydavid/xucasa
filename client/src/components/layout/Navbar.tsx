@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { Home, Search, Heart, User, LogOut, Briefcase } from "lucide-react";
+import { Home, Search, User, LogOut, Briefcase } from "lucide-react";
 
 export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -25,7 +25,11 @@ export function Navbar() {
             </Link>
             <Link href="/agent" className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full transition-colors flex items-center gap-2">
               <Briefcase className="w-4 h-4" />
-              Agent Dashboard
+              For Agents
+            </Link>
+            <Link href="/dashboard" className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full transition-colors flex items-center gap-2">
+              <User className="w-4 h-4" />
+              For Clients
             </Link>
           </nav>
         </div>
@@ -33,12 +37,7 @@ export function Navbar() {
         <div className="flex items-center gap-3">
           {isAuthenticated ? (
             <>
-              <Link href="/dashboard" className="hidden sm:flex px-4 py-2 text-sm font-medium text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-full transition-colors items-center gap-2">
-                <User className="w-4 h-4" />
-                My Dashboard
-              </Link>
-              <div className="h-6 w-px bg-border mx-1 hidden sm:block"></div>
-              <div className="flex items-center gap-3 pl-2">
+              <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   {user?.profileImageUrl ? (
                     <img src={user.profileImageUrl} alt="Avatar" className="w-8 h-8 rounded-full border border-border" />
