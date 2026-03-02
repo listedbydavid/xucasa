@@ -1,11 +1,17 @@
 import { useState, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
-import { Plus, Edit3, Trash2, Home, X, Search, Loader2 } from "lucide-react";
+import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link } from "lucide-react";
 import type { PropertyResponse, CreatePropertyRequest } from "@shared/schema";
 import { useJsApiLoader, Autocomplete } from "@react-google-maps/api";
 
 const GOOGLE_MAPS_LIBRARIES: ('places' | 'geometry')[] = ['places'];
+
+const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+
+function buildStreetViewUrl(lat: number, lng: number, size = "800x500"): string {
+  return `https://maps.googleapis.com/maps/api/streetview?size=${size}&location=${lat},${lng}&fov=90&pitch=5&key=${MAPS_KEY}`;
+}
 
 export default function AgentDashboard() {
   const { user, isAuthenticated } = useAuth();
@@ -17,9 +23,7 @@ export default function AgentDashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProperty, setEditingProperty] = useState<PropertyResponse | null>(null);
 
-  // Filter properties logic - assumes backend returns all or just ours.
-  // In a real app with proper roles, we'd only see our own. Let's filter by agentId if possible.
-  const myProperties = properties.filter(p => p.agentId === user?.id) || properties; 
+  const myProperties = properties.filter(p => p.agentId === user?.id) || properties;
 
   if (!isAuthenticated) {
     return (
@@ -41,7 +45,7 @@ export default function AgentDashboard() {
   };
 
   const handleDelete = (id: number) => {
-    if(confirm("Are you sure you want to delete this listing?")) {
+    if (confirm("Are you sure you want to delete this listing?")) {
       deleteProperty(id);
     }
   };
@@ -54,9 +58,10 @@ export default function AgentDashboard() {
             <h1 className="text-3xl font-display font-bold text-foreground">Agent Dashboard</h1>
             <p className="text-muted-foreground mt-2">Manage your active listings and off-market homes.</p>
           </div>
-          <button 
+          <button
             onClick={openNew}
             className="flex items-center gap-2 bg-foreground text-background px-6 py-3 rounded-xl font-bold hover:bg-primary hover:text-white transition-all shadow-lg active:scale-95"
+            data-testid="button-add-listing"
           >
             <Plus className="w-5 h-5" />
             Add Listing
@@ -65,8 +70,8 @@ export default function AgentDashboard() {
 
         {isLoading ? (
           <div className="animate-pulse space-y-4">
-            <div className="h-16 bg-muted rounded-xl"></div>
-            <div className="h-16 bg-muted rounded-xl"></div>
+            <div className="h-16 bg-muted rounded-xl" />
+            <div className="h-16 bg-muted rounded-xl" />
           </div>
         ) : myProperties.length === 0 ? (
           <div className="text-center py-20 bg-card border border-border rounded-3xl">
@@ -90,10 +95,13 @@ export default function AgentDashboard() {
               </thead>
               <tbody className="divide-y divide-border">
                 {myProperties.map(property => (
-                  <tr key={property.id} className="hover:bg-muted/20 transition-colors">
+                  <tr key={property.id} className="hover:bg-muted/20 transition-colors" data-testid={`row-property-${property.id}`}>
                     <td className="p-4 flex items-center gap-4">
                       <div className="w-16 h-16 rounded-lg bg-muted overflow-hidden flex-shrink-0">
-                        {property.imageUrl && <img src={property.imageUrl} className="w-full h-full object-cover" />}
+                        {property.imageUrl
+                          ? <img src={property.imageUrl} className="w-full h-full object-cover" alt={property.title} />
+                          : <div className="w-full h-full flex items-center justify-center"><ImageOff className="w-5 h-5 text-muted-foreground/40" /></div>
+                        }
                       </div>
                       <div>
                         <div className="font-bold text-foreground">{property.title}</div>
@@ -111,10 +119,10 @@ export default function AgentDashboard() {
                       )}
                     </td>
                     <td className="p-4 text-right">
-                      <button onClick={() => openEdit(property)} className="p-2 text-muted-foreground hover:text-primary transition-colors">
+                      <button onClick={() => openEdit(property)} className="p-2 text-muted-foreground hover:text-primary transition-colors" data-testid={`button-edit-${property.id}`}>
                         <Edit3 className="w-5 h-5" />
                       </button>
-                      <button onClick={() => handleDelete(property.id)} className="p-2 text-muted-foreground hover:text-destructive transition-colors ml-2">
+                      <button onClick={() => handleDelete(property.id)} className="p-2 text-muted-foreground hover:text-destructive transition-colors ml-2" data-testid={`button-delete-${property.id}`}>
                         <Trash2 className="w-5 h-5" />
                       </button>
                     </td>
@@ -127,7 +135,7 @@ export default function AgentDashboard() {
       </div>
 
       {isModalOpen && (
-        <PropertyFormModal 
+        <PropertyFormModal
           property={editingProperty}
           onClose={() => setIsModalOpen(false)}
           onSubmit={(data) => {
@@ -144,20 +152,19 @@ export default function AgentDashboard() {
   );
 }
 
-// Modal Component defined in same file for cohesion
-function PropertyFormModal({ 
-  property, 
-  onClose, 
-  onSubmit, 
-  isPending 
-}: { 
-  property: PropertyResponse | null, 
-  onClose: () => void, 
-  onSubmit: (data: any) => void,
-  isPending: boolean 
+function PropertyFormModal({
+  property,
+  onClose,
+  onSubmit,
+  isPending,
+}: {
+  property: PropertyResponse | null;
+  onClose: () => void;
+  onSubmit: (data: any) => void;
+  isPending: boolean;
 }) {
   const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
+    googleMapsApiKey: MAPS_KEY,
     libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
@@ -182,6 +189,11 @@ function PropertyFormModal({
     imageUrl: property?.imageUrl || "",
     isOffMarket: property?.isOffMarket || false,
   });
+
+  // Street View preview state
+  const [streetViewUrl, setStreetViewUrl] = useState<string | null>(null);
+  const [streetViewUsed, setStreetViewUsed] = useState(false);
+  const [photoTab, setPhotoTab] = useState<"streetview" | "url">(property?.imageUrl ? "url" : "streetview");
 
   const onAutocompleteLoad = (autocomplete: google.maps.places.Autocomplete) => {
     autocompleteRef.current = autocomplete;
@@ -217,6 +229,23 @@ function PropertyFormModal({
       location: `${city}, ${state}`,
       title: prev.title || (place.name || ""),
     }));
+
+    // Auto-generate Street View from geocoordinates
+    const lat = place.geometry?.location?.lat();
+    const lng = place.geometry?.location?.lng();
+    if (lat && lng) {
+      const svUrl = buildStreetViewUrl(lat, lng);
+      setStreetViewUrl(svUrl);
+      setStreetViewUsed(false);
+      setPhotoTab("streetview");
+    }
+  };
+
+  const handleUseStreetView = () => {
+    if (streetViewUrl) {
+      setFormData(prev => ({ ...prev, imageUrl: streetViewUrl }));
+      setStreetViewUsed(true);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -236,7 +265,7 @@ function PropertyFormModal({
       addressZip: formData.addressZip || undefined,
       location: fullLocation || formData.location,
       beds: Number(formData.beds),
-      baths: formData.baths, // kept as string — decimal column expects string
+      baths: formData.baths,
       sqft: Number(formData.sqft),
       lotSize: formData.lotSize ? Number(formData.lotSize) : undefined,
       hoaFee: formData.hoaFee ? Number(formData.hoaFee) : undefined,
@@ -248,29 +277,32 @@ function PropertyFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}></div>
-      <div className="bg-card rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative z-10 animate-in">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="bg-card rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative z-10">
         <div className="sticky top-0 bg-card/90 backdrop-blur-md p-6 border-b border-border flex justify-between items-center">
           <h2 className="text-2xl font-display font-bold">{property ? 'Edit Listing' : 'Create Listing'}</h2>
-          <button onClick={onClose} className="p-2 hover:bg-muted rounded-full transition-colors"><X className="w-5 h-5"/></button>
+          <button onClick={onClose} className="p-2 hover:bg-muted rounded-full transition-colors"><X className="w-5 h-5" /></button>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
+
+          {/* Address Autocomplete */}
           <div className="space-y-4">
             <div className="relative">
-              <label className="block text-sm font-bold text-muted-foreground mb-2">Search Address (Google Autocomplete)</label>
+              <label className="block text-sm font-bold text-muted-foreground mb-2">Search Address</label>
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground z-10 pointer-events-none" />
                 {isLoaded ? (
                   <Autocomplete
                     onLoad={onAutocompleteLoad}
                     onPlaceChanged={onPlaceChanged}
-                    options={{ componentRestrictions: { country: "us" }, types: ["address"] }}
+                    options={{ componentRestrictions: { country: "us" }, types: ["address"], fields: ["address_components", "geometry", "name", "formatted_address"] }}
                   >
                     <input
                       className="w-full bg-background border-2 border-border rounded-xl pl-12 pr-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all"
                       placeholder="Start typing an address..."
                       type="text"
+                      data-testid="input-address-autocomplete"
                     />
                   </Autocomplete>
                 ) : (
@@ -286,103 +318,210 @@ function PropertyFormModal({
             <div className="grid md:grid-cols-3 gap-4">
               <div className="md:col-span-1">
                 <label className="block text-sm font-bold text-muted-foreground mb-2">Street #</label>
-                <input required value={formData.addressStreetNumber} onChange={e => setFormData({...formData, addressStreetNumber: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="123" />
+                <input required value={formData.addressStreetNumber} onChange={e => setFormData({ ...formData, addressStreetNumber: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="123" />
               </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-bold text-muted-foreground mb-2">Street Name</label>
-                <input required value={formData.addressStreetName} onChange={e => setFormData({...formData, addressStreetName: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="Main St" />
+                <input required value={formData.addressStreetName} onChange={e => setFormData({ ...formData, addressStreetName: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="Main St" />
               </div>
             </div>
 
             <div className="grid md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-bold text-muted-foreground mb-2">Unit/Apt</label>
-                <input value={formData.addressUnitNumber} onChange={e => setFormData({...formData, addressUnitNumber: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="4B" />
+                <input value={formData.addressUnitNumber} onChange={e => setFormData({ ...formData, addressUnitNumber: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="4B" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-muted-foreground mb-2">City</label>
-                <input required value={formData.addressCity} onChange={e => setFormData({...formData, addressCity: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="Seattle" />
+                <input required value={formData.addressCity} onChange={e => setFormData({ ...formData, addressCity: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="San Diego" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-muted-foreground mb-2">State</label>
-                <input required value={formData.addressState} onChange={e => setFormData({...formData, addressState: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="WA" />
+                <input required value={formData.addressState} onChange={e => setFormData({ ...formData, addressState: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="CA" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-muted-foreground mb-2">Zip</label>
-                <input required value={formData.addressZip} onChange={e => setFormData({...formData, addressZip: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="98101" />
+                <input required value={formData.addressZip} onChange={e => setFormData({ ...formData, addressZip: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="92117" />
               </div>
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6 pt-4 border-t border-border">
+          {/* Photo Section */}
+          <div className="border-t border-border pt-6">
+            <label className="block text-sm font-bold text-muted-foreground mb-3 flex items-center gap-2">
+              <Camera className="w-4 h-4" /> Listing Photo
+            </label>
+
+            {/* Tab switcher */}
+            <div className="flex gap-2 mb-4">
+              <button
+                type="button"
+                onClick={() => setPhotoTab("streetview")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${photoTab === "streetview" ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+              >
+                <Camera className="w-4 h-4" />
+                Street View Auto-Photo
+              </button>
+              <button
+                type="button"
+                onClick={() => setPhotoTab("url")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${photoTab === "url" ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+              >
+                <Link className="w-4 h-4" />
+                Custom URL
+              </button>
+            </div>
+
+            {photoTab === "streetview" && (
+              <div>
+                {streetViewUrl ? (
+                  <div className="space-y-3">
+                    <div className="relative rounded-xl overflow-hidden border-2 border-border aspect-video bg-muted">
+                      <img
+                        src={streetViewUrl}
+                        alt="Street View"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                      <div className="hidden absolute inset-0 flex flex-col items-center justify-center text-muted-foreground gap-2">
+                        <ImageOff className="w-8 h-8 opacity-40" />
+                        <p className="text-sm">No Street View available for this address</p>
+                      </div>
+                      {streetViewUsed && (
+                        <div className="absolute top-3 right-3 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> In Use
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handleUseStreetView}
+                        className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${streetViewUsed ? "bg-green-100 text-green-800 border-2 border-green-300" : "bg-primary text-white hover:bg-primary/90"}`}
+                        data-testid="button-use-street-view"
+                      >
+                        {streetViewUsed ? (
+                          <><CheckCircle2 className="w-4 h-4" /> Street View Photo Selected</>
+                        ) : (
+                          <><Camera className="w-4 h-4" /> Use as Listing Photo</>
+                        )}
+                      </button>
+                      {streetViewUsed && (
+                        <button
+                          type="button"
+                          onClick={() => { setFormData(prev => ({ ...prev, imageUrl: "" })); setStreetViewUsed(false); }}
+                          className="p-2.5 rounded-xl bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Exterior street-level photo pulled from Google Street View for this address. Select an address above to update.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border-2 border-dashed border-border p-8 text-center">
+                    <Camera className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground font-medium">Select an address above</p>
+                    <p className="text-xs text-muted-foreground mt-1">A Street View exterior photo will appear automatically</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {photoTab === "url" && (
+              <div className="space-y-3">
+                <input
+                  value={formData.imageUrl}
+                  onChange={e => { setFormData({ ...formData, imageUrl: e.target.value }); setStreetViewUsed(false); }}
+                  className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all"
+                  placeholder="https://example.com/photo.jpg"
+                  data-testid="input-image-url"
+                />
+                {formData.imageUrl && (
+                  <div className="rounded-xl overflow-hidden border border-border aspect-video bg-muted">
+                    <img
+                      src={formData.imageUrl}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                      onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0'; }}
+                    />
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">Paste a direct link to a photo. For best results, use a high-resolution landscape photo.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Core listing details */}
+          <div className="grid md:grid-cols-2 gap-6 pt-2 border-t border-border">
             <div>
               <label className="block text-sm font-bold text-muted-foreground mb-2">Listing Title</label>
-              <input required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all" placeholder="Stunning Modern Home" />
+              <input required value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all" placeholder="Stunning Modern Home" />
             </div>
             <div>
               <label className="block text-sm font-bold text-muted-foreground mb-2">Price ($)</label>
-              <input required type="number" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all" placeholder="750000" />
+              <input required type="number" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all" placeholder="750000" />
             </div>
           </div>
 
-          <div className="md:col-span-2">
+          <div>
             <label className="block text-sm font-bold text-muted-foreground mb-2">Description</label>
-            <textarea required rows={4} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all resize-none" placeholder="Describe the property..." />
+            <textarea required rows={4} value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all resize-none" placeholder="Describe the property..." />
           </div>
 
-          <div className="grid grid-cols-3 gap-4 md:col-span-2">
+          <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-bold text-muted-foreground mb-2">Beds</label>
-              <input required type="number" min="0" value={formData.beds} onChange={e => setFormData({...formData, beds: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
+              <input required type="number" min="0" value={formData.beds} onChange={e => setFormData({ ...formData, beds: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
             </div>
             <div>
               <label className="block text-sm font-bold text-muted-foreground mb-2">Baths</label>
-              <input required type="number" step="0.5" min="0" value={formData.baths} onChange={e => setFormData({...formData, baths: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
+              <input required type="number" step="0.5" min="0" value={formData.baths} onChange={e => setFormData({ ...formData, baths: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
             </div>
             <div>
               <label className="block text-sm font-bold text-muted-foreground mb-2">Sq Ft</label>
-              <input required type="number" min="0" value={formData.sqft} onChange={e => setFormData({...formData, sqft: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
+              <input required type="number" min="0" value={formData.sqft} onChange={e => setFormData({ ...formData, sqft: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-bold text-muted-foreground mb-2">Lot Size (sq ft)</label>
-              <input type="number" min="0" value={formData.lotSize} onChange={e => setFormData({...formData, lotSize: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="e.g. 5000" />
+              <input type="number" min="0" value={formData.lotSize} onChange={e => setFormData({ ...formData, lotSize: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="e.g. 5000" />
             </div>
             <div>
               <label className="block text-sm font-bold text-muted-foreground mb-2">HOA Fee ($/mo)</label>
-              <input type="number" min="0" value={formData.hoaFee} onChange={e => setFormData({...formData, hoaFee: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="0 if none" />
+              <input type="number" min="0" value={formData.hoaFee} onChange={e => setFormData({ ...formData, hoaFee: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="0 if none" />
             </div>
           </div>
 
-          <div className="md:col-span-2">
-            <label className="block text-sm font-bold text-muted-foreground mb-2">Image URL</label>
-            <input value={formData.imageUrl} onChange={e => setFormData({...formData, imageUrl: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all" placeholder="https://unsplash.com/..." />
-          </div>
-
-          <div className="md:col-span-2 flex items-center gap-3 bg-yellow-500/10 p-4 rounded-xl border border-yellow-500/20">
-            <input 
-              type="checkbox" 
-              id="isOffMarket" 
+          <div className="flex items-center gap-3 bg-yellow-500/10 p-4 rounded-xl border border-yellow-500/20">
+            <input
+              type="checkbox"
+              id="isOffMarket"
               checked={formData.isOffMarket}
-              onChange={e => setFormData({...formData, isOffMarket: e.target.checked})}
+              onChange={e => setFormData({ ...formData, isOffMarket: e.target.checked })}
               className="w-5 h-5 accent-yellow-500 rounded cursor-pointer"
             />
-            <label htmlFor="isOffMarket" className="font-bold text-yellow-800 cursor-pointer">
+            <label htmlFor="isOffMarket" className="font-bold text-yellow-800 dark:text-yellow-400 cursor-pointer">
               Mark as "Make Me Move" (Off-Market)
             </label>
           </div>
-          
+
           <div className="flex justify-end gap-4 pt-4 border-t border-border">
             <button type="button" onClick={onClose} className="px-6 py-3 font-bold text-muted-foreground hover:bg-muted rounded-xl transition-colors">Cancel</button>
-            <button type="submit" disabled={isPending} className="px-8 py-3 font-bold bg-primary text-white rounded-xl hover:bg-primary/90 hover:shadow-lg transition-all disabled:opacity-50 flex items-center gap-2">
-              {isPending ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : null}
+            <button type="submit" disabled={isPending} className="px-8 py-3 font-bold bg-primary text-white rounded-xl hover:bg-primary/90 hover:shadow-lg transition-all disabled:opacity-50 flex items-center gap-2" data-testid="button-submit-listing">
+              {isPending ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
               {property ? 'Save Changes' : 'Post Listing'}
             </button>
           </div>
         </form>
       </div>
     </div>
-  )
+  );
 }
