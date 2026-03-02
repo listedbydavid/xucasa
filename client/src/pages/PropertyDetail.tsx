@@ -164,7 +164,15 @@ export default function PropertyDetail() {
               </div>
 
               <div className="mt-8 bg-muted rounded-3xl border border-border overflow-hidden h-64">
-                <MapView properties={[property]} center={[-122.4194, 37.7749]} zoom={15} />
+                <MapView
+                  properties={[property]}
+                  center={
+                    property.lat && property.lng
+                      ? [parseFloat(property.lng as string), parseFloat(property.lat as string)]
+                      : [-122.4194, 37.7749]
+                  }
+                  zoom={15}
+                />
               </div>
             </div>
           </div>
