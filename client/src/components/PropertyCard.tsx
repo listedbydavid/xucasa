@@ -180,6 +180,11 @@ export function PropertyCard({ property }: PropertyCardProps) {
                 Make Me Move
               </span>
             )}
+            {property.openHouseDate && new Date(property.openHouseDate) > new Date() && (
+              <span className="bg-green-500 text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-lg">
+                🏠 Open House
+              </span>
+            )}
             <span
               className={`text-xs font-bold px-3 py-1.5 rounded-full shadow-lg ${
                 property.status === "active"

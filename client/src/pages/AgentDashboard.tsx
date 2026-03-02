@@ -1,10 +1,13 @@
 import { useState, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
-import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link } from "lucide-react";
+import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck } from "lucide-react";
 import { IdxSyncPanel } from "@/components/IdxSyncPanel";
 import type { PropertyResponse, CreatePropertyRequest } from "@shared/schema";
 import { useJsApiLoader, Autocomplete } from "@react-google-maps/api";
+import { useAgentClients, useClientFavorites, useClientSearches, useOpenHouses } from "@/hooks/use-client-dashboard";
+
+type AgentTab = "listings" | "clients" | "openhouses" | "idx";
 
 const GOOGLE_MAPS_LIBRARIES: ('places' | 'geometry')[] = ['places'];
 
@@ -23,6 +26,7 @@ export default function AgentDashboard() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProperty, setEditingProperty] = useState<PropertyResponse | null>(null);
+  const [activeTab, setActiveTab] = useState<AgentTab>("listings");
 
   const myProperties = properties.filter(p => p.agentId === user?.id) || properties;
 
@@ -54,90 +58,129 @@ export default function AgentDashboard() {
   return (
     <div className="min-h-screen bg-background pb-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-10 gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 gap-4">
           <div>
             <h1 className="text-3xl font-display font-bold text-foreground">Agent Dashboard</h1>
-            <p className="text-muted-foreground mt-2">Manage your active listings and off-market homes.</p>
+            <p className="text-muted-foreground mt-2">Manage listings, clients, and open houses.</p>
           </div>
-          <button
-            onClick={openNew}
-            className="flex items-center gap-2 bg-foreground text-background px-6 py-3 rounded-xl font-bold hover:bg-primary hover:text-white transition-all shadow-lg active:scale-95"
-            data-testid="button-add-listing"
-          >
-            <Plus className="w-5 h-5" />
-            Add Listing
-          </button>
+          {activeTab === "listings" && (
+            <button
+              onClick={openNew}
+              className="flex items-center gap-2 bg-foreground text-background px-6 py-3 rounded-xl font-bold hover:bg-primary hover:text-white transition-all shadow-lg active:scale-95"
+              data-testid="button-add-listing"
+            >
+              <Plus className="w-5 h-5" />
+              Add Listing
+            </button>
+          )}
         </div>
 
-        {isLoading ? (
-          <div className="animate-pulse space-y-4">
-            <div className="h-16 bg-muted rounded-xl" />
-            <div className="h-16 bg-muted rounded-xl" />
-          </div>
-        ) : myProperties.length === 0 ? (
-          <div className="text-center py-20 bg-card border border-border rounded-3xl">
-            <Home className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-30" />
-            <h3 className="font-display font-bold text-xl mb-2">No active listings</h3>
-            <p className="text-muted-foreground mb-6">Create your first listing to start reaching buyers.</p>
-            <button onClick={openNew} className="text-primary font-bold hover:underline">
-              Create Listing
+        {/* Tab Nav */}
+        <div className="flex gap-1 mb-8 border-b border-border overflow-x-auto">
+          {([
+            { id: "listings",   label: "My Listings",  icon: Home },
+            { id: "clients",    label: "Clients",       icon: Users },
+            { id: "openhouses", label: "Open Houses",   icon: CalendarDays },
+            { id: "idx",        label: "MLS Sync",      icon: Search },
+          ] as { id: AgentTab; label: string; icon: any }[]).map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`flex items-center gap-2 px-5 py-3 text-sm font-bold whitespace-nowrap border-b-2 transition-all -mb-px ${
+                activeTab === id
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              data-testid={`tab-${id}`}
+            >
+              <Icon className="w-4 h-4" />
+              {label}
             </button>
-          </div>
-        ) : (
-          <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-muted/50 border-b border-border">
-                  <th className="p-4 font-bold text-muted-foreground text-sm uppercase tracking-wider">Property</th>
-                  <th className="p-4 font-bold text-muted-foreground text-sm uppercase tracking-wider">Price</th>
-                  <th className="p-4 font-bold text-muted-foreground text-sm uppercase tracking-wider">Status</th>
-                  <th className="p-4 font-bold text-muted-foreground text-sm uppercase tracking-wider text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {myProperties.map(property => (
-                  <tr key={property.id} className="hover:bg-muted/20 transition-colors" data-testid={`row-property-${property.id}`}>
-                    <td className="p-4 flex items-center gap-4">
-                      <div className="w-16 h-16 rounded-lg bg-muted overflow-hidden flex-shrink-0">
-                        {property.imageUrl
-                          ? <img src={property.imageUrl} className="w-full h-full object-cover" alt={property.title} />
-                          : <div className="w-full h-full flex items-center justify-center"><ImageOff className="w-5 h-5 text-muted-foreground/40" /></div>
-                        }
-                      </div>
-                      <div>
-                        <div className="font-bold text-foreground">{property.title}</div>
-                        <div className="text-sm text-muted-foreground">{property.location}</div>
-                      </div>
-                    </td>
-                    <td className="p-4 font-bold text-foreground">
-                      ${property.price.toLocaleString()}
-                    </td>
-                    <td className="p-4">
-                      {property.isOffMarket ? (
-                        <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-bold">Make Me Move</span>
-                      ) : (
-                        <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-bold">Active</span>
-                      )}
-                    </td>
-                    <td className="p-4 text-right">
-                      <button onClick={() => openEdit(property)} className="p-2 text-muted-foreground hover:text-primary transition-colors" data-testid={`button-edit-${property.id}`}>
-                        <Edit3 className="w-5 h-5" />
-                      </button>
-                      <button onClick={() => handleDelete(property.id)} className="p-2 text-muted-foreground hover:text-destructive transition-colors ml-2" data-testid={`button-delete-${property.id}`}>
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </td>
+          ))}
+        </div>
+
+        {/* Listings Tab */}
+        {activeTab === "listings" && (
+          isLoading ? (
+            <div className="animate-pulse space-y-4">
+              <div className="h-16 bg-muted rounded-xl" />
+              <div className="h-16 bg-muted rounded-xl" />
+            </div>
+          ) : myProperties.length === 0 ? (
+            <div className="text-center py-20 bg-card border border-border rounded-3xl">
+              <Home className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-30" />
+              <h3 className="font-display font-bold text-xl mb-2">No active listings</h3>
+              <p className="text-muted-foreground mb-6">Create your first listing to start reaching buyers.</p>
+              <button onClick={openNew} className="text-primary font-bold hover:underline">Create Listing</button>
+            </div>
+          ) : (
+            <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-muted/50 border-b border-border">
+                    <th className="p-4 font-bold text-muted-foreground text-sm uppercase tracking-wider">Property</th>
+                    <th className="p-4 font-bold text-muted-foreground text-sm uppercase tracking-wider">Price</th>
+                    <th className="p-4 font-bold text-muted-foreground text-sm uppercase tracking-wider">Status</th>
+                    <th className="p-4 font-bold text-muted-foreground text-sm uppercase tracking-wider text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {myProperties.map(property => (
+                    <tr key={property.id} className="hover:bg-muted/20 transition-colors" data-testid={`row-property-${property.id}`}>
+                      <td className="p-4 flex items-center gap-4">
+                        <div className="w-16 h-16 rounded-lg bg-muted overflow-hidden flex-shrink-0">
+                          {property.imageUrl
+                            ? <img src={property.imageUrl} className="w-full h-full object-cover" alt={property.title} />
+                            : <div className="w-full h-full flex items-center justify-center"><ImageOff className="w-5 h-5 text-muted-foreground/40" /></div>
+                          }
+                        </div>
+                        <div>
+                          <div className="font-bold text-foreground">{property.title}</div>
+                          <div className="text-sm text-muted-foreground">{property.location}</div>
+                          {(property as any).openHouseDate && new Date((property as any).openHouseDate) > new Date() && (
+                            <div className="flex items-center gap-1 mt-0.5 text-green-600 text-xs font-bold">
+                              <CalendarDays className="w-3 h-3" />
+                              Open House {new Date((property as any).openHouseDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-4 font-bold text-foreground">${property.price.toLocaleString()}</td>
+                      <td className="p-4">
+                        {property.isOffMarket ? (
+                          <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-bold">Make Me Move</span>
+                        ) : (
+                          <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-bold">Active</span>
+                        )}
+                      </td>
+                      <td className="p-4 text-right">
+                        <button onClick={() => openEdit(property)} className="p-2 text-muted-foreground hover:text-primary transition-colors" data-testid={`button-edit-${property.id}`}>
+                          <Edit3 className="w-5 h-5" />
+                        </button>
+                        <button onClick={() => handleDelete(property.id)} className="p-2 text-muted-foreground hover:text-destructive transition-colors ml-2" data-testid={`button-delete-${property.id}`}>
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
         )}
 
-        {/* MLS / IDX Sync Panel */}
-        <div className="mt-10">
-          <IdxSyncPanel />
-        </div>
+        {/* Clients Tab */}
+        {activeTab === "clients" && <AgentClientsSection />}
+
+        {/* Open Houses Tab */}
+        {activeTab === "openhouses" && <AgentOpenHousesSection agentProperties={myProperties} />}
+
+        {/* MLS / IDX Sync Tab */}
+        {activeTab === "idx" && (
+          <div>
+            <IdxSyncPanel />
+          </div>
+        )}
       </div>
 
       {isModalOpen && (
@@ -153,6 +196,210 @@ export default function AgentDashboard() {
           }}
           isPending={isCreating || isUpdating}
         />
+      )}
+    </div>
+  );
+}
+
+// ── Agent Clients Section ──────────────────────────────────────────────────────
+
+function AgentClientsSection() {
+  const { data: clients = [], isLoading } = useAgentClients();
+  const [expandedClient, setExpandedClient] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 pb-4 border-b border-border">
+        <div>
+          <h2 className="text-xl font-display font-bold text-foreground">My Clients</h2>
+          <p className="text-sm text-muted-foreground">Clients who have invited you to view their favorites and searches</p>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-4">{[1, 2].map(i => <div key={i} className="h-20 bg-muted animate-pulse rounded-2xl" />)}</div>
+      ) : clients.length === 0 ? (
+        <div className="text-center py-16 bg-card border border-border rounded-3xl">
+          <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+            <Users className="w-7 h-7 text-muted-foreground opacity-40" />
+          </div>
+          <h3 className="font-display font-bold text-xl mb-2">No clients yet</h3>
+          <p className="text-muted-foreground text-sm max-w-sm mx-auto">
+            When clients invite you from their dashboard using your email, they'll appear here.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {clients.map((c: any) => (
+            <ClientCard
+              key={c.clientId}
+              client={c}
+              expanded={expandedClient === c.clientId}
+              onToggle={() => setExpandedClient(expandedClient === c.clientId ? null : c.clientId)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClientCard({ client, expanded, onToggle }: { client: any; expanded: boolean; onToggle: () => void }) {
+  const { data: favorites = [], isLoading: favLoading } = useClientFavorites(expanded ? client.clientId : null);
+  const { data: searches = [], isLoading: searchLoading } = useClientSearches(expanded ? client.clientId : null);
+
+  const initials = [client.client?.firstName, client.client?.lastName]
+    .filter(Boolean)
+    .map((s: string) => s[0])
+    .join("") || client.client?.email?.[0]?.toUpperCase() || "?";
+
+  return (
+    <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-4 p-4 hover:bg-muted/30 transition-colors text-left"
+        data-testid={`button-client-${client.clientId}`}
+      >
+        <div className="w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-lg flex-shrink-0">
+          {initials}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-foreground">
+            {client.client?.firstName || client.client?.lastName
+              ? `${client.client.firstName || ""} ${client.client.lastName || ""}`.trim()
+              : client.client?.email}
+          </p>
+          <p className="text-sm text-muted-foreground truncate">{client.client?.email}</p>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1"><Heart className="w-3.5 h-3.5" /> favorites</span>
+            <span className="flex items-center gap-1"><BookmarkCheck className="w-3.5 h-3.5" /> searches</span>
+          </div>
+          {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-border bg-muted/20">
+          {/* Favorites */}
+          <div className="p-4 border-b border-border">
+            <h4 className="font-bold text-sm text-foreground mb-3 flex items-center gap-2">
+              <Heart className="w-4 h-4 text-rose-500" /> Favorited Homes ({favorites.length})
+            </h4>
+            {favLoading ? (
+              <div className="space-y-2">{[1, 2].map(i => <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />)}</div>
+            ) : favorites.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No favorites yet</p>
+            ) : (
+              <div className="space-y-2">
+                {favorites.map((sp: any) => (
+                  <div key={sp.id} className="flex items-center gap-3 bg-card border border-border rounded-xl px-3 py-2.5">
+                    <div className="w-10 h-10 rounded-lg bg-muted overflow-hidden flex-shrink-0">
+                      {sp.property?.imageUrl
+                        ? <img src={sp.property.imageUrl} className="w-full h-full object-cover" alt="" />
+                        : <div className="w-full h-full flex items-center justify-center"><Home className="w-4 h-4 text-muted-foreground/40" /></div>
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-sm text-foreground truncate">{sp.property?.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">{sp.property?.location}</p>
+                    </div>
+                    <p className="font-bold text-sm text-foreground flex-shrink-0">
+                      ${sp.property?.price?.toLocaleString()}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Saved Searches */}
+          <div className="p-4">
+            <h4 className="font-bold text-sm text-foreground mb-3 flex items-center gap-2">
+              <BookmarkCheck className="w-4 h-4 text-blue-500" /> Saved Searches ({searches.length})
+            </h4>
+            {searchLoading ? (
+              <div className="space-y-2">{[1].map(i => <div key={i} className="h-12 bg-muted animate-pulse rounded-lg" />)}</div>
+            ) : searches.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No saved searches yet</p>
+            ) : (
+              <div className="space-y-2">
+                {searches.map((s: any) => (
+                  <div key={s.id} className="bg-card border border-border rounded-xl px-3 py-2.5">
+                    <p className="font-bold text-sm text-foreground">{s.name}</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {Object.entries(s.criteria || {}).map(([k, v]) => (
+                        <span key={k} className="bg-primary/10 text-primary text-xs font-medium px-1.5 py-0.5 rounded">
+                          {k}: {String(v)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Agent Open Houses Section ──────────────────────────────────────────────────
+
+function AgentOpenHousesSection({ agentProperties }: { agentProperties: PropertyResponse[] }) {
+  const { data: allOpenHouses = [], isLoading } = useOpenHouses();
+
+  const formatDate = (date: string) =>
+    new Date(date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+
+  return (
+    <div className="space-y-4">
+      <div className="pb-4 border-b border-border">
+        <h2 className="text-xl font-display font-bold text-foreground">Open Houses</h2>
+        <p className="text-sm text-muted-foreground">All upcoming open houses across active listings</p>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-4">{[1, 2, 3].map(i => <div key={i} className="h-24 bg-muted animate-pulse rounded-2xl" />)}</div>
+      ) : allOpenHouses.length === 0 ? (
+        <div className="text-center py-16 bg-card border border-border rounded-3xl">
+          <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+            <CalendarDays className="w-7 h-7 text-muted-foreground opacity-40" />
+          </div>
+          <h3 className="font-display font-bold text-xl mb-2">No upcoming open houses</h3>
+          <p className="text-muted-foreground text-sm">Set an open house date on any listing by editing it.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {allOpenHouses.map((property: any) => (
+            <div
+              key={property.id}
+              className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm flex gap-3"
+              data-testid={`card-agent-openhouse-${property.id}`}
+            >
+              <div className="w-28 flex-shrink-0 bg-muted relative">
+                {property.imageUrl
+                  ? <img src={property.imageUrl} alt={property.title} className="w-full h-full object-cover" />
+                  : <div className="w-full h-full flex items-center justify-center min-h-[96px]"><Home className="w-6 h-6 text-muted-foreground/30" /></div>
+                }
+              </div>
+              <div className="p-3 flex-1 min-w-0">
+                <p className="font-bold text-foreground truncate text-sm">{property.title}</p>
+                <p className="text-xs text-muted-foreground truncate">{property.location}</p>
+                <p className="font-bold text-foreground text-sm mt-1">${property.price?.toLocaleString()}</p>
+                <div className="flex items-center gap-1 mt-2 text-primary text-xs font-bold">
+                  <CalendarDays className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="truncate">{property.openHouseDate ? formatDate(property.openHouseDate) : ""}</span>
+                </div>
+                {property.openHouseTime && (
+                  <p className="text-xs text-muted-foreground mt-0.5">{property.openHouseTime}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -194,6 +441,10 @@ function PropertyFormModal({
     hoaFee: property?.hoaFee?.toString() || "",
     imageUrl: property?.imageUrl || "",
     isOffMarket: property?.isOffMarket || false,
+    openHouseDate: (property as any)?.openHouseDate
+      ? new Date((property as any).openHouseDate).toISOString().split("T")[0]
+      : "",
+    openHouseTime: (property as any)?.openHouseTime || "",
   });
 
   // Street View preview state
@@ -278,6 +529,8 @@ function PropertyFormModal({
       imageUrl: formData.imageUrl || undefined,
       isOffMarket: formData.isOffMarket,
       status: "active",
+      openHouseDate: formData.openHouseDate || undefined,
+      openHouseTime: formData.openHouseTime || undefined,
     });
   };
 
@@ -503,6 +756,36 @@ function PropertyFormModal({
             <div>
               <label className="block text-sm font-bold text-muted-foreground mb-2">HOA Fee ($/mo)</label>
               <input type="number" min="0" value={formData.hoaFee} onChange={e => setFormData({ ...formData, hoaFee: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="0 if none" />
+            </div>
+          </div>
+
+          {/* Open House */}
+          <div className="bg-green-500/10 p-4 rounded-xl border border-green-500/20 space-y-3">
+            <p className="font-bold text-green-800 dark:text-green-400 text-sm flex items-center gap-2">
+              <CalendarDays className="w-4 h-4" /> Open House (optional)
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-muted-foreground mb-1">Date</label>
+                <input
+                  type="date"
+                  value={formData.openHouseDate}
+                  onChange={e => setFormData({ ...formData, openHouseDate: e.target.value })}
+                  className="w-full bg-background border-2 border-border rounded-xl px-4 py-2.5 outline-none text-sm"
+                  data-testid="input-openhouse-date"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-muted-foreground mb-1">Time</label>
+                <input
+                  type="text"
+                  value={formData.openHouseTime}
+                  onChange={e => setFormData({ ...formData, openHouseTime: e.target.value })}
+                  placeholder="e.g. 1:00 PM – 4:00 PM"
+                  className="w-full bg-background border-2 border-border rounded-xl px-4 py-2.5 outline-none text-sm"
+                  data-testid="input-openhouse-time"
+                />
+              </div>
             </div>
           </div>
 

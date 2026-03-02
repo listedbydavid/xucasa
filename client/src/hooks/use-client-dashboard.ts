@@ -63,6 +63,58 @@ export function useMyHomeIntelligence(id: number | null) {
   });
 }
 
+// ── Agent Invite ─────────────────────────────────────────────────────────────
+
+export function useAgentInvite() {
+  return useQuery({
+    queryKey: ["/api/agent-invite"],
+  });
+}
+
+export function useInviteAgent() {
+  return useMutation({
+    mutationFn: (agentEmail: string) => apiRequest("POST", "/api/agent-invite", { agentEmail }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/agent-invite"] }),
+  });
+}
+
+export function useRemoveAgentInvite() {
+  return useMutation({
+    mutationFn: () => apiRequest("DELETE", "/api/agent-invite"),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/agent-invite"] }),
+  });
+}
+
+export function useAgentClients() {
+  return useQuery<any[]>({
+    queryKey: ["/api/agent-clients"],
+  });
+}
+
+export function useClientFavorites(clientId: string | null) {
+  return useQuery<any[]>({
+    queryKey: ["/api/agent-clients", clientId, "favorites"],
+    queryFn: () => fetch(`/api/agent-clients/${clientId}/favorites`).then(r => r.json()),
+    enabled: clientId !== null,
+  });
+}
+
+export function useClientSearches(clientId: string | null) {
+  return useQuery<any[]>({
+    queryKey: ["/api/agent-clients", clientId, "searches"],
+    queryFn: () => fetch(`/api/agent-clients/${clientId}/searches`).then(r => r.json()),
+    enabled: clientId !== null,
+  });
+}
+
+// ── Open Houses ───────────────────────────────────────────────────────────────
+
+export function useOpenHouses() {
+  return useQuery<any[]>({
+    queryKey: ["/api/open-houses"],
+  });
+}
+
 // ── Profile ───────────────────────────────────────────────────────────────────
 
 export function useUpdateProfile() {

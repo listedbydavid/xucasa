@@ -29,6 +29,8 @@ export const properties = pgTable("properties", {
   lng: decimal("lng"),
   imageUrl: text("image_url"),
   photos: text("photos").array(),
+  openHouseDate: timestamp("open_house_date"),
+  openHouseTime: text("open_house_time"),
   status: text("status").default("active").notNull(),
   // IDX / MLS sync fields
   source: text("source").default("manual").notNull(),   // 'manual' | 'idx'
@@ -92,6 +94,15 @@ export const userHomes = pgTable("user_homes", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const clientAgentLinks = pgTable("client_agent_links", {
+  id: serial("id").primaryKey(),
+  clientId: varchar("client_id").references(() => users.id).notNull(),
+  agentEmail: text("agent_email").notNull(),
+  agentId: varchar("agent_id").references(() => users.id),
+  status: text("status").default("pending").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const propertiesRelations = relations(properties, ({ one, many }) => ({
   agent: one(users, { fields: [properties.agentId], references: [users.id] }),
@@ -115,12 +126,18 @@ export const userHomesRelations = relations(userHomes, ({ one }) => ({
   user: one(users, { fields: [userHomes.userId], references: [users.id] }),
 }));
 
+export const clientAgentLinksRelations = relations(clientAgentLinks, ({ one }) => ({
+  client: one(users, { fields: [clientAgentLinks.clientId], references: [users.id] }),
+  agent: one(users, { fields: [clientAgentLinks.agentId], references: [users.id] }),
+}));
+
 // Insert Schemas
 export const insertPropertySchema = createInsertSchema(properties).omit({ id: true, createdAt: true });
 export const insertSavedPropertySchema = createInsertSchema(savedProperties).omit({ id: true, createdAt: true });
 export const insertSavedSearchSchema = createInsertSchema(savedSearches).omit({ id: true, createdAt: true });
 export const insertSearchHistorySchema = createInsertSchema(searchHistory).omit({ id: true, createdAt: true });
 export const insertUserHomeSchema = createInsertSchema(userHomes).omit({ id: true, createdAt: true });
+export const insertClientAgentLinkSchema = createInsertSchema(clientAgentLinks).omit({ id: true, createdAt: true });
 
 // Types
 export type Property = typeof properties.$inferSelect;
@@ -133,6 +150,8 @@ export type SearchHistory = typeof searchHistory.$inferSelect;
 export type InsertSearchHistory = z.infer<typeof insertSearchHistorySchema>;
 export type UserHome = typeof userHomes.$inferSelect;
 export type InsertUserHome = z.infer<typeof insertUserHomeSchema>;
+export type ClientAgentLink = typeof clientAgentLinks.$inferSelect;
+export type InsertClientAgentLink = z.infer<typeof insertClientAgentLinkSchema>;
 
 // Request Types
 export type CreatePropertyRequest = InsertProperty;

@@ -5,6 +5,7 @@ import {
   savedSearches,
   searchHistory,
   userHomes,
+  clientAgentLinks,
   type Property,
   type InsertProperty,
   type SavedProperty,
@@ -13,9 +14,10 @@ import {
   type SearchHistory,
   type UserHome,
   type InsertUserHome,
+  type ClientAgentLink,
   users,
 } from "@shared/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, gte } from "drizzle-orm";
 
 export interface IStorage {
   // Properties
@@ -46,6 +48,15 @@ export interface IStorage {
   createUserHome(userId: string, home: Omit<InsertUserHome, 'userId'>): Promise<UserHome>;
   updateUserHome(id: number, userId: string, updates: Partial<InsertUserHome>): Promise<UserHome>;
   deleteUserHome(id: number, userId: string): Promise<void>;
+
+  // Client-Agent Links
+  getClientAgentLink(clientId: string): Promise<ClientAgentLink | undefined>;
+  upsertClientAgentLink(clientId: string, agentEmail: string): Promise<ClientAgentLink>;
+  deleteClientAgentLink(clientId: string): Promise<void>;
+  getAgentClients(agentEmail: string): Promise<(ClientAgentLink & { client: any })[]>;
+
+  // Open Houses
+  getUpcomingOpenHouses(): Promise<(Property & { agent: any })[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -179,6 +190,43 @@ export class DatabaseStorage implements IStorage {
 
   async deleteUserHome(id: number, userId: string): Promise<void> {
     await db.delete(userHomes).where(and(eq(userHomes.id, id), eq(userHomes.userId, userId)));
+  }
+
+  async getClientAgentLink(clientId: string): Promise<ClientAgentLink | undefined> {
+    const rows = await db.select().from(clientAgentLinks).where(eq(clientAgentLinks.clientId, clientId)).limit(1);
+    return rows[0];
+  }
+
+  async upsertClientAgentLink(clientId: string, agentEmail: string): Promise<ClientAgentLink> {
+    await db.delete(clientAgentLinks).where(eq(clientAgentLinks.clientId, clientId));
+    const agentUser = await db.select().from(users).where(eq(users.email, agentEmail)).limit(1);
+    const agentId = agentUser[0]?.id ?? null;
+    const status = agentId ? "active" : "pending";
+    const [link] = await db.insert(clientAgentLinks).values({ clientId, agentEmail, agentId, status }).returning();
+    return link;
+  }
+
+  async deleteClientAgentLink(clientId: string): Promise<void> {
+    await db.delete(clientAgentLinks).where(eq(clientAgentLinks.clientId, clientId));
+  }
+
+  async getAgentClients(agentEmail: string): Promise<(ClientAgentLink & { client: any })[]> {
+    const results = await db
+      .select({ link: clientAgentLinks, client: users })
+      .from(clientAgentLinks)
+      .innerJoin(users, eq(clientAgentLinks.clientId, users.id))
+      .where(eq(clientAgentLinks.agentEmail, agentEmail));
+    return results.map(r => ({ ...r.link, client: r.client }));
+  }
+
+  async getUpcomingOpenHouses(): Promise<(Property & { agent: any })[]> {
+    const now = new Date();
+    const results = await db
+      .select({ property: properties, agent: users })
+      .from(properties)
+      .leftJoin(users, eq(properties.agentId, users.id))
+      .where(gte(properties.openHouseDate, now));
+    return results.map(r => ({ ...r.property, agent: r.agent }));
   }
 }
 

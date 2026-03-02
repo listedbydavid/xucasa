@@ -432,6 +432,91 @@ export async function registerRoutes(
     }
   });
 
+  // ── Agent Invite / Client-Agent Links ────────────────────────────────────────
+
+  app.get("/api/agent-invite", isAuthenticated, async (req: any, res) => {
+    try {
+      const link = await storage.getClientAgentLink(req.user.sub);
+      res.json(link ?? null);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/agent-invite", isAuthenticated, async (req: any, res) => {
+    try {
+      const { agentEmail } = req.body;
+      if (!agentEmail) return res.status(400).json({ message: "agentEmail required" });
+      const link = await storage.upsertClientAgentLink(req.user.sub, agentEmail.trim().toLowerCase());
+      res.json(link);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/agent-invite", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteClientAgentLink(req.user.sub);
+      res.json({ message: "Removed" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Agent sees all linked clients
+  app.get("/api/agent-clients", isAuthenticated, async (req: any, res) => {
+    try {
+      const { email } = req.user as any;
+      const clients = await storage.getAgentClients(email);
+      res.json(clients);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Agent views a specific client's saved properties
+  app.get("/api/agent-clients/:clientId/favorites", isAuthenticated, async (req: any, res) => {
+    try {
+      const { clientId } = req.params;
+      const agentEmail = req.user.email;
+      const clients = await storage.getAgentClients(agentEmail);
+      if (!clients.find(c => c.clientId === clientId)) {
+        return res.status(403).json({ message: "Not authorized to view this client" });
+      }
+      const saved = await storage.getSavedProperties(clientId);
+      res.json(saved);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Agent views a specific client's saved searches
+  app.get("/api/agent-clients/:clientId/searches", isAuthenticated, async (req: any, res) => {
+    try {
+      const { clientId } = req.params;
+      const agentEmail = req.user.email;
+      const clients = await storage.getAgentClients(agentEmail);
+      if (!clients.find(c => c.clientId === clientId)) {
+        return res.status(403).json({ message: "Not authorized to view this client" });
+      }
+      const searches = await storage.getSavedSearches(clientId);
+      res.json(searches);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Open Houses ───────────────────────────────────────────────────────────────
+
+  app.get("/api/open-houses", async (_req, res) => {
+    try {
+      const openHouses = await storage.getUpcomingOpenHouses();
+      res.json(openHouses);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── IDX / MLS Sync Routes ────────────────────────────────────────────────────
 
   // Status — is IDX configured, last sync result, sync history

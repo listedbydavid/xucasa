@@ -6,6 +6,8 @@ import {
   useSearchHistory, useDeleteSearchHistory, useClearSearchHistory,
   useMyHomes, useCreateMyHome, useDeleteMyHome, useMyHomeIntelligence,
   useUpdateProfile,
+  useAgentInvite, useInviteAgent, useRemoveAgentInvite,
+  useOpenHouses,
 } from "@/hooks/use-client-dashboard";
 import { Link } from "wouter";
 import {
@@ -13,13 +15,14 @@ import {
   Trash2, ChevronRight, X, Plus, Edit2, Check, MapPin,
   Droplets, TreeDeciduous, School, ShoppingCart, Building,
   Flame, Activity, ExternalLink, Camera, Loader2,
+  UserPlus, CalendarDays, Mail, CheckCircle2, AlertCircle,
 } from "lucide-react";
 import { useJsApiLoader, Autocomplete } from "@react-google-maps/api";
 
 const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 const LIBRARIES: ('places')[] = ['places'];
 
-type Section = "profile" | "myhome" | "favorites" | "searches" | "history";
+type Section = "profile" | "myhome" | "favorites" | "searches" | "history" | "agent" | "openhouses";
 
 export default function Dashboard() {
   const { user, isAuthenticated } = useAuth();
@@ -42,11 +45,13 @@ export default function Dashboard() {
   }
 
   const navItems: { id: Section; label: string; icon: typeof User }[] = [
-    { id: "profile",   label: "My Profile",       icon: User },
-    { id: "myhome",    label: "My Home",           icon: Home },
-    { id: "favorites", label: "Favorites",         icon: Heart },
-    { id: "searches",  label: "Saved Searches",    icon: BookmarkCheck },
-    { id: "history",   label: "Search History",    icon: Clock },
+    { id: "profile",    label: "My Profile",       icon: User },
+    { id: "myhome",     label: "My Home",          icon: Home },
+    { id: "favorites",  label: "Favorites",        icon: Heart },
+    { id: "searches",   label: "Saved Searches",   icon: BookmarkCheck },
+    { id: "agent",      label: "My Agent",         icon: UserPlus },
+    { id: "openhouses", label: "Open Houses",      icon: CalendarDays },
+    { id: "history",    label: "Search History",   icon: Clock },
   ];
 
   return (
@@ -108,11 +113,13 @@ export default function Dashboard() {
 
           {/* Main Content */}
           <main className="flex-1 min-w-0">
-            {activeSection === "profile"   && <ProfileSection user={user} />}
-            {activeSection === "myhome"    && <MyHomeSection />}
-            {activeSection === "favorites" && <FavoritesSection />}
-            {activeSection === "searches"  && <SavedSearchesSection />}
-            {activeSection === "history"   && <SearchHistorySection />}
+            {activeSection === "profile"    && <ProfileSection user={user} />}
+            {activeSection === "myhome"     && <MyHomeSection />}
+            {activeSection === "favorites"  && <FavoritesSection />}
+            {activeSection === "searches"   && <SavedSearchesSection />}
+            {activeSection === "agent"      && <MyAgentSection />}
+            {activeSection === "openhouses" && <OpenHousesSection />}
+            {activeSection === "history"    && <SearchHistorySection />}
           </main>
         </div>
       </div>
@@ -514,6 +521,196 @@ function DemoStat({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="font-bold text-foreground">{value}</p>
+    </div>
+  );
+}
+
+// ── My Agent Section ───────────────────────────────────────────────────────────
+
+function MyAgentSection() {
+  const { data: link, isLoading } = useAgentInvite();
+  const { mutate: inviteAgent, isPending: isInviting } = useInviteAgent();
+  const { mutate: removeLink, isPending: isRemoving } = useRemoveAgentInvite();
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+
+  const handleInvite = () => {
+    setError("");
+    if (!email || !email.includes("@")) { setError("Please enter a valid email address."); return; }
+    inviteAgent(email, { onSuccess: () => setEmail("") });
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        title="My Agent"
+        subtitle="Invite your agent to view your favorites and saved searches"
+      />
+
+      {isLoading ? (
+        <div className="h-32 bg-muted animate-pulse rounded-2xl" />
+      ) : link ? (
+        <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-4">
+          <div className="flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
+              link.status === "active" ? "bg-green-100 text-green-600" : "bg-amber-100 text-amber-600"
+            }`}>
+              {link.status === "active" ? <CheckCircle2 className="w-6 h-6" /> : <Mail className="w-6 h-6" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-foreground">{link.agentEmail}</p>
+              {link.status === "active" ? (
+                <p className="text-sm text-green-600 font-medium flex items-center gap-1.5 mt-0.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Agent connected — they can see your favorites and saved searches
+                </p>
+              ) : (
+                <p className="text-sm text-amber-600 font-medium flex items-center gap-1.5 mt-0.5">
+                  <AlertCircle className="w-3.5 h-3.5" /> Invitation sent — waiting for agent to create an account
+                </p>
+              )}
+            </div>
+            <button
+              onClick={() => removeLink()}
+              disabled={isRemoving}
+              className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+              data-testid="button-remove-agent"
+              title="Remove agent"
+            >
+              {isRemoving ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+            </button>
+          </div>
+
+          <div className="bg-muted/50 rounded-xl p-4 text-sm text-muted-foreground">
+            <p className="font-bold text-foreground mb-1">What your agent can see:</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li>All your favorited homes</li>
+              <li>Your saved searches and filter criteria</li>
+              <li>Upcoming open houses for your favorites</li>
+            </ul>
+          </div>
+
+          <div className="border-t border-border pt-4">
+            <p className="text-sm font-bold text-foreground mb-2">Change agent</p>
+            <div className="flex gap-2">
+              <input
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="New agent email..."
+                className="flex-1 bg-background border-2 border-border rounded-xl px-4 py-2.5 text-sm focus:border-primary outline-none"
+                data-testid="input-agent-email"
+              />
+              <button
+                onClick={handleInvite}
+                disabled={isInviting}
+                className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                data-testid="button-invite-agent"
+              >
+                {isInviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                Update
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-4">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+              <UserPlus className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-bold text-foreground text-lg">Connect with your agent</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Enter your agent's email address and they'll be able to see your saved homes and searches — making it easy to collaborate on your home search.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-xs font-bold text-muted-foreground">Agent's Email Address</label>
+            <div className="flex gap-2">
+              <input
+                value={email}
+                onChange={e => { setEmail(e.target.value); setError(""); }}
+                onKeyDown={e => e.key === "Enter" && handleInvite()}
+                placeholder="agent@example.com"
+                type="email"
+                className="flex-1 bg-background border-2 border-border rounded-xl px-4 py-2.5 text-sm focus:border-primary outline-none"
+                data-testid="input-agent-email"
+              />
+              <button
+                onClick={handleInvite}
+                disabled={isInviting}
+                className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                data-testid="button-invite-agent"
+              >
+                {isInviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                Invite Agent
+              </button>
+            </div>
+            {error && <p className="text-xs text-destructive font-medium">{error}</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Open Houses Section ────────────────────────────────────────────────────────
+
+function OpenHousesSection() {
+  const { data: openHouses = [], isLoading } = useOpenHouses();
+
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        title="Open Houses"
+        subtitle="Upcoming open houses for active listings"
+      />
+
+      {isLoading ? (
+        <div className="space-y-4">{[1, 2, 3].map(i => <div key={i} className="h-28 bg-muted animate-pulse rounded-2xl" />)}</div>
+      ) : openHouses.length === 0 ? (
+        <EmptyState icon={CalendarDays} title="No upcoming open houses" description="Check back soon — agents will post open house dates for their listings here.">
+          <Link href="/search" className="bg-foreground text-background px-6 py-2.5 rounded-full font-bold hover:bg-primary hover:text-white transition-colors">
+            Browse Listings
+          </Link>
+        </EmptyState>
+      ) : (
+        <div className="grid grid-cols-1 gap-4">
+          {openHouses.map((property: any) => (
+            <Link key={property.id} href={`/property/${property.id}`}>
+              <div className="bg-card border border-border rounded-2xl overflow-hidden hover:shadow-md transition-shadow flex gap-4" data-testid={`card-open-house-${property.id}`}>
+                <div className="w-32 flex-shrink-0 bg-muted relative">
+                  {property.imageUrl ? (
+                    <img src={property.imageUrl} alt={property.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center min-h-[96px]">
+                      <Home className="w-8 h-8 text-muted-foreground/30" />
+                    </div>
+                  )}
+                  <div className="absolute top-2 left-2 bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    OPEN
+                  </div>
+                </div>
+                <div className="flex-1 p-4 min-w-0">
+                  <h3 className="font-bold text-foreground truncate">{property.title}</h3>
+                  <p className="text-sm text-muted-foreground truncate">{property.location}</p>
+                  <p className="font-bold text-foreground mt-1">${property.price?.toLocaleString()}</p>
+                  <div className="flex items-center gap-1.5 mt-2 text-primary text-sm font-bold">
+                    <CalendarDays className="w-4 h-4 flex-shrink-0" />
+                    <span>{property.openHouseDate ? formatDate(property.openHouseDate) : ""}</span>
+                    {property.openHouseTime && <span className="text-muted-foreground font-normal">· {property.openHouseTime}</span>}
+                  </div>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
