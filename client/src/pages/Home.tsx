@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Search } from "lucide-react";
+import { Search, Map } from "lucide-react";
 import { useProperties } from "@/hooks/use-properties";
 import { PropertyCard } from "@/components/PropertyCard";
 
@@ -15,6 +15,19 @@ export default function Home() {
       setLocation(`/search?location=${encodeURIComponent(searchQuery)}`);
     } else {
       setLocation("/search");
+    }
+  };
+
+  const handleMapSearch = () => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition((position) => {
+        const { latitude, longitude } = position.coords;
+        setLocation(`/search?map=true&lat=${latitude}&lng=${longitude}`);
+      }, () => {
+        setLocation("/search?map=true");
+      });
+    } else {
+      setLocation("/search?map=true");
     }
   };
 
@@ -41,7 +54,7 @@ export default function Home() {
           
           <form 
             onSubmit={handleSearch}
-            className="w-full max-w-2xl bg-background rounded-full p-2 flex items-center shadow-2xl hover:shadow-primary/20 transition-shadow duration-300"
+            className="w-full max-w-2xl bg-background rounded-full p-2 flex items-center shadow-2xl hover:shadow-primary/20 transition-shadow duration-300 mb-4"
           >
             <div className="flex-1 flex items-center pl-4 pr-2">
               <Search className="w-5 h-5 text-muted-foreground mr-3" />
@@ -60,6 +73,14 @@ export default function Home() {
               Search
             </button>
           </form>
+
+          <button 
+            onClick={handleMapSearch}
+            className="flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-md text-white px-6 py-3 rounded-full font-bold transition-all border border-white/30 active:scale-95 shadow-xl"
+          >
+            <Map className="w-5 h-5" />
+            Map Search
+          </button>
         </div>
       </div>
 

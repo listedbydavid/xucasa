@@ -30,8 +30,15 @@ export default function Search() {
     if (filters.isOffMarket) query.isOffMarket = filters.isOffMarket;
     setActiveQuery(query);
 
-    // Geocoding logic for zip codes (mock or simple logic)
-    if (filters.location.match(/^\d{5}$/)) {
+    // Handle geolocation from map search
+    const mapFlag = searchParams.get("map");
+    const lat = searchParams.get("lat");
+    const lng = searchParams.get("lng");
+
+    if (mapFlag === "true" && lat && lng) {
+      setMapCenter([Number(lng), Number(lat)]);
+      setMapZoom(14);
+    } else if (filters.location.match(/^\d{5}$/)) {
       const zip = parseInt(filters.location);
       if (zip >= 90000 && zip <= 96162) { // CA
         setMapCenter([-119.4179, 36.7783]);
