@@ -9,6 +9,7 @@ import { Search as SearchIcon, MapPin, Map, BookmarkPlus, X } from "lucide-react
 import { MapView } from "@/components/MapView";
 import { useJsApiLoader } from "@react-google-maps/api";
 import queryString from "query-string";
+import { AuthPromptModal } from "@/components/AuthPromptModal";
 
 const LIBRARIES: ('places' | 'marker')[] = ['places', 'marker'];
 
@@ -94,6 +95,7 @@ export default function Search() {
   const { mutate: saveSearch, isPending: isSavingSearch } = useCreateSavedSearch();
   const { isAuthenticated } = useAuth();
   const { mutate: addHistory } = useAddSearchHistory();
+  const [showAuthPrompt, setShowAuthPrompt] = useState(false);
 
   // Log search history when user searches (debounced 2s, authenticated only)
   useEffect(() => {
@@ -105,6 +107,10 @@ export default function Search() {
   }, [locationInput, isAuthenticated]);
 
   const handleSaveSearch = () => {
+    if (!isAuthenticated) {
+      setShowAuthPrompt(true);
+      return;
+    }
     const name = locationInput ? `Search in ${locationInput}` : "General Search";
     saveSearch({ name, criteria: activeQuery });
   };
@@ -129,6 +135,10 @@ export default function Search() {
   }, [properties]);
 
   return (
+    <>
+      {showAuthPrompt && (
+        <AuthPromptModal feature="save-search" onClose={() => setShowAuthPrompt(false)} />
+      )}
     <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
       {/* Search Header Bar */}
       <div className="bg-card border-b border-border p-4 z-10 shadow-sm">
@@ -257,5 +267,6 @@ export default function Search() {
         </div>
       </div>
     </div>
+    </>
   );
 }

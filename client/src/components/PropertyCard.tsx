@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import { BedDouble, Bath, Maximize, Heart, Sparkles } from "lucide-react";
 import type { PropertyResponse } from "@shared/schema";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
 import { useAuth } from "@/hooks/use-auth";
+import { AuthPromptModal } from "@/components/AuthPromptModal";
 
 interface PropertyCardProps {
   property: PropertyResponse;
@@ -12,13 +14,14 @@ export function PropertyCard({ property }: PropertyCardProps) {
   const { data: savedProps = [] } = useSavedProperties();
   const { mutate: toggleSave, isPending } = useToggleSavedProperty();
   const { isAuthenticated } = useAuth();
-  
+  const [showAuthPrompt, setShowAuthPrompt] = useState(false);
+
   const isSaved = savedProps.some(sp => sp.propertyId === property.id);
 
   const handleSave = (e: React.MouseEvent) => {
-    e.preventDefault(); // Prevent navigating to detail page
+    e.preventDefault();
     if (!isAuthenticated) {
-      window.location.href = "/api/login";
+      setShowAuthPrompt(true);
       return;
     }
     toggleSave({ propertyId: property.id, isSaved });
@@ -29,6 +32,10 @@ export function PropertyCard({ property }: PropertyCardProps) {
   const imageUrl = property.imageUrl || fallbackImage;
 
   return (
+    <>
+      {showAuthPrompt && (
+        <AuthPromptModal feature="favorite" onClose={() => setShowAuthPrompt(false)} />
+      )}
     <Link href={`/property/${property.id}`} className="group block">
       <div className="bg-card rounded-2xl overflow-hidden hover-card-effect border border-border">
         {/* Image Area */}
@@ -97,5 +104,6 @@ export function PropertyCard({ property }: PropertyCardProps) {
         </div>
       </div>
     </Link>
+    </>
   );
 }

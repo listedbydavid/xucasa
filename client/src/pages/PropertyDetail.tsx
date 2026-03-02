@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useParams } from "wouter";
 import { useProperty } from "@/hooks/use-properties";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
@@ -6,6 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { MapView } from "@/components/MapView";
 import { PublicRecordsPanel } from "@/components/PublicRecordsPanel";
 import { ZoningPanel } from "@/components/ZoningPanel";
+import { AuthPromptModal } from "@/components/AuthPromptModal";
 
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -13,6 +15,7 @@ export default function PropertyDetail() {
   const { data: savedProps = [] } = useSavedProperties();
   const { mutate: toggleSave, isPending: isSaving } = useToggleSavedProperty();
   const { isAuthenticated } = useAuth();
+  const [showAuthPrompt, setShowAuthPrompt] = useState(false);
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div></div>;
@@ -31,7 +34,7 @@ export default function PropertyDetail() {
 
   const handleSave = () => {
     if (!isAuthenticated) {
-      window.location.href = "/api/login";
+      setShowAuthPrompt(true);
       return;
     }
     toggleSave({ propertyId: property.id, isSaved });
@@ -42,6 +45,10 @@ export default function PropertyDetail() {
   const imageUrl = property.imageUrl || fallbackImage;
 
   return (
+    <>
+      {showAuthPrompt && (
+        <AuthPromptModal feature="favorite" onClose={() => setShowAuthPrompt(false)} />
+      )}
     <div className="min-h-screen bg-background pb-20">
       {/* Hero Image Section */}
       <div className="w-full h-[50vh] md:h-[60vh] relative group overflow-hidden bg-black">
@@ -185,5 +192,6 @@ export default function PropertyDetail() {
         </div>
       </div>
     </div>
+    </>
   );
 }
