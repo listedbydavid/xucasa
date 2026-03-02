@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
-import { Plus, Edit3, Trash2, Home, X } from "lucide-react";
+import { Plus, Edit3, Trash2, Home, X, Search, Loader2 } from "lucide-react";
 import type { PropertyResponse, CreatePropertyRequest } from "@shared/schema";
 
 export default function AgentDashboard() {
@@ -157,6 +157,12 @@ function PropertyFormModal({
     title: property?.title || "",
     description: property?.description || "",
     price: property?.price || "",
+    addressStreetNumber: property?.addressStreetNumber || "",
+    addressStreetName: property?.addressStreetName || "",
+    addressUnitNumber: property?.addressUnitNumber || "",
+    addressCity: property?.addressCity || "",
+    addressState: property?.addressState || "",
+    addressZip: property?.addressZip || "",
     location: property?.location || "",
     beds: property?.beds || "",
     baths: property?.baths || "",
@@ -165,10 +171,63 @@ function PropertyFormModal({
     isOffMarket: property?.isOffMarket || false,
   });
 
+  const [addressInput, setAddressInput] = useState("");
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  useEffect(() => {
+    const searchAddress = async () => {
+      if (addressInput.length < 3) {
+        setSuggestions([]);
+        return;
+      }
+
+      setIsSearching(true);
+      try {
+        // Use Mapbox Geocoding API if token is available, or fallback to mock
+        const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(addressInput)}.json?access_token=${import.meta.env.VITE_MAPBOX_TOKEN}&country=us&limit=5`);
+        const data = await res.json();
+        setSuggestions(data.features || []);
+      } catch (err) {
+        console.error("Geocoding error:", err);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    const timer = setTimeout(searchAddress, 300);
+    return () => clearTimeout(timer);
+  }, [addressInput]);
+
+  const handleSelectSuggestion = (feature: any) => {
+    const context = feature.context || [];
+    const streetInfo = feature.text;
+    const houseNumber = feature.address;
+    
+    const zip = context.find((c: any) => c.id.startsWith('postcode'))?.text || "";
+    const city = context.find((c: any) => c.id.startsWith('place'))?.text || "";
+    const state = context.find((c: any) => c.id.startsWith('region'))?.text || "";
+
+    setFormData({
+      ...formData,
+      addressStreetNumber: houseNumber || "",
+      addressStreetName: streetInfo || "",
+      addressCity: city,
+      addressState: state,
+      addressZip: zip,
+      location: `${city}, ${state}`,
+      title: feature.place_name.split(',')[0],
+    });
+    setSuggestions([]);
+    setAddressInput("");
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const fullLocation = `${formData.addressStreetNumber} ${formData.addressStreetName}, ${formData.addressCity}, ${formData.addressState} ${formData.addressZip}`;
     onSubmit({
       ...formData,
+      location: formData.location || fullLocation,
       price: Number(formData.price),
       beds: Number(formData.beds),
       baths: Number(formData.baths),
@@ -187,56 +246,114 @@ function PropertyFormModal({
         </div>
         
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-bold text-muted-foreground mb-2">Title</label>
-              <input required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all" placeholder="Stunning Modern Home" />
+          <div className="space-y-4">
+            <div className="relative">
+              <label className="block text-sm font-bold text-muted-foreground mb-2">Search Address (Mapbox Autocomplete)</label>
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <input 
+                  value={addressInput}
+                  onChange={e => setAddressInput(e.target.value)}
+                  className="w-full bg-background border-2 border-border rounded-xl pl-12 pr-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all" 
+                  placeholder="Start typing an address..." 
+                />
+                {isSearching && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-primary animate-spin" />}
+              </div>
+              
+              {suggestions.length > 0 && (
+                <div className="absolute z-20 w-full mt-2 bg-card border border-border rounded-xl shadow-xl overflow-hidden">
+                  {suggestions.map((s, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => handleSelectSuggestion(s)}
+                      className="w-full text-left px-4 py-3 hover:bg-muted transition-colors border-b border-border last:border-0"
+                    >
+                      <div className="font-bold text-sm">{s.place_name}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="md:col-span-1">
+                <label className="block text-sm font-bold text-muted-foreground mb-2">Street #</label>
+                <input required value={formData.addressStreetNumber} onChange={e => setFormData({...formData, addressStreetNumber: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="123" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-bold text-muted-foreground mb-2">Street Name</label>
+                <input required value={formData.addressStreetName} onChange={e => setFormData({...formData, addressStreetName: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="Main St" />
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-muted-foreground mb-2">Unit/Apt</label>
+                <input value={formData.addressUnitNumber} onChange={e => setFormData({...formData, addressUnitNumber: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="4B" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-muted-foreground mb-2">City</label>
+                <input required value={formData.addressCity} onChange={e => setFormData({...formData, addressCity: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="Seattle" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-muted-foreground mb-2">State</label>
+                <input required value={formData.addressState} onChange={e => setFormData({...formData, addressState: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="WA" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-muted-foreground mb-2">Zip</label>
+                <input required value={formData.addressZip} onChange={e => setFormData({...formData, addressZip: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" placeholder="98101" />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6 pt-4 border-t border-border">
             <div>
-              <label className="block text-sm font-bold text-muted-foreground mb-2">Location</label>
-              <input required value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all" placeholder="Seattle, WA" />
+              <label className="block text-sm font-bold text-muted-foreground mb-2">Listing Title</label>
+              <input required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all" placeholder="Stunning Modern Home" />
             </div>
             <div>
               <label className="block text-sm font-bold text-muted-foreground mb-2">Price ($)</label>
               <input required type="number" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all" placeholder="750000" />
             </div>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-bold text-muted-foreground mb-2">Description</label>
+            <textarea required rows={4} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all resize-none" placeholder="Describe the property..." />
+          </div>
+
+          <div className="grid grid-cols-3 gap-4 md:col-span-2">
             <div>
-              <label className="block text-sm font-bold text-muted-foreground mb-2">Image URL</label>
-              <input value={formData.imageUrl} onChange={e => setFormData({...formData, imageUrl: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all" placeholder="https://unsplash.com/..." />
+              <label className="block text-sm font-bold text-muted-foreground mb-2">Beds</label>
+              <input required type="number" value={formData.beds} onChange={e => setFormData({...formData, beds: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
             </div>
-            
-            <div className="grid grid-cols-3 gap-4 md:col-span-2">
-              <div>
-                <label className="block text-sm font-bold text-muted-foreground mb-2">Beds</label>
-                <input required type="number" value={formData.beds} onChange={e => setFormData({...formData, beds: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-muted-foreground mb-2">Baths</label>
-                <input required type="number" step="0.5" value={formData.baths} onChange={e => setFormData({...formData, baths: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-muted-foreground mb-2">Sq Ft</label>
-                <input required type="number" value={formData.sqft} onChange={e => setFormData({...formData, sqft: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
-              </div>
+            <div>
+              <label className="block text-sm font-bold text-muted-foreground mb-2">Baths</label>
+              <input required type="number" step="0.5" value={formData.baths} onChange={e => setFormData({...formData, baths: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
             </div>
+            <div>
+              <label className="block text-sm font-bold text-muted-foreground mb-2">Sq Ft</label>
+              <input required type="number" value={formData.sqft} onChange={e => setFormData({...formData, sqft: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
+            </div>
+          </div>
 
-            <div className="md:col-span-2">
-              <label className="block text-sm font-bold text-muted-foreground mb-2">Description</label>
-              <textarea required rows={4} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all resize-none" placeholder="Describe the property..." />
-            </div>
+          <div className="md:col-span-2">
+            <label className="block text-sm font-bold text-muted-foreground mb-2">Image URL</label>
+            <input value={formData.imageUrl} onChange={e => setFormData({...formData, imageUrl: e.target.value})} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all" placeholder="https://unsplash.com/..." />
+          </div>
 
-            <div className="md:col-span-2 flex items-center gap-3 bg-yellow-500/10 p-4 rounded-xl border border-yellow-500/20">
-              <input 
-                type="checkbox" 
-                id="isOffMarket" 
-                checked={formData.isOffMarket}
-                onChange={e => setFormData({...formData, isOffMarket: e.target.checked})}
-                className="w-5 h-5 accent-yellow-500 rounded cursor-pointer"
-              />
-              <label htmlFor="isOffMarket" className="font-bold text-yellow-800 cursor-pointer">
-                Mark as "Make Me Move" (Off-Market)
-              </label>
-            </div>
+          <div className="md:col-span-2 flex items-center gap-3 bg-yellow-500/10 p-4 rounded-xl border border-yellow-500/20">
+            <input 
+              type="checkbox" 
+              id="isOffMarket" 
+              checked={formData.isOffMarket}
+              onChange={e => setFormData({...formData, isOffMarket: e.target.checked})}
+              className="w-5 h-5 accent-yellow-500 rounded cursor-pointer"
+            />
+            <label htmlFor="isOffMarket" className="font-bold text-yellow-800 cursor-pointer">
+              Mark as "Make Me Move" (Off-Market)
+            </label>
           </div>
           
           <div className="flex justify-end gap-4 pt-4 border-t border-border">
