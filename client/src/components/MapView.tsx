@@ -52,8 +52,11 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }
     markersRef.current.forEach(m => { m.map = null; });
     markersRef.current = [];
 
+    const positions: google.maps.LatLngLiteral[] = [];
+
     properties.forEach((property, index) => {
       const position = getMarkerPosition(property, index);
+      positions.push(position);
 
       const pin = document.createElement('div');
       pin.style.cssText = `
@@ -82,17 +85,26 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }
       markersRef.current.push(marker);
     });
 
+    // Auto-fit map to show all pins
+    if (positions.length > 0 && mapRef.current) {
+      const bounds = new google.maps.LatLngBounds();
+      positions.forEach(pos => bounds.extend(pos));
+      if (positions.length === 1) {
+        mapRef.current.setCenter(positions[0]);
+        mapRef.current.setZoom(15);
+      } else {
+        mapRef.current.fitBounds(bounds, { top: 60, right: 40, bottom: 60, left: 40 });
+      }
+    } else if (positions.length === 0) {
+      mapRef.current.panTo(googleCenter);
+      mapRef.current.setZoom(zoom);
+    }
+
     return () => {
       markersRef.current.forEach(m => { m.map = null; });
       markersRef.current = [];
     };
-  }, [properties, center, isLoaded]);
-
-  useEffect(() => {
-    if (!mapRef.current) return;
-    mapRef.current.panTo(googleCenter);
-    mapRef.current.setZoom(zoom);
-  }, [center[0], center[1], zoom]);
+  }, [properties, isLoaded]);
 
   if (loadError) {
     return (
