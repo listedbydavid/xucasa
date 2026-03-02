@@ -19,7 +19,7 @@ export default function Search() {
   });
 
   const [activeQuery, setActiveQuery] = useState({});
-  const [mapCenter, setMapCenter] = useState<[number, number]>([37.7749, -122.4194]);
+  const [mapCenter, setMapCenter] = useState<[number, number]>([-122.4194, 37.7749]); // [lng, lat] for Mapbox
   const [mapZoom, setMapZoom] = useState(12);
 
   useEffect(() => {
@@ -32,21 +32,17 @@ export default function Search() {
 
     // Geocoding logic for zip codes (mock or simple logic)
     if (filters.location.match(/^\d{5}$/)) {
-      // In a real app, we'd use a geocoding service. 
-      // For now, we'll jitter the center to show movement if it's a valid-looking zip
       const zip = parseInt(filters.location);
-      // Roughly map US zip codes to some coordinates (very simplified mock logic)
       if (zip >= 90000 && zip <= 96162) { // CA
-        setMapCenter([36.7783, -119.4179]);
+        setMapCenter([-119.4179, 36.7783]);
       } else if (zip >= 10001 && zip <= 14905) { // NY
-        setMapCenter([40.7128, -74.0060]);
+        setMapCenter([-74.0060, 40.7128]);
       } else if (zip >= 60601 && zip <= 60699) { // Chicago
-        setMapCenter([41.8781, -87.6298]);
+        setMapCenter([-87.6298, 41.8781]);
       } else if (zip >= 33101 && zip <= 33299) { // Miami
-        setMapCenter([25.7617, -80.1918]);
+        setMapCenter([-80.1918, 25.7617]);
       } else {
-        // Fallback or randomish jitter to show it's "searching"
-        setMapCenter([39.8283 + (Math.random() - 0.5) * 5, -98.5795 + (Math.random() - 0.5) * 5]);
+        setMapCenter([-98.5795 + (Math.random() - 0.5) * 5, 39.8283 + (Math.random() - 0.5) * 5]);
       }
       setMapZoom(12);
     }

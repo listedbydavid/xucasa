@@ -1,30 +1,11 @@
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
+import { useEffect, useRef } from 'react';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 import { Property } from '@shared/schema';
-import { useEffect } from 'react';
 
-// Fix for default marker icon in Leaflet + React
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-
-let DefaultIcon = L.icon({
-    iconUrl: icon,
-    shadowUrl: iconShadow,
-    iconSize: [25, 41],
-    iconAnchor: [12, 41]
-});
-
-L.Marker.prototype.options.icon = DefaultIcon;
-
-// Helper to center map when location changes
-function ChangeView({ center, zoom }: { center: [number, number], zoom: number }) {
-  const map = useMap();
-  useEffect(() => {
-    map.setView(center, zoom);
-  }, [center, zoom, map]);
-  return null;
-}
+// NOTE: In a real app, you should use an environment variable for the token.
+// For this demo, we can use a public token or ask the user for one.
+// mapboxgl.accessToken = 'YOUR_MAPBOX_ACCESS_TOKEN';
 
 interface MapViewProps {
   properties: Property[];
@@ -32,34 +13,68 @@ interface MapViewProps {
   zoom?: number;
 }
 
-export function MapView({ properties, center = [37.7749, -122.4194], zoom = 12 }: MapViewProps) {
-  return (
-    <MapContainer 
-      center={center} 
-      zoom={zoom} 
-      style={{ height: '100%', width: '100%' }}
-      scrollWheelZoom={true}
-    >
-      <ChangeView center={center} zoom={zoom} />
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://www.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      {properties.map((property) => (
-        <Marker 
-          key={property.id} 
-          position={[37.7749 + (Math.random() - 0.5) * 0.1, -122.4194 + (Math.random() - 0.5) * 0.1] as [number, number]}
-        >
-          <Popup>
-            <div className="p-2">
-              <img src={property.imageUrl || ''} alt={property.title} className="w-full h-24 object-cover rounded-md mb-2" />
-              <h3 className="font-bold text-sm">{property.title}</h3>
-              <p className="text-primary font-bold">${property.price.toLocaleString()}</p>
-              <a href={`/property/${property.id}`} className="text-xs text-blue-500 hover:underline">View Details</a>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
-    </MapContainer>
-  );
+export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 12 }: MapViewProps) {
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const map = useRef<mapboxgl.Map | null>(null);
+  const markers = useRef<mapboxgl.Marker[]>([]);
+
+  useEffect(() => {
+    if (map.current) return; // Initialize only once
+    if (!mapContainer.current) return;
+
+    // Default public token for demonstration if none provided
+    // mapboxgl.accessToken = '...'; 
+
+    map.current = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: 'mapbox://styles/mapbox/streets-v12',
+      center: center,
+      zoom: zoom,
+    });
+
+    map.current.addControl(new mapboxgl.NavigationControl());
+  }, []);
+
+  useEffect(() => {
+    if (!map.current) return;
+    map.current.flyTo({ center, zoom, duration: 2000 });
+  }, [center, zoom]);
+
+  useEffect(() => {
+    if (!map.current) return;
+
+    // Clear old markers
+    markers.current.forEach(marker => marker.remove());
+    markers.current = [];
+
+    // Add new markers
+    properties.forEach(property => {
+      const el = document.createElement('div');
+      el.className = 'marker';
+      el.style.backgroundColor = '#ef4444';
+      el.style.width = '12px';
+      el.style.height = '12px';
+      el.style.borderRadius = '50%';
+      el.style.border = '2px solid white';
+      el.style.cursor = 'pointer';
+
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([center[0] + (Math.random() - 0.5) * 0.05, center[1] + (Math.random() - 0.5) * 0.05])
+        .setPopup(
+          new mapboxgl.Popup({ offset: 25 }).setHTML(
+            `<div class="p-2">
+              <img src="${property.imageUrl || ''}" alt="${property.title}" class="w-full h-24 object-cover rounded-md mb-2" />
+              <h3 class="font-bold text-sm">${property.title}</h3>
+              <p class="text-primary font-bold">$${property.price.toLocaleString()}</p>
+              <a href="/property/${property.id}" class="text-xs text-blue-500 hover:underline">View Details</a>
+            </div>`
+          )
+        )
+        .addTo(map.current!);
+      
+      markers.current.push(marker);
+    });
+  }, [properties]);
+
+  return <div ref={mapContainer} className="w-full h-full" />;
 }
