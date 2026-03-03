@@ -31,10 +31,12 @@ export function Navbar() {
               <Users className="w-4 h-4" />
               Buyers
             </Link>
-            <Link href="/swipe" className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full transition-colors flex items-center gap-2">
-              <Layers className="w-4 h-4" />
-              My Feed
-            </Link>
+            {isAuthenticated && (
+              <Link href="/swipe" className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full transition-colors flex items-center gap-2">
+                <Layers className="w-4 h-4" />
+                My Feed
+              </Link>
+            )}
             <Link href="/agent" className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full transition-colors flex items-center gap-2">
               <Briefcase className="w-4 h-4" />
               For Agents
