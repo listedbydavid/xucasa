@@ -6,6 +6,7 @@ import {
   searchHistory,
   userHomes,
   clientAgentLinks,
+  sellLeads,
   type Property,
   type InsertProperty,
   type SavedProperty,
@@ -15,6 +16,8 @@ import {
   type UserHome,
   type InsertUserHome,
   type ClientAgentLink,
+  type SellLead,
+  type InsertSellLead,
   users,
 } from "@shared/schema";
 import { eq, and, desc, sql, gte } from "drizzle-orm";
@@ -57,6 +60,20 @@ export interface IStorage {
 
   // Open Houses
   getUpcomingOpenHouses(): Promise<(Property & { agent: any })[]>;
+
+  // Sell Leads
+  createSellLead(lead: InsertSellLead): Promise<SellLead>;
+  getSellLeads(): Promise<SellLead[]>;
+
+  // Valuation
+  getValuation(beds: number, sqft: number): Promise<{
+    estimatedLow: number;
+    estimatedMid: number;
+    estimatedHigh: number;
+    pricePerSqft: number;
+    compsCount: number;
+    comps: { id: number; title: string; price: number; beds: number; sqft: number; location: string }[];
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -227,6 +244,74 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(users, eq(properties.agentId, users.id))
       .where(gte(properties.openHouseDate, now));
     return results.map(r => ({ ...r.property, agent: r.agent }));
+  }
+
+  async createSellLead(lead: InsertSellLead): Promise<SellLead> {
+    const [newLead] = await db.insert(sellLeads).values(lead).returning();
+    return newLead;
+  }
+
+  async getSellLeads(): Promise<SellLead[]> {
+    return await db.select().from(sellLeads).orderBy(desc(sellLeads.createdAt));
+  }
+
+  async getValuation(beds: number, sqft: number): Promise<{
+    estimatedLow: number;
+    estimatedMid: number;
+    estimatedHigh: number;
+    pricePerSqft: number;
+    compsCount: number;
+    comps: { id: number; title: string; price: number; beds: number; sqft: number; location: string }[];
+  }> {
+    const allProps = await db.select().from(properties)
+      .where(eq(properties.isOffMarket, false));
+
+    const compsWithData = allProps.filter(p => p.sqft && p.sqft > 0 && p.price > 0);
+
+    const sqftLow = sqft * 0.60;
+    const sqftHigh = sqft * 1.40;
+    const bedsLow = Math.max(1, beds - 1);
+    const bedsHigh = beds + 1;
+
+    let comps = compsWithData.filter(p =>
+      p.sqft! >= sqftLow && p.sqft! <= sqftHigh &&
+      p.beds >= bedsLow && p.beds <= bedsHigh
+    );
+
+    if (comps.length < 2) {
+      comps = compsWithData.filter(p =>
+        p.sqft! >= sqft * 0.50 && p.sqft! <= sqft * 1.60
+      );
+    }
+
+    if (comps.length === 0) {
+      comps = compsWithData;
+    }
+
+    const pricePerSqftValues = comps.map(p => p.price / p.sqft!);
+    const avgPricePerSqft = pricePerSqftValues.length > 0
+      ? pricePerSqftValues.reduce((a, b) => a + b, 0) / pricePerSqftValues.length
+      : 500;
+
+    const estimatedMid = Math.round(avgPricePerSqft * sqft);
+    const estimatedLow = Math.round(estimatedMid * 0.88);
+    const estimatedHigh = Math.round(estimatedMid * 1.12);
+
+    return {
+      estimatedLow,
+      estimatedMid,
+      estimatedHigh,
+      pricePerSqft: Math.round(avgPricePerSqft),
+      compsCount: comps.length,
+      comps: comps.slice(0, 4).map(p => ({
+        id: p.id,
+        title: p.title,
+        price: p.price,
+        beds: p.beds,
+        sqft: p.sqft!,
+        location: p.addressCity ? `${p.addressCity}, ${p.addressState}` : p.location,
+      })),
+    };
   }
 }
 

@@ -517,6 +517,32 @@ export async function registerRoutes(
     }
   });
 
+  // ── Sell / Valuation Routes ─────────────────────────────────────────────────
+
+  app.get("/api/valuation", async (req, res) => {
+    try {
+      const beds = parseInt(req.query.beds as string) || 3;
+      const sqft = parseInt(req.query.sqft as string) || 1800;
+      const valuation = await storage.getValuation(beds, sqft);
+      res.json(valuation);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/sell-leads", async (req, res) => {
+    try {
+      const lead = req.body;
+      if (!lead.name || !lead.email) {
+        return res.status(400).json({ message: "Name and email are required" });
+      }
+      const newLead = await storage.createSellLead(lead);
+      res.status(201).json(newLead);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── IDX / MLS Sync Routes ────────────────────────────────────────────────────
 
   // Status — is IDX configured, last sync result, sync history

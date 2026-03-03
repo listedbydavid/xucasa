@@ -131,8 +131,37 @@ export const clientAgentLinksRelations = relations(clientAgentLinks, ({ one }) =
   agent: one(users, { fields: [clientAgentLinks.agentId], references: [users.id] }),
 }));
 
+export const sellLeads = pgTable("sell_leads", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone"),
+  fullAddress: text("full_address"),
+  addressStreetNumber: text("address_street_number"),
+  addressStreetName: text("address_street_name"),
+  addressCity: text("address_city"),
+  addressState: text("address_state"),
+  addressZip: text("address_zip"),
+  beds: integer("beds"),
+  baths: decimal("baths"),
+  sqft: integer("sqft"),
+  lotSize: integer("lot_size"),
+  yearBuilt: integer("year_built"),
+  homeType: text("home_type"),
+  condition: text("condition"),
+  hoaFee: integer("hoa_fee"),
+  timeline: text("timeline"),
+  motivation: text("motivation"),
+  estimatedValue: integer("estimated_value"),
+  lat: decimal("lat"),
+  lng: decimal("lng"),
+  agentNote: text("agent_note"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Insert Schemas
 export const insertPropertySchema = createInsertSchema(properties).omit({ id: true, createdAt: true });
+export const insertSellLeadSchema = createInsertSchema(sellLeads).omit({ id: true, createdAt: true });
 export const insertSavedPropertySchema = createInsertSchema(savedProperties).omit({ id: true, createdAt: true });
 export const insertSavedSearchSchema = createInsertSchema(savedSearches).omit({ id: true, createdAt: true });
 export const insertSearchHistorySchema = createInsertSchema(searchHistory).omit({ id: true, createdAt: true });
@@ -152,6 +181,8 @@ export type UserHome = typeof userHomes.$inferSelect;
 export type InsertUserHome = z.infer<typeof insertUserHomeSchema>;
 export type ClientAgentLink = typeof clientAgentLinks.$inferSelect;
 export type InsertClientAgentLink = z.infer<typeof insertClientAgentLinkSchema>;
+export type SellLead = typeof sellLeads.$inferSelect;
+export type InsertSellLead = z.infer<typeof insertSellLeadSchema>;
 
 // Request Types
 export type CreatePropertyRequest = InsertProperty;

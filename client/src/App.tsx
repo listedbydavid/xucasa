@@ -12,12 +12,14 @@ import PropertyDetail from "@/pages/PropertyDetail";
 import Dashboard from "@/pages/Dashboard";
 import AgentDashboard from "@/pages/AgentDashboard";
 import Swipe from "@/pages/Swipe";
+import Sell from "@/pages/Sell";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/search" component={Search} />
+      <Route path="/sell" component={Sell} />
       <Route path="/swipe" component={Swipe} />
       <Route path="/property/:id" component={PropertyDetail} />
       <Route path="/dashboard" component={Dashboard} />
