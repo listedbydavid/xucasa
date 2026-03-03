@@ -62,40 +62,80 @@ async function idxFetch(endpoint: string, params: Record<string, string> = {}) {
       "Content-Type": "application/x-www-form-urlencoded",
       outputtype: "json",
     },
+    redirect: "manual",
   });
+
+  if (res.status === 302 || res.status === 301) {
+    const location = res.headers.get("location") || "";
+    if (location.includes("404")) {
+      throw new Error(`IDX API ${endpoint} → redirected to 404. Your API key may not be fully activated yet. Contact IDX Broker support or your MLS to confirm API access is enabled.`);
+    }
+    throw new Error(`IDX API ${endpoint} → HTTP ${res.status} redirect to ${location}`);
+  }
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`IDX API ${endpoint} → HTTP ${res.status}: ${body}`);
+    throw new Error(`IDX API ${endpoint} → HTTP ${res.status}: ${body.slice(0, 200)}`);
   }
   return res.json();
 }
 
 /**
  * Fetch ALL active listings from IDX Broker, paginated.
+ * Tries multiple endpoint patterns: /clients/featured, /clients/listings,
+ * /clients/soldpending, and /mls/searchresults as fallbacks.
  * IDX Broker returns max 500 per page.
  */
 async function fetchAllIdxListings(): Promise<any[]> {
+  const endpoints = [
+    { path: "/clients/featured", label: "featured" },
+    { path: "/clients/listings", label: "listings" },
+    { path: "/clients/soldpending", label: "soldpending" },
+    { path: "/mls/searchresults/0", label: "mls-search" },
+  ];
+
+  let workingEndpoint: string | null = null;
+
+  for (const ep of endpoints) {
+    try {
+      console.log(`[IDX Sync] Trying endpoint: ${ep.path}...`);
+      const test = await idxFetch(ep.path, { limit: "1" });
+      workingEndpoint = ep.path;
+      console.log(`[IDX Sync] Endpoint ${ep.path} (${ep.label}) is accessible`);
+      break;
+    } catch (e: any) {
+      console.log(`[IDX Sync] Endpoint ${ep.path} not available: ${e.message.slice(0, 120)}`);
+    }
+  }
+
+  if (!workingEndpoint) {
+    throw new Error(
+      "No IDX Broker API endpoints are accessible. Your API key may not be fully activated yet. " +
+      "Please contact IDX Broker support or your MLS (SD MLS) to confirm:\n" +
+      "  1. API access is enabled for your account\n" +
+      "  2. Your API key has 'client' level access\n" +
+      "  3. Your MLS data feed is provisioned"
+    );
+  }
+
   const all: any[] = [];
   let start = 0;
   const pageSize = 500;
 
   while (true) {
-    const page = await idxFetch("/clients/listings", {
+    const page = await idxFetch(workingEndpoint, {
       start: String(start),
       limit: String(pageSize),
-      filterField: "listingStatus",
-      filterValue: "Active",
     });
 
-    const listings = Array.isArray(page) ? page : Object.values(page);
+    const raw = Array.isArray(page) ? page : Object.values(page);
+    const listings = raw.filter((item: any) => typeof item === "object" && item !== null && !Array.isArray(item));
     if (!listings.length) break;
 
     all.push(...listings);
-    if (listings.length < pageSize) break; // last page
+    if (listings.length < pageSize) break;
     start += pageSize;
 
-    // Be gentle with the API
     await new Promise(r => setTimeout(r, 300));
   }
   return all;
