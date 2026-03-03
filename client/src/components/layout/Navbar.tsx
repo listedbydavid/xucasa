@@ -21,7 +21,7 @@ export function Navbar() {
           <nav className="hidden md:flex items-center gap-1">
             <Link href="/search" className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full transition-colors flex items-center gap-2">
               <Search className="w-4 h-4" />
-              Buy
+              Search
             </Link>
             <Link href="/sell" className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full transition-colors flex items-center gap-2">
               <TrendingUp className="w-4 h-4" />
