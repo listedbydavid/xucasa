@@ -26,9 +26,55 @@ const IDX_BASE = "https://middleware.idxbroker.com/api";
 const IDX_KEY = process.env.IDX_BROKER_API_KEY || "";
 const RESO_URL = process.env.IDX_RESO_URL || "";
 const RESO_TOKEN = process.env.IDX_RESO_TOKEN || "";
+const RESO_CLIENT_ID = process.env.IDX_RESO_CLIENT_ID || "";
+const RESO_CLIENT_SECRET = process.env.IDX_RESO_CLIENT_SECRET || "";
+
+const TRESTLE_TOKEN_URL = "https://api-trestle.corelogic.com/trestle/oidc/connect/token";
+const TRESTLE_API_BASE = "https://api-trestle.corelogic.com/trestle/odata";
+
+let cachedResoToken: { token: string; expiresAt: number } | null = null;
 
 export function idxConfigured(): boolean {
-  return !!(IDX_KEY || (RESO_URL && RESO_TOKEN));
+  return !!(IDX_KEY || (RESO_URL && RESO_TOKEN) || (RESO_CLIENT_ID && RESO_CLIENT_SECRET));
+}
+
+function resoOAuthConfigured(): boolean {
+  return !!(RESO_CLIENT_ID && RESO_CLIENT_SECRET);
+}
+
+async function getResoOAuthToken(): Promise<string> {
+  if (cachedResoToken && cachedResoToken.expiresAt > Date.now() + 60000) {
+    return cachedResoToken.token;
+  }
+
+  console.log("[IDX Sync] Requesting RESO OAuth2 token via client_credentials...");
+  const res = await fetch(TRESTLE_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: RESO_CLIENT_ID,
+      client_secret: RESO_CLIENT_SECRET,
+      scope: "api",
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`RESO OAuth2 token request failed (HTTP ${res.status}): ${errText.slice(0, 300)}`);
+  }
+
+  const data = await res.json();
+  if (!data.access_token) {
+    throw new Error(`RESO OAuth2 response missing access_token: ${JSON.stringify(data).slice(0, 200)}`);
+  }
+
+  cachedResoToken = {
+    token: data.access_token,
+    expiresAt: Date.now() + (data.expires_in || 3600) * 1000,
+  };
+  console.log(`[IDX Sync] RESO OAuth2 token acquired (expires in ${data.expires_in || 3600}s)`);
+  return cachedResoToken.token;
 }
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -144,17 +190,32 @@ async function fetchAllIdxListings(): Promise<any[]> {
 // ── RESO Web API helpers ──────────────────────────────────────────────────────
 
 async function fetchAllResoListings(): Promise<any[]> {
+  let token: string;
+  let baseUrl: string;
+
+  if (resoOAuthConfigured()) {
+    token = await getResoOAuthToken();
+    baseUrl = RESO_URL || TRESTLE_API_BASE;
+  } else {
+    token = RESO_TOKEN;
+    baseUrl = RESO_URL;
+  }
+
   const all: any[] = [];
-  let nextUrl: string | null = `${RESO_URL}/Property?$filter=StandardStatus eq 'Active'&$top=200&$select=ListingKey,ListingId,ListPrice,BedroomsTotal,BathroomsTotalInteger,LivingArea,LotSizeSquareFeet,StreetNumber,StreetName,UnitNumber,City,StateOrProvince,PostalCode,Latitude,Longitude,PublicRemarks,PhotosCount,ListDate,AssociationFee,MlsStatus`;
+  let nextUrl: string | null = `${baseUrl}/Property?$filter=StandardStatus eq 'Active'&$top=200&$select=ListingKey,ListingId,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,LivingArea,LotSizeSquareFeet,StreetNumber,StreetName,UnitNumber,City,StateOrProvince,PostalCode,Latitude,Longitude,PublicRemarks,Media,ListDate,AssociationFee,MlsStatus,PropertyType,YearBuilt`;
 
   while (nextUrl) {
     const res = await fetch(nextUrl, {
-      headers: { Authorization: `Bearer ${RESO_TOKEN}`, Accept: "application/json" },
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
     });
-    if (!res.ok) throw new Error(`RESO API → HTTP ${res.status}`);
+    if (!res.ok) {
+      const errBody = await res.text();
+      throw new Error(`RESO API → HTTP ${res.status}: ${errBody.slice(0, 300)}`);
+    }
     const body = await res.json();
     const records = body.value || [];
     all.push(...records);
+    console.log(`[IDX Sync] RESO fetched ${all.length} listings so far...`);
     nextUrl = body["@odata.nextLink"] || null;
     if (nextUrl) await new Promise(r => setTimeout(r, 300));
   }
@@ -213,13 +274,30 @@ function normaliseIdxBroker(raw: any) {
 }
 
 function normaliseReso(raw: any) {
+  let imageUrl: string | null = null;
+  let photos: string[] | null = null;
+
+  if (raw.Media && Array.isArray(raw.Media)) {
+    const photoMedia = raw.Media
+      .filter((m: any) => m.MediaCategory === "Photo" || m.MediaType === "image/jpeg")
+      .sort((a: any, b: any) => (a.Order || 0) - (b.Order || 0));
+    if (photoMedia.length > 0) {
+      imageUrl = photoMedia[0].MediaURL || null;
+      photos = photoMedia.map((m: any) => m.MediaURL).filter(Boolean);
+    }
+  }
+
+  const bathsFull = parseInt(raw.BathroomsFull || raw.BathroomsTotalInteger || "0") || 0;
+  const bathsHalf = parseInt(raw.BathroomsHalf || "0") || 0;
+  const baths = String(bathsFull + bathsHalf * 0.5);
+
   return {
     idxId: String(raw.ListingKey || raw.ListingId || ""),
     mlsNumber: raw.ListingId || null,
     title: `${raw.StreetNumber || ""} ${raw.StreetName || ""}, ${raw.City || ""}`.trim(),
     description: raw.PublicRemarks || `MLS listing at ${raw.StreetNumber} ${raw.StreetName}, ${raw.City}.`,
     price: parseInt(raw.ListPrice || "0") || 0,
-    addressStreetNumber: raw.StreetNumber || null,
+    addressStreetNumber: raw.StreetNumber ? String(raw.StreetNumber) : null,
     addressStreetName: raw.StreetName || null,
     addressUnitNumber: raw.UnitNumber || null,
     addressCity: raw.City || null,
@@ -227,13 +305,14 @@ function normaliseReso(raw: any) {
     addressZip: raw.PostalCode || null,
     location: `${raw.City || ""}, ${raw.StateOrProvince || ""}`,
     beds: parseInt(raw.BedroomsTotal || "0") || 0,
-    baths: String(parseFloat(raw.BathroomsTotalInteger || "0")),
+    baths,
     sqft: parseInt(raw.LivingArea || "0") || 0,
     lotSize: parseInt(raw.LotSizeSquareFeet || "0") || null,
     hoaFee: raw.AssociationFee ? parseInt(raw.AssociationFee) : null,
     lat: raw.Latitude ? String(raw.Latitude) : null,
     lng: raw.Longitude ? String(raw.Longitude) : null,
-    imageUrl: null,
+    imageUrl,
+    photos,
     status: "active" as const,
     source: "idx" as const,
     isOffMarket: false,
@@ -247,7 +326,7 @@ let syncInProgress = false;
 
 export async function runIdxSync(): Promise<{ added: number; updated: number; removed: number; total: number }> {
   if (syncInProgress) throw new Error("Sync already in progress");
-  if (!idxConfigured()) throw new Error("IDX not configured — set IDX_BROKER_API_KEY (or IDX_RESO_URL + IDX_RESO_TOKEN)");
+  if (!idxConfigured()) throw new Error("IDX not configured — set IDX_BROKER_API_KEY, or IDX_RESO_CLIENT_ID + IDX_RESO_CLIENT_SECRET, or IDX_RESO_URL + IDX_RESO_TOKEN");
 
   syncInProgress = true;
 
@@ -257,21 +336,28 @@ export async function runIdxSync(): Promise<{ added: number; updated: number; re
   try {
     console.log("[IDX Sync] Starting…");
 
-    // Fetch raw listings from whichever source is configured
     let rawListings: any[];
-    if (IDX_KEY) {
+    let useReso = false;
+
+    if (resoOAuthConfigured()) {
+      console.log("[IDX Sync] Using RESO Web API (OAuth2 client_credentials)");
+      rawListings = await fetchAllResoListings();
+      useReso = true;
+    } else if (RESO_URL && RESO_TOKEN) {
+      console.log("[IDX Sync] Using RESO Web API (static Bearer token)");
+      rawListings = await fetchAllResoListings();
+      useReso = true;
+    } else if (IDX_KEY) {
       console.log("[IDX Sync] Using IDX Broker API");
       rawListings = await fetchAllIdxListings();
     } else {
-      console.log("[IDX Sync] Using RESO Web API");
-      rawListings = await fetchAllResoListings();
+      throw new Error("No IDX/RESO credentials configured");
     }
 
     console.log(`[IDX Sync] Fetched ${rawListings.length} listings`);
 
-    // Normalise
     const normalised = rawListings
-      .map(r => IDX_KEY ? normaliseIdxBroker(r) : normaliseReso(r))
+      .map(r => useReso ? normaliseReso(r) : normaliseIdxBroker(r))
       .filter(r => r.idxId && r.price > 0);
 
     // Get current IDX ids in DB
@@ -341,7 +427,7 @@ export function isSyncInProgress() {
 
 export function startIdxAutoSync() {
   if (!idxConfigured()) {
-    console.log("[IDX Sync] Not configured — skipping auto-sync. Add IDX_BROKER_API_KEY to activate.");
+    console.log("[IDX Sync] Not configured — skipping auto-sync. Set IDX_RESO_CLIENT_ID + IDX_RESO_CLIENT_SECRET (or IDX_BROKER_API_KEY) to activate.");
     return;
   }
 
