@@ -79,33 +79,44 @@ function resoOAuthConfigured(): boolean {
   return !!(RESO_CLIENT_ID && RESO_CLIENT_SECRET);
 }
 
-async function tryDirectTokenAccess(provider: ResoProvider, token: string): Promise<boolean> {
+async function tryDirectTokenAccess(provider: ResoProvider, token: string, headerStyle: "bearer" | "referer" = "bearer"): Promise<boolean> {
   try {
     const testUrl = `${provider.apiBase}/Property?$top=1&$select=ListingKey`;
-    const res = await fetch(testUrl, {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-    });
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (headerStyle === "bearer") {
+      headers["Authorization"] = `Bearer ${token}`;
+    } else {
+      headers["Referer"] = token;
+    }
+    const res = await fetch(testUrl, { headers });
     if (res.ok) {
       const body = await res.json();
       if (body.value !== undefined) return true;
     }
-    console.log(`[IDX Sync] ${provider.name} direct access → HTTP ${res.status}`);
+    const errText = await res.text().catch(() => "");
+    console.log(`[IDX Sync] ${provider.name} (${headerStyle}) → HTTP ${res.status}: ${errText.slice(0, 120)}`);
     return false;
   } catch (err: any) {
-    console.log(`[IDX Sync] ${provider.name} direct access → Error: ${err.message}`);
+    console.log(`[IDX Sync] ${provider.name} (${headerStyle}) → Error: ${err.message}`);
     return false;
   }
 }
 
+let discoveredAuthStyle: "bearer" | "referer" = "bearer";
+
 async function tryTokenEndpoint(provider: ResoProvider): Promise<{ token: string; expiresIn: number } | null> {
   if (provider.directToken) {
     const candidates = [RESO_CLIENT_SECRET, RESO_CLIENT_ID];
-    for (const candidate of candidates) {
-      if (!candidate) continue;
-      console.log(`[IDX Sync] ${provider.name} → Testing direct Bearer token...`);
-      const ok = await tryDirectTokenAccess(provider, candidate);
-      if (ok) {
-        return { token: candidate, expiresIn: 86400 * 365 };
+    const styles: Array<"bearer" | "referer"> = ["bearer", "referer"];
+    for (const style of styles) {
+      for (const candidate of candidates) {
+        if (!candidate) continue;
+        console.log(`[IDX Sync] ${provider.name} → Testing ${style} with ${candidate === RESO_CLIENT_SECRET ? "client_secret" : "client_id"}...`);
+        const ok = await tryDirectTokenAccess(provider, candidate, style);
+        if (ok) {
+          discoveredAuthStyle = style;
+          return { token: candidate, expiresIn: 86400 * 365 };
+        }
       }
     }
     return null;
@@ -308,9 +319,13 @@ async function fetchAllResoListings(): Promise<any[]> {
   let nextUrl: string | null = `${baseUrl}/Property?$filter=StandardStatus eq 'Active'&$top=200&$select=ListingKey,ListingId,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,LivingArea,LotSizeSquareFeet,StreetNumber,StreetName,UnitNumber,City,StateOrProvince,PostalCode,Latitude,Longitude,PublicRemarks,Media,ListDate,AssociationFee,MlsStatus,PropertyType,YearBuilt`;
 
   while (nextUrl) {
-    const res = await fetch(nextUrl, {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-    });
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (discoveredProvider?.directToken && discoveredAuthStyle === "referer") {
+      headers["Referer"] = token;
+    } else {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    const res = await fetch(nextUrl, { headers });
     if (!res.ok) {
       const errBody = await res.text();
       throw new Error(`RESO API → HTTP ${res.status}: ${errBody.slice(0, 300)}`);
