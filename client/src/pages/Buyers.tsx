@@ -650,6 +650,217 @@ function PitchModal({ profile, onClose }: { profile: BuyerProfileWithUser; onClo
   );
 }
 
+const MOCK_BUYERS: BuyerProfileWithUser[] = [
+  {
+    id: -1, userId: "mock-1", displayName: "Sarah M.", preApprovalAmount: 850000,
+    minBeds: 3, maxBeds: 4, minBaths: "2", minSqft: 1800, maxSqft: 2500, minLotSize: 5000,
+    preferredCities: ["San Diego", "La Jolla"], homeTypes: ["Single Family"],
+    mustHaves: ["Garage", "Updated Kitchen", "Backyard"], niceToHaves: ["Pool", "Ocean View"],
+    dealBreakers: ["Busy Road", "HOA over $400"], moveInTimeline: "1-3 months",
+    bio: "Growing family looking for our forever home in the San Diego area. Pre-approved and ready to close quickly.",
+    isActive: true, createdAt: new Date(),
+    user: { id: "mock-1", firstName: "Sarah", lastName: "M." },
+  },
+  {
+    id: -2, userId: "mock-2", displayName: "James & Lisa K.", preApprovalAmount: 1200000,
+    minBeds: 4, maxBeds: 5, minBaths: "3", minSqft: 2500, maxSqft: 4000, minLotSize: 8000,
+    preferredCities: ["Carlsbad", "Encinitas", "Del Mar"], homeTypes: ["Single Family", "Townhouse"],
+    mustHaves: ["4+ Bedrooms", "2-Car Garage", "Good Schools"], niceToHaves: ["Pool", "Home Office", "Walk to Beach"],
+    dealBreakers: ["No Parking", "Major Renovations Needed"], moveInTimeline: "3-6 months",
+    bio: "Relocating from the Bay Area for work. Looking for a spacious home near top-rated schools. Flexible on timeline.",
+    isActive: true, createdAt: new Date(),
+    user: { id: "mock-2", firstName: "James", lastName: "K." },
+  },
+  {
+    id: -3, userId: "mock-3", displayName: "David R.", preApprovalAmount: 650000,
+    minBeds: 2, maxBeds: 3, minBaths: "2", minSqft: 1200, maxSqft: 1800, minLotSize: null,
+    preferredCities: ["San Diego", "Chula Vista", "National City"], homeTypes: ["Condo", "Townhouse"],
+    mustHaves: ["In-Unit Laundry", "Parking"], niceToHaves: ["Rooftop Deck", "Gym", "Near Transit"],
+    dealBreakers: ["No A/C", "Street Parking Only"], moveInTimeline: "ASAP",
+    bio: "First-time buyer, pre-approved and motivated. Looking for a move-in ready condo or townhome close to downtown.",
+    isActive: true, createdAt: new Date(),
+    user: { id: "mock-3", firstName: "David", lastName: "R." },
+  },
+  {
+    id: -4, userId: "mock-4", displayName: "Michelle T.", preApprovalAmount: 975000,
+    minBeds: 3, maxBeds: 4, minBaths: "2.5", minSqft: 2000, maxSqft: 3000, minLotSize: 6000,
+    preferredCities: ["Poway", "Scripps Ranch", "Rancho Bernardo"], homeTypes: ["Single Family"],
+    mustHaves: ["Large Yard", "Modern Kitchen", "Quiet Street"], niceToHaves: ["Solar Panels", "RV Parking", "View"],
+    dealBreakers: ["Flood Zone", "Under 1800 sqft"], moveInTimeline: "3-6 months",
+    bio: "Empty nester downsizing from a larger home. Want a single-story or main-floor primary in a quiet neighborhood.",
+    isActive: true, createdAt: new Date(),
+    user: { id: "mock-4", firstName: "Michelle", lastName: "T." },
+  },
+  {
+    id: -5, userId: "mock-5", displayName: "Carlos & Ana G.", preApprovalAmount: 550000,
+    minBeds: 3, maxBeds: null, minBaths: "2", minSqft: 1400, maxSqft: 2200, minLotSize: null,
+    preferredCities: ["Oceanside", "Vista", "San Marcos"], homeTypes: ["Single Family", "Townhouse"],
+    mustHaves: ["3+ Bedrooms", "Garage", "Near Schools"], niceToHaves: ["Community Pool", "Park Nearby"],
+    dealBreakers: ["Major Foundation Issues"], moveInTimeline: "1-3 months",
+    bio: "Young family of 4 looking for our first home. Would love a neighborhood with other families and good schools nearby.",
+    isActive: true, createdAt: new Date(),
+    user: { id: "mock-5", firstName: "Carlos", lastName: "G." },
+  },
+  {
+    id: -6, userId: "mock-6", displayName: "Rachel W.", preApprovalAmount: 1500000,
+    minBeds: 4, maxBeds: 6, minBaths: "3", minSqft: 3000, maxSqft: 5000, minLotSize: 10000,
+    preferredCities: ["La Jolla", "Del Mar", "Rancho Santa Fe"], homeTypes: ["Single Family"],
+    mustHaves: ["Pool", "Ocean View", "Gourmet Kitchen", "3-Car Garage"], niceToHaves: ["Wine Cellar", "Home Theater", "Guest Suite"],
+    dealBreakers: ["No View", "Under 3000 sqft"], moveInTimeline: "6-12 months",
+    bio: "Looking for a luxury property with entertaining space and ocean views. No rush — waiting for the right fit.",
+    isActive: true, createdAt: new Date(),
+    user: { id: "mock-6", firstName: "Rachel", lastName: "W." },
+  },
+];
+
+function QuickCriteriaForm({ onOpenFullForm }: { onOpenFullForm: () => void }) {
+  const { isAuthenticated } = useAuth();
+  const { toast } = useToast();
+  const [quickForm, setQuickForm] = useState({
+    budget: "",
+    beds: "",
+    city: "",
+    homeType: "",
+  });
+
+  const handleGetStarted = () => {
+    if (!isAuthenticated) {
+      toast({ title: "Sign in required", description: "Please log in to create your buyer profile.", variant: "destructive" });
+      return;
+    }
+    onOpenFullForm();
+  };
+
+  return (
+    <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-6 sm:p-8 mb-8 text-white relative overflow-hidden" data-testid="section-cta-form">
+      <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+      <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+
+      <div className="relative">
+        <div className="flex items-center gap-2 mb-2">
+          <Sparkles className="w-5 h-5 text-yellow-400" />
+          <span className="text-yellow-400 text-sm font-semibold uppercase tracking-wide">Reverse Home Search</span>
+        </div>
+        <h2 className="text-2xl sm:text-3xl font-bold mb-2">Tell sellers what you want</h2>
+        <p className="text-slate-300 text-sm sm:text-base mb-6 max-w-xl">
+          Post your home criteria and let homeowners come to you. Skip the endless scrolling — get matched with properties that fit your exact needs.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+          <div>
+            <label className="text-xs text-slate-400 font-medium mb-1 block">Your Budget</label>
+            <div className="relative">
+              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                className="w-full pl-8 pr-3 py-2.5 bg-white/10 border border-white/20 rounded-xl text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50"
+                type="number"
+                value={quickForm.budget}
+                onChange={e => setQuickForm(f => ({ ...f, budget: e.target.value }))}
+                placeholder="e.g. 750,000"
+                data-testid="input-quick-budget"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 font-medium mb-1 block">Bedrooms</label>
+            <div className="relative">
+              <Bed className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <select
+                className="w-full pl-9 pr-3 py-2.5 bg-white/10 border border-white/20 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary/50 appearance-none"
+                value={quickForm.beds}
+                onChange={e => setQuickForm(f => ({ ...f, beds: e.target.value }))}
+                data-testid="select-quick-beds"
+              >
+                <option value="" className="text-slate-900">Any</option>
+                <option value="1" className="text-slate-900">1+</option>
+                <option value="2" className="text-slate-900">2+</option>
+                <option value="3" className="text-slate-900">3+</option>
+                <option value="4" className="text-slate-900">4+</option>
+                <option value="5" className="text-slate-900">5+</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 font-medium mb-1 block">City</label>
+            <div className="relative">
+              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                className="w-full pl-9 pr-3 py-2.5 bg-white/10 border border-white/20 rounded-xl text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                value={quickForm.city}
+                onChange={e => setQuickForm(f => ({ ...f, city: e.target.value }))}
+                placeholder="e.g. San Diego"
+                data-testid="input-quick-city"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 font-medium mb-1 block">Home Type</label>
+            <div className="relative">
+              <HomeIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <select
+                className="w-full pl-9 pr-3 py-2.5 bg-white/10 border border-white/20 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary/50 appearance-none"
+                value={quickForm.homeType}
+                onChange={e => setQuickForm(f => ({ ...f, homeType: e.target.value }))}
+                data-testid="select-quick-home-type"
+              >
+                <option value="" className="text-slate-900">Any</option>
+                <option value="Single Family" className="text-slate-900">Single Family</option>
+                <option value="Condo" className="text-slate-900">Condo</option>
+                <option value="Townhouse" className="text-slate-900">Townhouse</option>
+                <option value="Multi-Family" className="text-slate-900">Multi-Family</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <button
+            onClick={handleGetStarted}
+            className="px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-xl font-semibold text-sm transition-all active:scale-[0.98] flex items-center gap-2 shadow-lg shadow-primary/25"
+            data-testid="button-post-criteria"
+          >
+            <Plus className="w-4 h-4" />
+            Post My Criteria — It's Free
+          </button>
+          <div className="flex items-center gap-3 text-sm text-slate-400">
+            <div className="flex -space-x-2">
+              {["S", "J", "D", "M", "C"].map((letter, i) => (
+                <div key={i} className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 border-2 border-slate-800 flex items-center justify-center text-xs font-semibold text-white">
+                  {letter}
+                </div>
+              ))}
+            </div>
+            <span data-testid="text-buyer-count">100K+ buyers have posted their needs</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatsBar() {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8" data-testid="section-stats">
+      <div className="bg-white rounded-xl border border-border/60 p-4 text-center">
+        <div className="text-2xl font-bold text-foreground">100K+</div>
+        <div className="text-xs text-muted-foreground mt-0.5">Active Buyers</div>
+      </div>
+      <div className="bg-white rounded-xl border border-border/60 p-4 text-center">
+        <div className="text-2xl font-bold text-foreground">$850K</div>
+        <div className="text-xs text-muted-foreground mt-0.5">Avg Budget</div>
+      </div>
+      <div className="bg-white rounded-xl border border-border/60 p-4 text-center">
+        <div className="text-2xl font-bold text-foreground">23K+</div>
+        <div className="text-xs text-muted-foreground mt-0.5">Matches Made</div>
+      </div>
+      <div className="bg-white rounded-xl border border-border/60 p-4 text-center">
+        <div className="text-2xl font-bold text-foreground">48 hrs</div>
+        <div className="text-xs text-muted-foreground mt-0.5">Avg Response Time</div>
+      </div>
+    </div>
+  );
+}
+
 export default function Buyers() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
@@ -691,6 +902,10 @@ export default function Buyers() {
   };
 
   const handlePitch = (profile: BuyerProfileWithUser) => {
+    if (profile.id < 0) {
+      toast({ title: "Example Profile", description: "This is a sample buyer. Sign in and create your own profile to get pitches from real homeowners!" });
+      return;
+    }
     if (!isAuthenticated) {
       toast({ title: "Sign in required", description: "Please log in to pitch your home to buyers.", variant: "destructive" });
       return;
@@ -698,10 +913,13 @@ export default function Buyers() {
     setPitchTarget(profile);
   };
 
+  const realProfiles = profiles || [];
+  const allProfiles = [...realProfiles, ...MOCK_BUYERS.filter(mock => !realProfiles.some(p => p.id === mock.id))];
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Users className="w-6 h-6 text-primary" />
@@ -744,6 +962,10 @@ export default function Buyers() {
             )}
           </div>
         </div>
+
+        <QuickCriteriaForm onOpenFullForm={() => setShowCreateModal(true)} />
+
+        <StatsBar />
 
         {showFilters && (
           <div className="bg-white border rounded-2xl p-4 mb-6 animate-in slide-in-from-top-2">
@@ -800,6 +1022,15 @@ export default function Buyers() {
           </div>
         )}
 
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-foreground" data-testid="text-listings-heading">
+            Buyers Looking Right Now
+          </h3>
+          <span className="text-sm text-muted-foreground" data-testid="text-showing-count">
+            Showing {allProfiles.length.toLocaleString()} of 100,000+ buyers
+          </span>
+        </div>
+
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3, 4, 5, 6].map(i => (
@@ -818,31 +1049,11 @@ export default function Buyers() {
               </div>
             ))}
           </div>
-        ) : profiles && profiles.length > 0 ? (
+        ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {profiles.map(profile => (
+            {allProfiles.map(profile => (
               <BuyerCard key={profile.id} profile={profile} onPitch={handlePitch} />
             ))}
-          </div>
-        ) : (
-          <div className="text-center py-20">
-            <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Users className="w-8 h-8 text-primary" />
-            </div>
-            <h3 className="text-lg font-semibold mb-2" data-testid="text-empty-state">No buyer profiles yet</h3>
-            <p className="text-muted-foreground text-sm max-w-md mx-auto mb-6">
-              Be the first to create a buyer profile! Let sellers know exactly what you're looking for and get matched with your dream home.
-            </p>
-            {isAuthenticated && (
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="px-6 py-3 bg-foreground text-background hover:bg-primary hover:text-primary-foreground rounded-xl font-semibold transition-all flex items-center gap-2 mx-auto active:scale-[0.98]"
-                data-testid="button-create-profile-empty"
-              >
-                <Plus className="w-5 h-5" />
-                Create My Buyer Profile
-              </button>
-            )}
           </div>
         )}
       </div>
