@@ -1,8 +1,9 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Link } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useAuth } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
 
 import { Navbar } from "@/components/layout/Navbar";
@@ -33,6 +34,24 @@ function Router() {
   );
 }
 
+function Footer() {
+  const { user, isAuthenticated } = useAuth();
+  const isAdmin = isAuthenticated && user?.id === "55534280";
+
+  return (
+    <footer className="border-t border-border/40 bg-muted/20 py-6 px-4">
+      <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span>doocasa</span>
+        {isAdmin && (
+          <Link href="/admin" className="text-muted-foreground/60 hover:text-foreground transition-colors" data-testid="link-admin">
+            Admin
+          </Link>
+        )}
+      </div>
+    </footer>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -42,6 +61,7 @@ function App() {
           <main className="flex-1">
             <Router />
           </main>
+          <Footer />
         </div>
         <Toaster />
       </TooltipProvider>
