@@ -7,8 +7,31 @@ import type { BuyerProfile, Property } from "@shared/schema";
 import {
   Users, DollarSign, Bed, Bath, Ruler, MapPin, Heart, Clock,
   Plus, Send, Filter, X, ChevronDown, ChevronUp, Sparkles,
-  Home as HomeIcon, TreePine, ShieldCheck, AlertTriangle
+  Home as HomeIcon, TreePine, ShieldCheck, AlertTriangle, Scale
 } from "lucide-react";
+
+const FAIR_HOUSING_NOTICE = "doocasa supports fair housing. All profiles and communications must comply with the Fair Housing Act. Discrimination based on race, color, religion, national origin, sex, familial status, or disability is illegal and strictly prohibited.";
+
+const PROHIBITED_TERMS = [
+  "no kids", "no children", "no families", "adults only", "no section 8",
+  "christian", "muslim", "jewish", "hindu", "buddhist", "catholic",
+  "whites only", "no blacks", "no hispanics", "no asians", "no mexicans",
+  "english only", "american only", "no immigrants", "no foreigners",
+  "no disabled", "no wheelchair", "no handicap", "able-bodied only",
+  "no gay", "no lgbtq", "straight only", "no trans",
+  "no single mothers", "no single parents", "married only", "couples only",
+  "no elderly", "young only", "no seniors",
+];
+
+function checkFairHousingCompliance(text: string): string | null {
+  const lower = text.toLowerCase();
+  for (const term of PROHIBITED_TERMS) {
+    if (lower.includes(term)) {
+      return `Your profile contains language ("${term}") that may violate the Fair Housing Act. Please describe only property features, not characteristics of people.`;
+    }
+  }
+  return null;
+}
 
 type BuyerProfileWithUser = BuyerProfile & { user: { id: string; firstName?: string; lastName?: string; profileImageUrl?: string } | null };
 
@@ -433,6 +456,9 @@ function CreateProfileModal({ onClose, existingProfile }: { onClose: () => void;
               placeholder="HOA over $500, No parking, Busy road (comma-separated)"
               data-testid="input-deal-breakers"
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              Property features only. Do not reference characteristics of people or neighborhoods based on protected classes.
+            </p>
           </div>
 
           <div>
@@ -459,6 +485,14 @@ function CreateProfileModal({ onClose, existingProfile }: { onClose: () => void;
           </div>
         </div>
 
+        <div className="px-5 pb-2">
+          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl" data-testid="notice-fair-housing-profile">
+            <Scale className="w-4 h-4 text-amber-700 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-amber-800">
+              <span className="font-semibold">Fair Housing Notice:</span> {FAIR_HOUSING_NOTICE} By submitting, you agree that your profile describes only property features and preferences.
+            </p>
+          </div>
+        </div>
         <div className="p-5 border-t flex gap-3">
           <button
             onClick={onClose}
@@ -468,7 +502,15 @@ function CreateProfileModal({ onClose, existingProfile }: { onClose: () => void;
             Cancel
           </button>
           <button
-            onClick={() => createMutation.mutate()}
+            onClick={() => {
+              const allText = [form.mustHaves, form.niceToHaves, form.dealBreakers, form.bio].join(" ");
+              const violation = checkFairHousingCompliance(allText);
+              if (violation) {
+                toast({ title: "Fair Housing Violation", description: violation, variant: "destructive" });
+                return;
+              }
+              createMutation.mutate();
+            }}
             disabled={!form.displayName || !form.preApprovalAmount || createMutation.isPending}
             className="flex-1 py-2.5 bg-foreground text-background hover:bg-primary hover:text-primary-foreground rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             data-testid="button-submit-profile"
@@ -562,9 +604,19 @@ function PitchModal({ profile, onClose }: { profile: BuyerProfileWithUser; onClo
               className="w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 min-h-[120px] resize-none"
               value={message}
               onChange={e => setMessage(e.target.value)}
-              placeholder={`Hi ${profile.displayName}, I have a property that matches what you're looking for...`}
+              placeholder={`Hi ${profile.displayName}, I have a property that matches what you're looking for. Here are the details...`}
               data-testid="input-pitch-message"
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              Focus on your property's features and how they match this buyer's criteria. Do not make assumptions about the buyer based on personal characteristics.
+            </p>
+          </div>
+
+          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl" data-testid="notice-fair-housing-pitch">
+            <Scale className="w-4 h-4 text-amber-700 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-amber-800">
+              <span className="font-semibold">Fair Housing Act:</span> Your pitch must focus only on property features. Do not discriminate or make assumptions about any person based on race, color, religion, national origin, sex, familial status, or disability.
+            </p>
           </div>
         </div>
 
@@ -577,7 +629,14 @@ function PitchModal({ profile, onClose }: { profile: BuyerProfileWithUser; onClo
             Cancel
           </button>
           <button
-            onClick={() => pitchMutation.mutate()}
+            onClick={() => {
+              const violation = checkFairHousingCompliance(message);
+              if (violation) {
+                toast({ title: "Fair Housing Violation", description: violation, variant: "destructive" });
+                return;
+              }
+              pitchMutation.mutate();
+            }}
             disabled={!message.trim() || pitchMutation.isPending}
             className="flex-1 py-2.5 bg-foreground text-background hover:bg-primary hover:text-primary-foreground rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             data-testid="button-send-pitch"
@@ -651,6 +710,12 @@ export default function Buyers() {
             <p className="text-muted-foreground text-sm sm:text-base max-w-xl">
               Pre-approved buyers sharing what they're looking for. Homeowners — find your perfect match and pitch your property directly.
             </p>
+            <div className="flex items-center gap-1.5 mt-2" data-testid="badge-fair-housing">
+              <Scale className="w-3.5 h-3.5 text-amber-600" />
+              <span className="text-xs text-amber-700 font-medium">
+                Equal Housing Opportunity — Fair Housing Act compliant
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">

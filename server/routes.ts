@@ -585,11 +585,40 @@ export async function registerRoutes(
     }
   });
 
+  const FAIR_HOUSING_PROHIBITED = [
+    "no kids", "no children", "no families", "adults only", "no section 8",
+    "christian", "muslim", "jewish", "hindu", "buddhist", "catholic",
+    "whites only", "no blacks", "no hispanics", "no asians", "no mexicans",
+    "english only", "american only", "no immigrants", "no foreigners",
+    "no disabled", "no wheelchair", "no handicap", "able-bodied only",
+    "no gay", "no lgbtq", "straight only", "no trans",
+    "no single mothers", "no single parents", "married only", "couples only",
+    "no elderly", "young only", "no seniors",
+  ];
+
+  function checkFairHousing(text: string): string | null {
+    const lower = text.toLowerCase();
+    for (const term of FAIR_HOUSING_PROHIBITED) {
+      if (lower.includes(term)) {
+        return `Content contains language ("${term}") that may violate the Fair Housing Act. Please describe only property features.`;
+      }
+    }
+    return null;
+  }
+
   app.post("/api/buyer-profiles", isAuthenticated, async (req, res) => {
     try {
       const { insertBuyerProfileSchema } = await import("@shared/schema");
       const parsed = insertBuyerProfileSchema.omit({ userId: true }).safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
+      const textToCheck = [
+        ...(parsed.data.mustHaves || []),
+        ...(parsed.data.niceToHaves || []),
+        ...(parsed.data.dealBreakers || []),
+        parsed.data.bio || "",
+      ].join(" ");
+      const violation = checkFairHousing(textToCheck);
+      if (violation) return res.status(400).json({ message: violation });
       const data = { ...parsed.data, userId: req.user!.claims.sub };
       const profile = await storage.createBuyerProfile(data);
       res.status(201).json(profile);
@@ -603,6 +632,14 @@ export async function registerRoutes(
       const { insertBuyerProfileSchema } = await import("@shared/schema");
       const parsed = insertBuyerProfileSchema.omit({ userId: true }).partial().safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
+      const textToCheck = [
+        ...(parsed.data.mustHaves || []),
+        ...(parsed.data.niceToHaves || []),
+        ...(parsed.data.dealBreakers || []),
+        parsed.data.bio || "",
+      ].join(" ");
+      const violation = checkFairHousing(textToCheck);
+      if (violation) return res.status(400).json({ message: violation });
       const updated = await storage.updateBuyerProfile(
         parseInt(req.params.id),
         req.user!.claims.sub,
@@ -630,6 +667,10 @@ export async function registerRoutes(
       const { insertBuyerMatchSchema } = await import("@shared/schema");
       const parsed = insertBuyerMatchSchema.omit({ senderId: true }).safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
+      if (parsed.data.message) {
+        const violation = checkFairHousing(parsed.data.message);
+        if (violation) return res.status(400).json({ message: violation });
+      }
       const data = { ...parsed.data, senderId: req.user!.claims.sub };
       const match = await storage.createBuyerMatch(data);
       res.status(201).json(match);
