@@ -14,6 +14,7 @@ import AgentDashboard from "@/pages/AgentDashboard";
 import Swipe from "@/pages/Swipe";
 import Sell from "@/pages/Sell";
 import Buyers from "@/pages/Buyers";
+import Admin from "@/pages/Admin";
 
 function Router() {
   return (
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/agent" component={AgentDashboard} />
       <Route path="/buyers" component={Buyers} />
+      <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>
   );

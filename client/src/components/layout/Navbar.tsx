@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { Home, Search, User, LogOut, Briefcase, Layers, TrendingUp, Users } from "lucide-react";
+import { Home, Search, User, LogOut, Briefcase, Layers, TrendingUp, Users, Shield } from "lucide-react";
 
 export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -43,6 +43,12 @@ export function Navbar() {
               <Link href="/dashboard" className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full transition-colors flex items-center gap-2" data-testid="link-my-account">
                 <User className="w-4 h-4" />
                 My Account
+              </Link>
+            )}
+            {isAuthenticated && user?.id === "55534280" && (
+              <Link href="/admin" className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-full transition-colors flex items-center gap-2" data-testid="link-admin">
+                <Shield className="w-4 h-4" />
+                Admin
               </Link>
             )}
           </nav>

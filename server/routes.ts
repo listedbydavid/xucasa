@@ -555,6 +555,94 @@ export async function registerRoutes(
     }
   });
 
+  // ── Seller Pitches ─────────────────────────────────────────────────────────
+
+  const ADMIN_USER_ID = "55534280";
+
+  const isAdmin = (req: any, res: any, next: any) => {
+    if (!req.user?.claims?.sub || req.user.claims.sub !== ADMIN_USER_ID) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    next();
+  };
+
+  app.post("/api/seller-pitches", async (req: any, res) => {
+    try {
+      const body = req.body;
+      if (!body.name || !body.email) {
+        return res.status(400).json({ message: "Name and email are required" });
+      }
+      const userId = req.user?.claims?.sub || null;
+      const pitch = await storage.createSellerPitch({ ...body, userId });
+      res.status(201).json(pitch);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/seller-pitches", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const pitches = await storage.getSellerPitches();
+      res.json(pitches);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/seller-pitches/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      const pitch = await storage.getSellerPitch(id);
+      if (!pitch) return res.status(404).json({ message: "Pitch not found" });
+      res.json(pitch);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/admin/seller-pitches/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      const { status, adminNotes } = req.body;
+      if (!status) return res.status(400).json({ message: "Status is required" });
+      const updated = await storage.updateSellerPitchStatus(id, status, adminNotes);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/sell-leads", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const leads = await storage.getSellLeads();
+      res.json(leads);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/stats", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const [pitches, leads, profiles, props] = await Promise.all([
+        storage.getSellerPitches(),
+        storage.getSellLeads(),
+        storage.getBuyerProfiles(),
+        storage.getProperties(),
+      ]);
+      res.json({
+        totalPitches: pitches.length,
+        newPitches: pitches.filter(p => p.status === "new").length,
+        totalSellLeads: leads.length,
+        totalBuyerProfiles: profiles.length,
+        totalProperties: props.length,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── Buyer Profiles ──────────────────────────────────────────────────────────
 
   app.get("/api/buyer-profiles", async (req, res) => {

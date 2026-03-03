@@ -10,7 +10,9 @@ Key features:
 - Property detail pages with neighborhood stats, flood zone info, and nearby places (public APIs)
 - **Client Dashboard** — profile editor, My Home tracker with property intelligence, favorites, saved searches, search history
 - **Sell Wizard** (`/sell`) — 6-step homeowner sell flow: address (Google Autocomplete + Street View preview), home details, instant valuation from comparable sales (beds/sqft matching), selling goals (timeline/motivation), contact + listing type (MLS public vs. Buy it Now private), confirmation. Saves leads to `sell_leads` DB table. Valuation via `/api/valuation`.
-- **Buyer Marketplace** (`/buyers`) — Reverse buyer marketplace where pre-approved buyers create profiles listing their home needs (budget, beds, baths, sqft, lot size, home types, preferred cities, must-haves, nice-to-haves, deal-breakers, move-in timeline, bio). Homeowners browse buyer cards and pitch their properties directly to matching buyers via a message + optional property selection. Filter buyers by city, min/max budget.
+- **Buyer Marketplace** (`/buyers`) — Reverse buyer marketplace where pre-approved buyers create profiles listing their home needs (budget, beds, baths, sqft, lot size, home types, preferred cities, must-haves, nice-to-haves, deal-breakers, move-in timeline, bio). Homeowners browse buyer cards and pitch their properties directly to matching buyers via a message + optional property selection. Filter buyers by city, min/max budget. Inline CTA form, mock buyer examples, 100K+ stats for social proof.
+- **Seller Pitch** — On the Sell wizard Step 2, homeowners can pitch their home to buyers by uploading photos, entering asking price, description. Pitches go to the site admin (not directly to buyers) for review and matching. Stored in `seller_pitches` DB table.
+- **Admin Dashboard** (`/admin`) — Master admin panel (restricted to user ID `55534280`) with overview stats, seller pitch management (view/update status/add notes), sell leads list. Tabs: Overview, Seller Pitches, Sell Leads. Status workflow: new → reviewing → contacted → matched → rejected.
 - Agent dashboard for creating, editing, and deleting listings with Street View auto-photo
 - **PWA (Progressive Web App)** — installable on iOS/Android home screens, offline-capable service worker, app manifest with icons
 - Authentication via Replit Auth (OpenID Connect)
@@ -62,6 +64,7 @@ Preferred communication style: Simple, everyday language.
   - `userHomes` — userId + address fields + nickname + notes + lat/lng + imageUrl (Street View auto-photo)
   - `buyerProfiles` — userId, displayName, preApprovalAmount, bed/bath/sqft ranges, preferredCities[], homeTypes[], mustHaves[], niceToHaves[], dealBreakers[], moveInTimeline, bio, isActive
   - `buyerMatches` — buyerProfileId, propertyId (optional), senderId, message, status (pending/accepted/rejected)
+  - `sellerPitches` — userId (optional), name, email, phone, fullAddress, beds, baths, sqft, lotSize, price, homeType, condition, description, photos[], timeline, status (new/reviewing/contacted/matched/rejected), adminNotes
 - **Migrations**: `./migrations/` directory, applied with `drizzle-kit push`
 
 ### Authentication

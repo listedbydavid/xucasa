@@ -202,11 +202,40 @@ export const buyerMatchesRelations = relations(buyerMatches, ({ one }) => ({
   sender: one(users, { fields: [buyerMatches.senderId], references: [users.id] }),
 }));
 
+export const sellerPitches = pgTable("seller_pitches", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone"),
+  fullAddress: text("full_address"),
+  addressCity: text("address_city"),
+  addressState: text("address_state"),
+  beds: integer("beds"),
+  baths: decimal("baths"),
+  sqft: integer("sqft"),
+  lotSize: integer("lot_size"),
+  price: integer("price"),
+  homeType: text("home_type"),
+  condition: text("condition"),
+  description: text("description"),
+  photos: text("photos").array(),
+  timeline: text("timeline"),
+  status: text("status").default("new").notNull(),
+  adminNotes: text("admin_notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const sellerPitchesRelations = relations(sellerPitches, ({ one }) => ({
+  user: one(users, { fields: [sellerPitches.userId], references: [users.id] }),
+}));
+
 // Insert Schemas
 export const insertPropertySchema = createInsertSchema(properties).omit({ id: true, createdAt: true });
 export const insertSellLeadSchema = createInsertSchema(sellLeads).omit({ id: true, createdAt: true });
 export const insertBuyerProfileSchema = createInsertSchema(buyerProfiles).omit({ id: true, createdAt: true });
 export const insertBuyerMatchSchema = createInsertSchema(buyerMatches).omit({ id: true, createdAt: true });
+export const insertSellerPitchSchema = createInsertSchema(sellerPitches).omit({ id: true, createdAt: true });
 export const insertSavedPropertySchema = createInsertSchema(savedProperties).omit({ id: true, createdAt: true });
 export const insertSavedSearchSchema = createInsertSchema(savedSearches).omit({ id: true, createdAt: true });
 export const insertSearchHistorySchema = createInsertSchema(searchHistory).omit({ id: true, createdAt: true });
@@ -232,6 +261,8 @@ export type BuyerProfile = typeof buyerProfiles.$inferSelect;
 export type InsertBuyerProfile = z.infer<typeof insertBuyerProfileSchema>;
 export type BuyerMatch = typeof buyerMatches.$inferSelect;
 export type InsertBuyerMatch = z.infer<typeof insertBuyerMatchSchema>;
+export type SellerPitch = typeof sellerPitches.$inferSelect;
+export type InsertSellerPitch = z.infer<typeof insertSellerPitchSchema>;
 
 // Request Types
 export type CreatePropertyRequest = InsertProperty;

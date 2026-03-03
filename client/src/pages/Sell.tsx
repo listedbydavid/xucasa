@@ -2,7 +2,8 @@ import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useJsApiLoader, Autocomplete } from "@react-google-maps/api";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -165,10 +166,69 @@ function fmt(n: number) {
 export default function Sell() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user, isAuthenticated } = useAuth();
   const [step, setStep] = useState(1);
   const [valuation, setValuation] = useState<ValuationResult | null>(null);
   const [autocompleteRef, setAutocompleteRef] = useState<google.maps.places.Autocomplete | null>(null);
   const addressInputRef = useRef<HTMLInputElement>(null);
+  const [showPitchForm, setShowPitchForm] = useState(false);
+  const [pitchSent, setPitchSent] = useState(false);
+  const [pitchPhotos, setPitchPhotos] = useState<string[]>([]);
+  const [pitchDescription, setPitchDescription] = useState("");
+  const [pitchPrice, setPitchPrice] = useState("");
+
+  const pitchMutation = useMutation({
+    mutationFn: async (data: any) => {
+      await apiRequest("POST", "/api/seller-pitches", data);
+    },
+    onSuccess: () => {
+      setPitchSent(true);
+      setShowPitchForm(false);
+      toast({ title: "Pitch submitted!", description: "Our team will review your home and match you with interested buyers." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handlePitchSubmit = () => {
+    if (!form.name && !user?.firstName) {
+      toast({ title: "Name required", description: "Please provide your name in the Connect step or log in.", variant: "destructive" });
+      return;
+    }
+    pitchMutation.mutate({
+      name: form.name || `${user?.firstName || ""} ${user?.lastName || ""}`.trim(),
+      email: form.email || user?.email || "",
+      phone: form.phone || null,
+      fullAddress: form.fullAddress || null,
+      addressCity: form.addressCity || null,
+      addressState: form.addressState || null,
+      beds: form.beds,
+      baths: String(form.baths),
+      sqft: form.sqft,
+      lotSize: form.lotSize,
+      price: pitchPrice ? parseInt(pitchPrice) : null,
+      homeType: form.homeType,
+      condition: form.condition,
+      description: pitchDescription || null,
+      photos: pitchPhotos.length > 0 ? pitchPhotos : null,
+      timeline: form.timeline,
+    });
+  };
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        if (ev.target?.result) {
+          setPitchPhotos(prev => [...prev, ev.target!.result as string]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
 
   const [form, setForm] = useState<FormData>({
     fullAddress: "",
@@ -612,6 +672,139 @@ export default function Sell() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Pitch to Buyers CTA */}
+            {!pitchSent ? (
+              <Card className="shadow-sm border-emerald-200 bg-gradient-to-r from-emerald-50 to-green-50 overflow-hidden">
+                <CardContent className="pt-6 pb-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Users className="w-5 h-5 text-emerald-600" />
+                    <h3 className="font-semibold text-emerald-900">Want buyers to come to you?</h3>
+                  </div>
+                  <p className="text-sm text-emerald-700 mb-4">
+                    100,000+ pre-approved buyers are actively looking. Submit your home details and photos — our team will match you with the right buyers.
+                  </p>
+
+                  {!showPitchForm ? (
+                    <Button
+                      data-testid="button-open-pitch-form"
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white gap-2"
+                      onClick={() => setShowPitchForm(true)}
+                    >
+                      <Send className="w-4 h-4" />
+                      Pitch My Home to Buyers
+                    </Button>
+                  ) : (
+                    <div className="space-y-4 mt-4 pt-4 border-t border-emerald-200">
+                      <div>
+                        <Label className="text-sm font-medium mb-1 block">Your Asking Price (optional)</Label>
+                        <div className="relative">
+                          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <Input
+                            data-testid="input-pitch-price"
+                            type="number"
+                            className="pl-8"
+                            value={pitchPrice}
+                            onChange={e => setPitchPrice(e.target.value)}
+                            placeholder="e.g. 850000"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label className="text-sm font-medium mb-1 block">Tell us about your home</Label>
+                        <Textarea
+                          data-testid="input-pitch-description"
+                          value={pitchDescription}
+                          onChange={e => setPitchDescription(e.target.value)}
+                          placeholder="Describe what makes your home special — recent upgrades, neighborhood highlights, unique features..."
+                          className="min-h-[100px] resize-none"
+                        />
+                      </div>
+
+                      <div>
+                        <Label className="text-sm font-medium mb-2 block">Upload Photos</Label>
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {pitchPhotos.map((photo, i) => (
+                            <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border group">
+                              <img src={photo} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
+                              <button
+                                onClick={() => setPitchPhotos(prev => prev.filter((_, idx) => idx !== i))}
+                                className="absolute top-0.5 right-0.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                                data-testid={`button-remove-photo-${i}`}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                          <label className="w-20 h-20 rounded-lg border-2 border-dashed border-emerald-300 flex flex-col items-center justify-center cursor-pointer hover:bg-emerald-50 transition-colors" data-testid="button-upload-photos">
+                            <Eye className="w-5 h-5 text-emerald-400" />
+                            <span className="text-[10px] text-emerald-500 mt-0.5">Add</span>
+                            <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} />
+                          </label>
+                        </div>
+                        <p className="text-xs text-muted-foreground">Add photos of your home to attract more buyers</p>
+                      </div>
+
+                      {!isAuthenticated && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-sm font-medium mb-1 block">Your Name *</Label>
+                            <Input
+                              data-testid="input-pitch-name"
+                              value={form.name}
+                              onChange={e => set("name", e.target.value)}
+                              placeholder="Full name"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium mb-1 block">Email *</Label>
+                            <Input
+                              data-testid="input-pitch-email"
+                              type="email"
+                              value={form.email}
+                              onChange={e => set("email", e.target.value)}
+                              placeholder="you@email.com"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowPitchForm(false)}
+                          data-testid="button-cancel-pitch"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white gap-2"
+                          onClick={handlePitchSubmit}
+                          disabled={pitchMutation.isPending}
+                          data-testid="button-submit-pitch"
+                        >
+                          <Send className="w-4 h-4" />
+                          {pitchMutation.isPending ? "Submitting..." : "Submit to doocasa Team"}
+                        </Button>
+                      </div>
+
+                      <p className="text-xs text-emerald-600/70 text-center">
+                        Your pitch goes directly to the doocasa team — we'll review it and connect you with matching buyers.
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="shadow-sm border-green-300 bg-green-50">
+                <CardContent className="pt-5 pb-5 text-center">
+                  <CheckCircle2 className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                  <p className="font-semibold text-green-800">Pitch submitted!</p>
+                  <p className="text-sm text-green-700">Our team will review your home and reach out with matching buyers.</p>
+                </CardContent>
+              </Card>
+            )}
 
             <div className="flex gap-3">
               <Button

@@ -9,6 +9,7 @@ import {
   sellLeads,
   buyerProfiles,
   buyerMatches,
+  sellerPitches,
   type Property,
   type InsertProperty,
   type SavedProperty,
@@ -24,6 +25,8 @@ import {
   type InsertBuyerProfile,
   type BuyerMatch,
   type InsertBuyerMatch,
+  type SellerPitch,
+  type InsertSellerPitch,
   users,
 } from "@shared/schema";
 import { eq, and, desc, sql, gte } from "drizzle-orm";
@@ -83,6 +86,12 @@ export interface IStorage {
   createBuyerMatch(match: InsertBuyerMatch): Promise<BuyerMatch>;
   getBuyerMatchesForProfile(profileId: number): Promise<(BuyerMatch & { property: Property | null; sender: any })[]>;
   getBuyerMatchesForSender(senderId: string): Promise<(BuyerMatch & { buyerProfile: BuyerProfile })[]>;
+
+  // Seller Pitches
+  createSellerPitch(pitch: InsertSellerPitch): Promise<SellerPitch>;
+  getSellerPitches(): Promise<(SellerPitch & { user: any })[]>;
+  getSellerPitch(id: number): Promise<(SellerPitch & { user: any }) | undefined>;
+  updateSellerPitchStatus(id: number, status: string, adminNotes?: string): Promise<SellerPitch>;
 
   // Valuation
   getValuation(beds: number, sqft: number, lat?: number, lng?: number): Promise<{
@@ -467,6 +476,38 @@ export class DatabaseStorage implements IStorage {
       .where(eq(buyerMatches.senderId, senderId))
       .orderBy(desc(buyerMatches.createdAt));
     return results.map(r => ({ ...r.match, buyerProfile: r.buyerProfile }));
+  }
+
+  async createSellerPitch(pitch: InsertSellerPitch): Promise<SellerPitch> {
+    const [newPitch] = await db.insert(sellerPitches).values(pitch).returning();
+    return newPitch;
+  }
+
+  async getSellerPitches(): Promise<(SellerPitch & { user: any })[]> {
+    const results = await db
+      .select({ pitch: sellerPitches, user: users })
+      .from(sellerPitches)
+      .leftJoin(users, eq(sellerPitches.userId, users.id))
+      .orderBy(desc(sellerPitches.createdAt));
+    return results.map(r => ({ ...r.pitch, user: r.user }));
+  }
+
+  async getSellerPitch(id: number): Promise<(SellerPitch & { user: any }) | undefined> {
+    const results = await db
+      .select({ pitch: sellerPitches, user: users })
+      .from(sellerPitches)
+      .leftJoin(users, eq(sellerPitches.userId, users.id))
+      .where(eq(sellerPitches.id, id))
+      .limit(1);
+    if (!results[0]) return undefined;
+    return { ...results[0].pitch, user: results[0].user };
+  }
+
+  async updateSellerPitchStatus(id: number, status: string, adminNotes?: string): Promise<SellerPitch> {
+    const updates: any = { status };
+    if (adminNotes !== undefined) updates.adminNotes = adminNotes;
+    const [updated] = await db.update(sellerPitches).set(updates).where(eq(sellerPitches.id, id)).returning();
+    return updated;
   }
 }
 
