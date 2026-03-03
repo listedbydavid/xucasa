@@ -29,10 +29,35 @@ const RESO_TOKEN = process.env.IDX_RESO_TOKEN || "";
 const RESO_CLIENT_ID = process.env.IDX_RESO_CLIENT_ID || "";
 const RESO_CLIENT_SECRET = process.env.IDX_RESO_CLIENT_SECRET || "";
 
-const TRESTLE_TOKEN_URL = "https://api-trestle.corelogic.com/trestle/oidc/connect/token";
-const TRESTLE_API_BASE = "https://api-trestle.corelogic.com/trestle/odata";
+const RESO_PROVIDERS = [
+  {
+    name: "Trestle (CoreLogic)",
+    tokenUrl: "https://api-trestle.corelogic.com/trestle/oidc/connect/token",
+    apiBase: "https://api-trestle.corelogic.com/trestle/odata",
+    scope: "api",
+  },
+  {
+    name: "Bridge Interactive",
+    tokenUrl: "https://api.bridgedataoutput.com/api/v2/OData/test/oauth/token",
+    apiBase: "https://api.bridgedataoutput.com/api/v2/OData/test",
+    scope: undefined,
+  },
+  {
+    name: "Spark (FBS)",
+    tokenUrl: "https://sparkplatform.com/v1/oauth2/token",
+    apiBase: "https://replication.sparkapi.com/Reso/OData",
+    scope: undefined,
+  },
+  {
+    name: "CRMLS",
+    tokenUrl: "https://crmls-api.corelogic.com/trestle/oidc/connect/token",
+    apiBase: "https://crmls-api.corelogic.com/trestle/odata",
+    scope: "api",
+  },
+];
 
 let cachedResoToken: { token: string; expiresAt: number } | null = null;
+let discoveredProvider: (typeof RESO_PROVIDERS)[0] | null = null;
 
 export function idxConfigured(): boolean {
   return !!(IDX_KEY || (RESO_URL && RESO_TOKEN) || (RESO_CLIENT_ID && RESO_CLIENT_SECRET));
@@ -42,39 +67,72 @@ function resoOAuthConfigured(): boolean {
   return !!(RESO_CLIENT_ID && RESO_CLIENT_SECRET);
 }
 
+async function tryTokenEndpoint(provider: typeof RESO_PROVIDERS[0]): Promise<{ token: string; expiresIn: number } | null> {
+  const params: Record<string, string> = {
+    grant_type: "client_credentials",
+    client_id: RESO_CLIENT_ID,
+    client_secret: RESO_CLIENT_SECRET,
+  };
+  if (provider.scope) params.scope = provider.scope;
+
+  try {
+    const res = await fetch(provider.tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(params),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.log(`[IDX Sync] ${provider.name} → HTTP ${res.status}: ${errText.slice(0, 150)}`);
+      return null;
+    }
+    const data = await res.json();
+    if (!data.access_token) {
+      console.log(`[IDX Sync] ${provider.name} → No access_token in response`);
+      return null;
+    }
+    return { token: data.access_token, expiresIn: data.expires_in || 3600 };
+  } catch (err: any) {
+    console.log(`[IDX Sync] ${provider.name} → Network error: ${err.message}`);
+    return null;
+  }
+}
+
 async function getResoOAuthToken(): Promise<string> {
   if (cachedResoToken && cachedResoToken.expiresAt > Date.now() + 60000) {
     return cachedResoToken.token;
   }
 
-  console.log("[IDX Sync] Requesting RESO OAuth2 token via client_credentials...");
-  const res = await fetch(TRESTLE_TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "client_credentials",
-      client_id: RESO_CLIENT_ID,
-      client_secret: RESO_CLIENT_SECRET,
-      scope: "api",
-    }),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`RESO OAuth2 token request failed (HTTP ${res.status}): ${errText.slice(0, 300)}`);
+  if (discoveredProvider) {
+    console.log(`[IDX Sync] Refreshing token from ${discoveredProvider.name}...`);
+    const result = await tryTokenEndpoint(discoveredProvider);
+    if (result) {
+      cachedResoToken = { token: result.token, expiresAt: Date.now() + result.expiresIn * 1000 };
+      console.log(`[IDX Sync] Token refreshed (expires in ${result.expiresIn}s)`);
+      return result.token;
+    }
+    discoveredProvider = null;
   }
 
-  const data = await res.json();
-  if (!data.access_token) {
-    throw new Error(`RESO OAuth2 response missing access_token: ${JSON.stringify(data).slice(0, 200)}`);
+  console.log("[IDX Sync] Discovering RESO provider — trying all known OAuth2 endpoints...");
+  for (const provider of RESO_PROVIDERS) {
+    const result = await tryTokenEndpoint(provider);
+    if (result) {
+      discoveredProvider = provider;
+      cachedResoToken = { token: result.token, expiresAt: Date.now() + result.expiresIn * 1000 };
+      console.log(`[IDX Sync] ✓ Authenticated with ${provider.name} (expires in ${result.expiresIn}s)`);
+      return result.token;
+    }
   }
 
-  cachedResoToken = {
-    token: data.access_token,
-    expiresAt: Date.now() + (data.expires_in || 3600) * 1000,
-  };
-  console.log(`[IDX Sync] RESO OAuth2 token acquired (expires in ${data.expires_in || 3600}s)`);
-  return cachedResoToken.token;
+  throw new Error("RESO OAuth2 failed — none of the known providers accepted the credentials. Tried: " +
+    RESO_PROVIDERS.map(p => p.name).join(", "));
+}
+
+function getResoApiBase(): string {
+  if (RESO_URL) return RESO_URL;
+  if (discoveredProvider) return discoveredProvider.apiBase;
+  return RESO_PROVIDERS[0].apiBase;
 }
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -195,7 +253,7 @@ async function fetchAllResoListings(): Promise<any[]> {
 
   if (resoOAuthConfigured()) {
     token = await getResoOAuthToken();
-    baseUrl = RESO_URL || TRESTLE_API_BASE;
+    baseUrl = getResoApiBase();
   } else {
     token = RESO_TOKEN;
     baseUrl = RESO_URL;
