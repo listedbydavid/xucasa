@@ -39,10 +39,12 @@ export function Navbar() {
               <Briefcase className="w-4 h-4" />
               For Agents
             </Link>
-            <Link href="/dashboard" className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full transition-colors flex items-center gap-2">
-              <User className="w-4 h-4" />
-              For You
-            </Link>
+            {isAuthenticated && (
+              <Link href="/dashboard" className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full transition-colors flex items-center gap-2" data-testid="link-my-account">
+                <User className="w-4 h-4" />
+                My Account
+              </Link>
+            )}
           </nav>
         </div>
 
