@@ -10,6 +10,7 @@ Key features:
 - Property detail pages with neighborhood stats, flood zone info, and nearby places (public APIs)
 - **Client Dashboard** — profile editor, My Home tracker with property intelligence, favorites, saved searches, search history
 - **Sell Wizard** (`/sell`) — 6-step homeowner sell flow: address (Google Autocomplete + Street View preview), home details, instant valuation from comparable sales (beds/sqft matching), selling goals (timeline/motivation), contact + listing type (MLS public vs. Buy it Now private), confirmation. Saves leads to `sell_leads` DB table. Valuation via `/api/valuation`.
+- **Buyer Marketplace** (`/buyers`) — Reverse buyer marketplace where pre-approved buyers create profiles listing their home needs (budget, beds, baths, sqft, lot size, home types, preferred cities, must-haves, nice-to-haves, deal-breakers, move-in timeline, bio). Homeowners browse buyer cards and pitch their properties directly to matching buyers via a message + optional property selection. Filter buyers by city, min/max budget.
 - Agent dashboard for creating, editing, and deleting listings with Street View auto-photo
 - Authentication via Replit Auth (OpenID Connect)
 
@@ -58,6 +59,8 @@ Preferred communication style: Simple, everyday language.
   - `savedSearches` — userId + name + JSONB criteria
   - `searchHistory` — userId + query string + JSONB criteria (auto-logged from Search page, last 50 per user)
   - `userHomes` — userId + address fields + nickname + notes + lat/lng + imageUrl (Street View auto-photo)
+  - `buyerProfiles` — userId, displayName, preApprovalAmount, bed/bath/sqft ranges, preferredCities[], homeTypes[], mustHaves[], niceToHaves[], dealBreakers[], moveInTimeline, bio, isActive
+  - `buyerMatches` — buyerProfileId, propertyId (optional), senderId, message, status (pending/accepted/rejected)
 - **Migrations**: `./migrations/` directory, applied with `drizzle-kit push`
 
 ### Authentication

@@ -46,6 +46,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/properties/mine", isAuthenticated, async (req, res) => {
+    try {
+      const allProps = await storage.getProperties();
+      const mine = allProps.filter(p => p.agentId === req.user!.claims.sub);
+      res.json(mine);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get(api.properties.get.path, async (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
@@ -540,6 +550,112 @@ export async function registerRoutes(
       }
       const newLead = await storage.createSellLead(lead);
       res.status(201).json(newLead);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Buyer Profiles ──────────────────────────────────────────────────────────
+
+  app.get("/api/buyer-profiles", async (req, res) => {
+    try {
+      const profiles = await storage.getBuyerProfiles(req.query);
+      res.json(profiles);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/buyer-profiles/mine", isAuthenticated, async (req, res) => {
+    try {
+      const profile = await storage.getUserBuyerProfile(req.user!.claims.sub);
+      res.json(profile || null);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/buyer-profiles/:id", async (req, res) => {
+    try {
+      const profile = await storage.getBuyerProfile(parseInt(req.params.id));
+      if (!profile) return res.status(404).json({ message: "Profile not found" });
+      res.json(profile);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/buyer-profiles", isAuthenticated, async (req, res) => {
+    try {
+      const { insertBuyerProfileSchema } = await import("@shared/schema");
+      const parsed = insertBuyerProfileSchema.omit({ userId: true }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
+      const data = { ...parsed.data, userId: req.user!.claims.sub };
+      const profile = await storage.createBuyerProfile(data);
+      res.status(201).json(profile);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/buyer-profiles/:id", isAuthenticated, async (req, res) => {
+    try {
+      const { insertBuyerProfileSchema } = await import("@shared/schema");
+      const parsed = insertBuyerProfileSchema.omit({ userId: true }).partial().safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
+      const updated = await storage.updateBuyerProfile(
+        parseInt(req.params.id),
+        req.user!.claims.sub,
+        parsed.data
+      );
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/buyer-profiles/:id", isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteBuyerProfile(parseInt(req.params.id), req.user!.claims.sub);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Buyer Matches (Pitches) ────────────────────────────────────────────────
+
+  app.post("/api/buyer-matches", isAuthenticated, async (req, res) => {
+    try {
+      const { insertBuyerMatchSchema } = await import("@shared/schema");
+      const parsed = insertBuyerMatchSchema.omit({ senderId: true }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
+      const data = { ...parsed.data, senderId: req.user!.claims.sub };
+      const match = await storage.createBuyerMatch(data);
+      res.status(201).json(match);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/buyer-matches/profile/:profileId", isAuthenticated, async (req, res) => {
+    try {
+      const profileId = parseInt(req.params.profileId);
+      const profile = await storage.getBuyerProfile(profileId);
+      if (!profile || profile.userId !== req.user!.claims.sub) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const matches = await storage.getBuyerMatchesForProfile(profileId);
+      res.json(matches);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/buyer-matches/sent", isAuthenticated, async (req, res) => {
+    try {
+      const matches = await storage.getBuyerMatchesForSender(req.user!.claims.sub);
+      res.json(matches);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

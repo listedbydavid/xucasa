@@ -159,9 +159,54 @@ export const sellLeads = pgTable("sell_leads", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const buyerProfiles = pgTable("buyer_profiles", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  displayName: text("display_name").notNull(),
+  preApprovalAmount: integer("pre_approval_amount").notNull(),
+  minBeds: integer("min_beds"),
+  maxBeds: integer("max_beds"),
+  minBaths: decimal("min_baths"),
+  minSqft: integer("min_sqft"),
+  maxSqft: integer("max_sqft"),
+  minLotSize: integer("min_lot_size"),
+  preferredCities: text("preferred_cities").array(),
+  homeTypes: text("home_types").array(),
+  mustHaves: text("must_haves").array(),
+  niceToHaves: text("nice_to_haves").array(),
+  dealBreakers: text("deal_breakers").array(),
+  moveInTimeline: text("move_in_timeline"),
+  bio: text("bio"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const buyerMatches = pgTable("buyer_matches", {
+  id: serial("id").primaryKey(),
+  buyerProfileId: integer("buyer_profile_id").references(() => buyerProfiles.id).notNull(),
+  propertyId: integer("property_id").references(() => properties.id),
+  senderId: varchar("sender_id").references(() => users.id).notNull(),
+  message: text("message"),
+  status: text("status").default("pending").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const buyerProfilesRelations = relations(buyerProfiles, ({ one, many }) => ({
+  user: one(users, { fields: [buyerProfiles.userId], references: [users.id] }),
+  matches: many(buyerMatches),
+}));
+
+export const buyerMatchesRelations = relations(buyerMatches, ({ one }) => ({
+  buyerProfile: one(buyerProfiles, { fields: [buyerMatches.buyerProfileId], references: [buyerProfiles.id] }),
+  property: one(properties, { fields: [buyerMatches.propertyId], references: [properties.id] }),
+  sender: one(users, { fields: [buyerMatches.senderId], references: [users.id] }),
+}));
+
 // Insert Schemas
 export const insertPropertySchema = createInsertSchema(properties).omit({ id: true, createdAt: true });
 export const insertSellLeadSchema = createInsertSchema(sellLeads).omit({ id: true, createdAt: true });
+export const insertBuyerProfileSchema = createInsertSchema(buyerProfiles).omit({ id: true, createdAt: true });
+export const insertBuyerMatchSchema = createInsertSchema(buyerMatches).omit({ id: true, createdAt: true });
 export const insertSavedPropertySchema = createInsertSchema(savedProperties).omit({ id: true, createdAt: true });
 export const insertSavedSearchSchema = createInsertSchema(savedSearches).omit({ id: true, createdAt: true });
 export const insertSearchHistorySchema = createInsertSchema(searchHistory).omit({ id: true, createdAt: true });
@@ -183,6 +228,10 @@ export type ClientAgentLink = typeof clientAgentLinks.$inferSelect;
 export type InsertClientAgentLink = z.infer<typeof insertClientAgentLinkSchema>;
 export type SellLead = typeof sellLeads.$inferSelect;
 export type InsertSellLead = z.infer<typeof insertSellLeadSchema>;
+export type BuyerProfile = typeof buyerProfiles.$inferSelect;
+export type InsertBuyerProfile = z.infer<typeof insertBuyerProfileSchema>;
+export type BuyerMatch = typeof buyerMatches.$inferSelect;
+export type InsertBuyerMatch = z.infer<typeof insertBuyerMatchSchema>;
 
 // Request Types
 export type CreatePropertyRequest = InsertProperty;

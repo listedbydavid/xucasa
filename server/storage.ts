@@ -7,6 +7,8 @@ import {
   userHomes,
   clientAgentLinks,
   sellLeads,
+  buyerProfiles,
+  buyerMatches,
   type Property,
   type InsertProperty,
   type SavedProperty,
@@ -18,6 +20,10 @@ import {
   type ClientAgentLink,
   type SellLead,
   type InsertSellLead,
+  type BuyerProfile,
+  type InsertBuyerProfile,
+  type BuyerMatch,
+  type InsertBuyerMatch,
   users,
 } from "@shared/schema";
 import { eq, and, desc, sql, gte } from "drizzle-orm";
@@ -64,6 +70,19 @@ export interface IStorage {
   // Sell Leads
   createSellLead(lead: InsertSellLead): Promise<SellLead>;
   getSellLeads(): Promise<SellLead[]>;
+
+  // Buyer Profiles
+  getBuyerProfiles(filters?: any): Promise<(BuyerProfile & { user: any })[]>;
+  getBuyerProfile(id: number): Promise<(BuyerProfile & { user: any }) | undefined>;
+  createBuyerProfile(profile: InsertBuyerProfile): Promise<BuyerProfile>;
+  updateBuyerProfile(id: number, userId: string, updates: Partial<InsertBuyerProfile>): Promise<BuyerProfile>;
+  deleteBuyerProfile(id: number, userId: string): Promise<void>;
+  getUserBuyerProfile(userId: string): Promise<BuyerProfile | undefined>;
+
+  // Buyer Matches
+  createBuyerMatch(match: InsertBuyerMatch): Promise<BuyerMatch>;
+  getBuyerMatchesForProfile(profileId: number): Promise<(BuyerMatch & { property: Property | null; sender: any })[]>;
+  getBuyerMatchesForSender(senderId: string): Promise<(BuyerMatch & { buyerProfile: BuyerProfile })[]>;
 
   // Valuation
   getValuation(beds: number, sqft: number, lat?: number, lng?: number): Promise<{
@@ -371,6 +390,83 @@ export class DatabaseStorage implements IStorage {
         distanceMiles: p.distanceMiles !== undefined ? Math.round(p.distanceMiles) : undefined,
       })),
     };
+  }
+
+  async getBuyerProfiles(filters?: any): Promise<(BuyerProfile & { user: any })[]> {
+    let conditions: any[] = [eq(buyerProfiles.isActive, true)];
+
+    if (filters) {
+      if (filters.minBudget) conditions.push(sql`${buyerProfiles.preApprovalAmount} >= ${parseInt(filters.minBudget)}`);
+      if (filters.maxBudget) conditions.push(sql`${buyerProfiles.preApprovalAmount} <= ${parseInt(filters.maxBudget)}`);
+      if (filters.minBeds) conditions.push(sql`${buyerProfiles.minBeds} >= ${parseInt(filters.minBeds)}`);
+      if (filters.city) conditions.push(sql`${filters.city} = ANY(${buyerProfiles.preferredCities})`);
+    }
+
+    const results = await db
+      .select({ profile: buyerProfiles, user: users })
+      .from(buyerProfiles)
+      .leftJoin(users, eq(buyerProfiles.userId, users.id))
+      .where(and(...conditions))
+      .orderBy(desc(buyerProfiles.createdAt));
+
+    return results.map(r => ({ ...r.profile, user: r.user }));
+  }
+
+  async getBuyerProfile(id: number): Promise<(BuyerProfile & { user: any }) | undefined> {
+    const results = await db
+      .select({ profile: buyerProfiles, user: users })
+      .from(buyerProfiles)
+      .leftJoin(users, eq(buyerProfiles.userId, users.id))
+      .where(eq(buyerProfiles.id, id));
+    if (results.length === 0) return undefined;
+    return { ...results[0].profile, user: results[0].user };
+  }
+
+  async createBuyerProfile(profile: InsertBuyerProfile): Promise<BuyerProfile> {
+    const [newProfile] = await db.insert(buyerProfiles).values(profile).returning();
+    return newProfile;
+  }
+
+  async updateBuyerProfile(id: number, userId: string, updates: Partial<InsertBuyerProfile>): Promise<BuyerProfile> {
+    const [updated] = await db.update(buyerProfiles).set(updates)
+      .where(and(eq(buyerProfiles.id, id), eq(buyerProfiles.userId, userId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteBuyerProfile(id: number, userId: string): Promise<void> {
+    await db.delete(buyerProfiles).where(and(eq(buyerProfiles.id, id), eq(buyerProfiles.userId, userId)));
+  }
+
+  async getUserBuyerProfile(userId: string): Promise<BuyerProfile | undefined> {
+    const rows = await db.select().from(buyerProfiles).where(eq(buyerProfiles.userId, userId)).limit(1);
+    return rows[0];
+  }
+
+  async createBuyerMatch(match: InsertBuyerMatch): Promise<BuyerMatch> {
+    const [newMatch] = await db.insert(buyerMatches).values(match).returning();
+    return newMatch;
+  }
+
+  async getBuyerMatchesForProfile(profileId: number): Promise<(BuyerMatch & { property: Property | null; sender: any })[]> {
+    const results = await db
+      .select({ match: buyerMatches, property: properties, sender: users })
+      .from(buyerMatches)
+      .leftJoin(properties, eq(buyerMatches.propertyId, properties.id))
+      .leftJoin(users, eq(buyerMatches.senderId, users.id))
+      .where(eq(buyerMatches.buyerProfileId, profileId))
+      .orderBy(desc(buyerMatches.createdAt));
+    return results.map(r => ({ ...r.match, property: r.property, sender: r.sender }));
+  }
+
+  async getBuyerMatchesForSender(senderId: string): Promise<(BuyerMatch & { buyerProfile: BuyerProfile })[]> {
+    const results = await db
+      .select({ match: buyerMatches, buyerProfile: buyerProfiles })
+      .from(buyerMatches)
+      .innerJoin(buyerProfiles, eq(buyerMatches.buyerProfileId, buyerProfiles.id))
+      .where(eq(buyerMatches.senderId, senderId))
+      .orderBy(desc(buyerMatches.createdAt));
+    return results.map(r => ({ ...r.match, buyerProfile: r.buyerProfile }));
   }
 }
 

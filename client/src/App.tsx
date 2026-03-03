@@ -13,6 +13,7 @@ import Dashboard from "@/pages/Dashboard";
 import AgentDashboard from "@/pages/AgentDashboard";
 import Swipe from "@/pages/Swipe";
 import Sell from "@/pages/Sell";
+import Buyers from "@/pages/Buyers";
 
 function Router() {
   return (
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/property/:id" component={PropertyDetail} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/agent" component={AgentDashboard} />
+      <Route path="/buyers" component={Buyers} />
       <Route component={NotFound} />
     </Switch>
   );
