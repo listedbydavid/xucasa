@@ -523,7 +523,9 @@ export async function registerRoutes(
     try {
       const beds = parseInt(req.query.beds as string) || 3;
       const sqft = parseInt(req.query.sqft as string) || 1800;
-      const valuation = await storage.getValuation(beds, sqft);
+      const lat = req.query.lat ? parseFloat(req.query.lat as string) : undefined;
+      const lng = req.query.lng ? parseFloat(req.query.lng as string) : undefined;
+      const valuation = await storage.getValuation(beds, sqft, lat, lng);
       res.json(valuation);
     } catch (err: any) {
       res.status(500).json({ message: err.message });

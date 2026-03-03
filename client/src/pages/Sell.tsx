@@ -57,7 +57,7 @@ interface ValuationResult {
   estimatedHigh: number;
   pricePerSqft: number;
   compsCount: number;
-  comps: { id: number; title: string; price: number; beds: number; sqft: number; location: string }[];
+  comps: { id: number; title: string; price: number; beds: number; sqft: number; location: string; distanceMiles?: number }[];
 }
 
 const STEPS = [
@@ -169,7 +169,13 @@ export default function Sell() {
 
   const fetchValuation = async () => {
     try {
-      const res = await fetch(`/api/valuation?beds=${form.beds}&sqft=${form.sqft}`);
+      const params = new URLSearchParams({
+        beds: String(form.beds),
+        sqft: String(form.sqft),
+      });
+      if (form.lat) params.set("lat", String(form.lat));
+      if (form.lng) params.set("lng", String(form.lng));
+      const res = await fetch(`/api/valuation?${params}`);
       const data = await res.json();
       setValuation(data);
       setStep(3);
@@ -628,10 +634,13 @@ export default function Sell() {
                           </div>
                           <p className="text-sm font-bold text-primary ml-2">{fmt(comp.price)}</p>
                         </div>
-                        <div className="flex gap-3 mt-2 text-xs text-muted-foreground">
+                        <div className="flex gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
                           <span>{comp.beds} bd</span>
                           <span>{comp.sqft.toLocaleString()} sqft</span>
                           <span className="text-primary font-medium">${Math.round(comp.price / comp.sqft)}/sqft</span>
+                          {comp.distanceMiles !== undefined && (
+                            <span className="ml-auto text-green-700 font-medium">{comp.distanceMiles} mi away</span>
+                          )}
                         </div>
                       </CardContent>
                     </Card>

@@ -66,13 +66,13 @@ export interface IStorage {
   getSellLeads(): Promise<SellLead[]>;
 
   // Valuation
-  getValuation(beds: number, sqft: number): Promise<{
+  getValuation(beds: number, sqft: number, lat?: number, lng?: number): Promise<{
     estimatedLow: number;
     estimatedMid: number;
     estimatedHigh: number;
     pricePerSqft: number;
     compsCount: number;
-    comps: { id: number; title: string; price: number; beds: number; sqft: number; location: string }[];
+    comps: { id: number; title: string; price: number; beds: number; sqft: number; location: string; distanceMiles?: number }[];
   }>;
 }
 
@@ -255,45 +255,103 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(sellLeads).orderBy(desc(sellLeads.createdAt));
   }
 
-  async getValuation(beds: number, sqft: number): Promise<{
+  async getValuation(beds: number, sqft: number, lat?: number, lng?: number): Promise<{
     estimatedLow: number;
     estimatedMid: number;
     estimatedHigh: number;
     pricePerSqft: number;
     compsCount: number;
-    comps: { id: number; title: string; price: number; beds: number; sqft: number; location: string }[];
+    comps: { id: number; title: string; price: number; beds: number; sqft: number; location: string; distanceMiles?: number }[];
   }> {
+    const haversine = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+      const R = 3959;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2
+        + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+
+    const median = (arr: number[]) => {
+      if (arr.length === 0) return 0;
+      const sorted = [...arr].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    };
+
     const allProps = await db.select().from(properties)
       .where(eq(properties.isOffMarket, false));
 
-    const compsWithData = allProps.filter(p => p.sqft && p.sqft > 0 && p.price > 0);
+    const compsWithData = allProps
+      .filter(p => p.sqft && p.sqft > 0 && p.price > 0)
+      .map(p => ({
+        ...p,
+        distanceMiles: (lat && lng && p.lat && p.lng)
+          ? haversine(lat, lng, parseFloat(p.lat as string), parseFloat(p.lng as string))
+          : undefined,
+      }));
 
     const sqftLow = sqft * 0.60;
     const sqftHigh = sqft * 1.40;
     const bedsLow = Math.max(1, beds - 1);
     const bedsHigh = beds + 1;
 
-    let comps = compsWithData.filter(p =>
+    const byBedsSqft = compsWithData.filter(p =>
       p.sqft! >= sqftLow && p.sqft! <= sqftHigh &&
       p.beds >= bedsLow && p.beds <= bedsHigh
     );
 
-    if (comps.length < 2) {
-      comps = compsWithData.filter(p =>
-        p.sqft! >= sqft * 0.50 && p.sqft! <= sqft * 1.60
-      );
+    // Separate comps that have real GPS coordinates vs. those that don't
+    const withCoords = byBedsSqft.filter(p => p.distanceMiles !== undefined);
+    const withoutCoords = byBedsSqft.filter(p => p.distanceMiles === undefined);
+
+    let comps = byBedsSqft;
+
+    if (lat && lng) {
+      // Step 1: try nearby comps (within 50 mi) with correct beds/sqft
+      const nearby50 = withCoords.filter(p => p.distanceMiles! <= 50);
+      if (nearby50.length >= 1) {
+        comps = nearby50;
+      } else {
+        // Step 2: loosen sqft filter but stay nearby (150 mi)
+        const looseSqft = compsWithData.filter(p =>
+          p.distanceMiles !== undefined &&
+          p.sqft! >= sqft * 0.50 && p.sqft! <= sqft * 1.70 &&
+          p.beds >= Math.max(1, beds - 2) && p.beds <= beds + 2
+        );
+        const nearby150 = looseSqft.filter(p => p.distanceMiles! <= 150);
+        if (nearby150.length >= 1) {
+          comps = nearby150;
+        } else if (withCoords.length >= 1) {
+          // Step 3: use whatever coordinated comps we have (best effort)
+          comps = withCoords;
+        } else {
+          // Step 4: last resort — use all beds/sqft matches even without coords
+          comps = withoutCoords.length > 0 ? withoutCoords : byBedsSqft;
+        }
+      }
+    } else {
+      // No user location — fall back to all beds/sqft matches
+      if (comps.length < 2) {
+        comps = compsWithData.filter(p =>
+          p.sqft! >= sqft * 0.50 && p.sqft! <= sqft * 1.60
+        );
+      }
     }
 
     if (comps.length === 0) {
       comps = compsWithData;
     }
 
-    const pricePerSqftValues = comps.map(p => p.price / p.sqft!);
-    const avgPricePerSqft = pricePerSqftValues.length > 0
-      ? pricePerSqftValues.reduce((a, b) => a + b, 0) / pricePerSqftValues.length
-      : 500;
+    // Sort by distance (closest first) if location available
+    if (lat && lng) {
+      comps = comps.sort((a, b) => (a.distanceMiles ?? 9999) - (b.distanceMiles ?? 9999));
+    }
 
-    const estimatedMid = Math.round(avgPricePerSqft * sqft);
+    const pricePerSqftValues = comps.map(p => p.price / p.sqft!);
+    const medianPricePerSqft = median(pricePerSqftValues) || 500;
+
+    const estimatedMid = Math.round(medianPricePerSqft * sqft);
     const estimatedLow = Math.round(estimatedMid * 0.88);
     const estimatedHigh = Math.round(estimatedMid * 1.12);
 
@@ -301,7 +359,7 @@ export class DatabaseStorage implements IStorage {
       estimatedLow,
       estimatedMid,
       estimatedHigh,
-      pricePerSqft: Math.round(avgPricePerSqft),
+      pricePerSqft: Math.round(medianPricePerSqft),
       compsCount: comps.length,
       comps: comps.slice(0, 4).map(p => ({
         id: p.id,
@@ -310,6 +368,7 @@ export class DatabaseStorage implements IStorage {
         beds: p.beds,
         sqft: p.sqft!,
         location: p.addressCity ? `${p.addressCity}, ${p.addressState}` : p.location,
+        distanceMiles: p.distanceMiles !== undefined ? Math.round(p.distanceMiles) : undefined,
       })),
     };
   }
