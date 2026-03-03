@@ -29,7 +29,21 @@ const RESO_TOKEN = process.env.IDX_RESO_TOKEN || "";
 const RESO_CLIENT_ID = process.env.IDX_RESO_CLIENT_ID || "";
 const RESO_CLIENT_SECRET = process.env.IDX_RESO_CLIENT_SECRET || "";
 
-const RESO_PROVIDERS = [
+interface ResoProvider {
+  name: string;
+  tokenUrl: string | null;
+  apiBase: string;
+  scope?: string;
+  directToken?: boolean;
+}
+
+const RESO_PROVIDERS: ResoProvider[] = [
+  {
+    name: "RealtyFeed (Realtyna)",
+    tokenUrl: null,
+    apiBase: "https://api.realtyfeed.com/reso/odata",
+    directToken: true,
+  },
   {
     name: "Trestle (CoreLogic)",
     tokenUrl: "https://api-trestle.corelogic.com/trestle/oidc/connect/token",
@@ -40,13 +54,11 @@ const RESO_PROVIDERS = [
     name: "Bridge Interactive",
     tokenUrl: "https://api.bridgedataoutput.com/api/v2/OData/test/oauth/token",
     apiBase: "https://api.bridgedataoutput.com/api/v2/OData/test",
-    scope: undefined,
   },
   {
     name: "Spark (FBS)",
     tokenUrl: "https://sparkplatform.com/v1/oauth2/token",
     apiBase: "https://replication.sparkapi.com/Reso/OData",
-    scope: undefined,
   },
   {
     name: "CRMLS",
@@ -57,7 +69,7 @@ const RESO_PROVIDERS = [
 ];
 
 let cachedResoToken: { token: string; expiresAt: number } | null = null;
-let discoveredProvider: (typeof RESO_PROVIDERS)[0] | null = null;
+let discoveredProvider: ResoProvider | null = null;
 
 export function idxConfigured(): boolean {
   return !!(IDX_KEY || (RESO_URL && RESO_TOKEN) || (RESO_CLIENT_ID && RESO_CLIENT_SECRET));
@@ -67,7 +79,40 @@ function resoOAuthConfigured(): boolean {
   return !!(RESO_CLIENT_ID && RESO_CLIENT_SECRET);
 }
 
-async function tryTokenEndpoint(provider: typeof RESO_PROVIDERS[0]): Promise<{ token: string; expiresIn: number } | null> {
+async function tryDirectTokenAccess(provider: ResoProvider, token: string): Promise<boolean> {
+  try {
+    const testUrl = `${provider.apiBase}/Property?$top=1&$select=ListingKey`;
+    const res = await fetch(testUrl, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    });
+    if (res.ok) {
+      const body = await res.json();
+      if (body.value !== undefined) return true;
+    }
+    console.log(`[IDX Sync] ${provider.name} direct access → HTTP ${res.status}`);
+    return false;
+  } catch (err: any) {
+    console.log(`[IDX Sync] ${provider.name} direct access → Error: ${err.message}`);
+    return false;
+  }
+}
+
+async function tryTokenEndpoint(provider: ResoProvider): Promise<{ token: string; expiresIn: number } | null> {
+  if (provider.directToken) {
+    const candidates = [RESO_CLIENT_SECRET, RESO_CLIENT_ID];
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      console.log(`[IDX Sync] ${provider.name} → Testing direct Bearer token...`);
+      const ok = await tryDirectTokenAccess(provider, candidate);
+      if (ok) {
+        return { token: candidate, expiresIn: 86400 * 365 };
+      }
+    }
+    return null;
+  }
+
+  if (!provider.tokenUrl) return null;
+
   const params: Record<string, string> = {
     grant_type: "client_credentials",
     client_id: RESO_CLIENT_ID,
