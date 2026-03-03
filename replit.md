@@ -12,6 +12,7 @@ Key features:
 - **Sell Wizard** (`/sell`) — 6-step homeowner sell flow: address (Google Autocomplete + Street View preview), home details, instant valuation from comparable sales (beds/sqft matching), selling goals (timeline/motivation), contact + listing type (MLS public vs. Buy it Now private), confirmation. Saves leads to `sell_leads` DB table. Valuation via `/api/valuation`.
 - **Buyer Marketplace** (`/buyers`) — Reverse buyer marketplace where pre-approved buyers create profiles listing their home needs (budget, beds, baths, sqft, lot size, home types, preferred cities, must-haves, nice-to-haves, deal-breakers, move-in timeline, bio). Homeowners browse buyer cards and pitch their properties directly to matching buyers via a message + optional property selection. Filter buyers by city, min/max budget.
 - Agent dashboard for creating, editing, and deleting listings with Street View auto-photo
+- **PWA (Progressive Web App)** — installable on iOS/Android home screens, offline-capable service worker, app manifest with icons
 - Authentication via Replit Auth (OpenID Connect)
 
 ## User Preferences
