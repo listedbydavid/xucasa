@@ -178,6 +178,10 @@ export const buyerProfiles = pgTable("buyer_profiles", {
   moveInTimeline: text("move_in_timeline"),
   bio: text("bio"),
   isActive: boolean("is_active").default(true).notNull(),
+  agentId: varchar("agent_id").references(() => users.id),
+  clientName: text("client_name"),
+  clientEmail: text("client_email"),
+  clientPhone: text("client_phone"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

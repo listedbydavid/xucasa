@@ -1,11 +1,14 @@
 import { useState, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
-import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck } from "lucide-react";
+import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck } from "lucide-react";
 import { IdxSyncPanel } from "@/components/IdxSyncPanel";
 import type { PropertyResponse, CreatePropertyRequest } from "@shared/schema";
 import { useJsApiLoader, Autocomplete } from "@react-google-maps/api";
 import { useAgentClients, useClientFavorites, useClientSearches, useOpenHouses } from "@/hooks/use-client-dashboard";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 type AgentTab = "listings" | "clients" | "openhouses" | "idx";
 
@@ -208,39 +211,418 @@ function AgentClientsSection() {
   const [expandedClient, setExpandedClient] = useState<string | null>(null);
 
   return (
+    <div className="space-y-10">
+      <AgentBuyerClientsSection />
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-3 pb-4 border-b border-border">
+          <div>
+            <h2 className="text-xl font-display font-bold text-foreground">Linked Clients</h2>
+            <p className="text-sm text-muted-foreground">Clients who have invited you from their dashboard to view their activity</p>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="space-y-4">{[1, 2].map(i => <div key={i} className="h-20 bg-muted animate-pulse rounded-2xl" />)}</div>
+        ) : clients.length === 0 ? (
+          <div className="text-center py-12 bg-card border border-border rounded-3xl">
+            <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+              <Users className="w-7 h-7 text-muted-foreground opacity-40" />
+            </div>
+            <h3 className="font-display font-bold text-xl mb-2">No linked clients yet</h3>
+            <p className="text-muted-foreground text-sm max-w-sm mx-auto">
+              When clients invite you from their dashboard using your email, they'll appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {clients.map((c: any) => (
+              <ClientCard
+                key={c.clientId}
+                client={c}
+                expanded={expandedClient === c.clientId}
+                onToggle={() => setExpandedClient(expandedClient === c.clientId ? null : c.clientId)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AgentBuyerClientsSection() {
+  const { data: buyerClients = [], isLoading } = useQuery<any[]>({ queryKey: ["/api/agent/buyer-clients"] });
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const { toast } = useToast();
+
+  const createMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/agent/buyer-clients", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/agent/buyer-clients"] });
+      setShowForm(false);
+      toast({ title: "Buyer client added", description: "Their profile is now visible on the Buy page." });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      const res = await apiRequest("PATCH", `/api/agent/buyer-clients/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/agent/buyer-clients"] });
+      setEditingId(null);
+      toast({ title: "Client updated" });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/agent/buyer-clients/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/agent/buyer-clients"] });
+      toast({ title: "Client removed" });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3 pb-4 border-b border-border">
+      <div className="flex items-center justify-between pb-4 border-b border-border">
         <div>
-          <h2 className="text-xl font-display font-bold text-foreground">My Clients</h2>
-          <p className="text-sm text-muted-foreground">Clients who have invited you to view their favorites and searches</p>
+          <h2 className="text-xl font-display font-bold text-foreground">Buyer Clients</h2>
+          <p className="text-sm text-muted-foreground">Add your buyer clients to connect them with matching sellers</p>
+        </div>
+        {!showForm && (
+          <button
+            onClick={() => { setShowForm(true); setEditingId(null); }}
+            className="flex items-center gap-2 bg-foreground text-background px-5 py-2.5 rounded-xl font-bold hover:bg-primary hover:text-white transition-all shadow-sm active:scale-95 text-sm"
+            data-testid="button-add-buyer-client"
+          >
+            <Plus className="w-4 h-4" />
+            Add Buyer Client
+          </button>
+        )}
+      </div>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3">
+        <ShieldCheck className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+        <div className="text-sm text-blue-800">
+          <p className="font-semibold mb-1">Your client's information is private</p>
+          <p className="text-blue-700">Contact details (name, email, phone) are never shown publicly. When a seller pitches a property to your buyer, the seller's information is routed through doocasa and delivered directly to you — so you stay in the loop on every opportunity.</p>
         </div>
       </div>
 
+      {showForm && (
+        <BuyerClientForm
+          onSubmit={(data) => createMutation.mutate(data)}
+          onCancel={() => setShowForm(false)}
+          isPending={createMutation.isPending}
+        />
+      )}
+
       {isLoading ? (
-        <div className="space-y-4">{[1, 2].map(i => <div key={i} className="h-20 bg-muted animate-pulse rounded-2xl" />)}</div>
-      ) : clients.length === 0 ? (
-        <div className="text-center py-16 bg-card border border-border rounded-3xl">
-          <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-            <Users className="w-7 h-7 text-muted-foreground opacity-40" />
+        <div className="space-y-3">{[1, 2].map(i => <div key={i} className="h-24 bg-muted animate-pulse rounded-2xl" />)}</div>
+      ) : buyerClients.length === 0 && !showForm ? (
+        <div className="text-center py-12 bg-card border border-border rounded-3xl">
+          <div className="w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Users className="w-7 h-7 text-primary opacity-60" />
           </div>
-          <h3 className="font-display font-bold text-xl mb-2">No clients yet</h3>
-          <p className="text-muted-foreground text-sm max-w-sm mx-auto">
-            When clients invite you from their dashboard using your email, they'll appear here.
+          <h3 className="font-display font-bold text-xl mb-2">No buyer clients yet</h3>
+          <p className="text-muted-foreground text-sm max-w-md mx-auto mb-4">
+            Add your pre-approved buyers here. Their profile will appear on the Buy page so sellers can pitch matching properties — all inquiries come through you.
           </p>
+          <button
+            onClick={() => setShowForm(true)}
+            className="text-primary font-bold hover:underline"
+            data-testid="button-add-first-buyer"
+          >
+            Add Your First Buyer Client
+          </button>
         </div>
       ) : (
         <div className="space-y-3">
-          {clients.map((c: any) => (
-            <ClientCard
-              key={c.clientId}
-              client={c}
-              expanded={expandedClient === c.clientId}
-              onToggle={() => setExpandedClient(expandedClient === c.clientId ? null : c.clientId)}
-            />
+          {buyerClients.map((bp: any) => (
+            editingId === bp.id ? (
+              <BuyerClientForm
+                key={bp.id}
+                initialData={bp}
+                onSubmit={(data) => updateMutation.mutate({ id: bp.id, data })}
+                onCancel={() => setEditingId(null)}
+                isPending={updateMutation.isPending}
+              />
+            ) : (
+              <div key={bp.id} className="bg-card border border-border rounded-2xl p-5 shadow-sm" data-testid={`card-buyer-client-${bp.id}`}>
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="font-bold text-foreground text-lg">{bp.displayName}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Budget: <span className="font-semibold text-foreground">${bp.preApprovalAmount?.toLocaleString()}</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => setEditingId(bp.id)} className="p-2 text-muted-foreground hover:text-primary transition-colors" data-testid={`button-edit-buyer-${bp.id}`}>
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => { if (confirm("Remove this buyer client?")) deleteMutation.mutate(bp.id); }} className="p-2 text-muted-foreground hover:text-destructive transition-colors" data-testid={`button-delete-buyer-${bp.id}`}>
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  {bp.minBeds && <span className="bg-muted px-2 py-1 rounded-lg font-medium">{bp.minBeds}+ beds</span>}
+                  {bp.minBaths && <span className="bg-muted px-2 py-1 rounded-lg font-medium">{bp.minBaths}+ baths</span>}
+                  {bp.minSqft && <span className="bg-muted px-2 py-1 rounded-lg font-medium">{bp.minSqft?.toLocaleString()}+ sqft</span>}
+                  {bp.preferredCities?.map((c: string) => <span key={c} className="bg-primary/10 text-primary px-2 py-1 rounded-lg font-medium">{c}</span>)}
+                  {bp.homeTypes?.map((t: string) => <span key={t} className="bg-muted px-2 py-1 rounded-lg font-medium">{t}</span>)}
+                  {bp.moveInTimeline && <span className="bg-muted px-2 py-1 rounded-lg font-medium">{bp.moveInTimeline}</span>}
+                </div>
+                {bp.clientName && (
+                  <div className="mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
+                    <span className="font-medium">Private contact:</span> {bp.clientName}{bp.clientEmail ? ` · ${bp.clientEmail}` : ""}{bp.clientPhone ? ` · ${bp.clientPhone}` : ""}
+                  </div>
+                )}
+                {bp.bio && <p className="mt-2 text-sm text-muted-foreground">{bp.bio}</p>}
+              </div>
+            )
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+const HOME_TYPES = ["Single Family", "Condo", "Townhouse", "Multi-Family", "Land", "Mobile Home"];
+const TIMELINES = ["ASAP", "1-3 months", "3-6 months", "6-12 months", "12+ months"];
+
+function BuyerClientForm({ initialData, onSubmit, onCancel, isPending }: {
+  initialData?: any;
+  onSubmit: (data: any) => void;
+  onCancel: () => void;
+  isPending: boolean;
+}) {
+  const [form, setForm] = useState({
+    displayName: initialData?.displayName || "",
+    clientName: initialData?.clientName || "",
+    clientEmail: initialData?.clientEmail || "",
+    clientPhone: initialData?.clientPhone || "",
+    preApprovalAmount: initialData?.preApprovalAmount?.toString() || "",
+    minBeds: initialData?.minBeds?.toString() || "",
+    maxBeds: initialData?.maxBeds?.toString() || "",
+    minBaths: initialData?.minBaths?.toString() || "",
+    minSqft: initialData?.minSqft?.toString() || "",
+    maxSqft: initialData?.maxSqft?.toString() || "",
+    minLotSize: initialData?.minLotSize?.toString() || "",
+    preferredCities: initialData?.preferredCities?.join(", ") || "",
+    homeTypes: (initialData?.homeTypes || []) as string[],
+    mustHaves: initialData?.mustHaves?.join(", ") || "",
+    niceToHaves: initialData?.niceToHaves?.join(", ") || "",
+    dealBreakers: initialData?.dealBreakers?.join(", ") || "",
+    moveInTimeline: initialData?.moveInTimeline || "",
+    bio: initialData?.bio || "",
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.displayName.trim() || !form.preApprovalAmount) return;
+    const splitList = (s: string) => s.split(",").map(x => x.trim()).filter(Boolean);
+    onSubmit({
+      displayName: form.displayName.trim(),
+      clientName: form.clientName.trim() || null,
+      clientEmail: form.clientEmail.trim() || null,
+      clientPhone: form.clientPhone.trim() || null,
+      preApprovalAmount: parseInt(form.preApprovalAmount),
+      minBeds: form.minBeds ? parseInt(form.minBeds) : null,
+      maxBeds: form.maxBeds ? parseInt(form.maxBeds) : null,
+      minBaths: form.minBaths || null,
+      minSqft: form.minSqft ? parseInt(form.minSqft) : null,
+      maxSqft: form.maxSqft ? parseInt(form.maxSqft) : null,
+      minLotSize: form.minLotSize ? parseInt(form.minLotSize) : null,
+      preferredCities: splitList(form.preferredCities),
+      homeTypes: form.homeTypes,
+      mustHaves: splitList(form.mustHaves),
+      niceToHaves: splitList(form.niceToHaves),
+      dealBreakers: splitList(form.dealBreakers),
+      moveInTimeline: form.moveInTimeline || null,
+      bio: form.bio.trim() || null,
+    });
+  };
+
+  const toggleHomeType = (t: string) => {
+    setForm(f => ({
+      ...f,
+      homeTypes: f.homeTypes.includes(t) ? f.homeTypes.filter(x => x !== t) : [...f.homeTypes, t],
+    }));
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-5" data-testid="form-buyer-client">
+      <h3 className="font-display font-bold text-lg text-foreground">{initialData ? "Edit Buyer Client" : "Add Buyer Client"}</h3>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-semibold text-foreground mb-1">Display Name *</label>
+          <input
+            value={form.displayName}
+            onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))}
+            placeholder="How they appear on the Buy page"
+            className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
+            required
+            data-testid="input-display-name"
+          />
+          <p className="text-xs text-muted-foreground mt-1">This is the only name shown publicly</p>
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-foreground mb-1">Budget (Pre-Approval) *</label>
+          <input
+            type="number"
+            value={form.preApprovalAmount}
+            onChange={e => setForm(f => ({ ...f, preApprovalAmount: e.target.value }))}
+            placeholder="e.g. 500000"
+            className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
+            required
+            data-testid="input-budget"
+          />
+        </div>
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+        <p className="text-xs font-semibold text-amber-800 mb-2">Private Client Contact (never shown publicly)</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <input
+            value={form.clientName}
+            onChange={e => setForm(f => ({ ...f, clientName: e.target.value }))}
+            placeholder="Client's real name"
+            className="w-full px-3 py-2 rounded-lg border border-amber-200 bg-white text-foreground text-sm outline-none focus:ring-2 focus:ring-amber-300"
+            data-testid="input-client-name"
+          />
+          <input
+            type="email"
+            value={form.clientEmail}
+            onChange={e => setForm(f => ({ ...f, clientEmail: e.target.value }))}
+            placeholder="Client's email"
+            className="w-full px-3 py-2 rounded-lg border border-amber-200 bg-white text-foreground text-sm outline-none focus:ring-2 focus:ring-amber-300"
+            data-testid="input-client-email"
+          />
+          <input
+            type="tel"
+            value={form.clientPhone}
+            onChange={e => setForm(f => ({ ...f, clientPhone: e.target.value }))}
+            placeholder="Client's phone"
+            className="w-full px-3 py-2 rounded-lg border border-amber-200 bg-white text-foreground text-sm outline-none focus:ring-2 focus:ring-amber-300"
+            data-testid="input-client-phone"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-muted-foreground mb-1">Min Beds</label>
+          <input type="number" value={form.minBeds} onChange={e => setForm(f => ({ ...f, minBeds: e.target.value }))} placeholder="—" className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/30" data-testid="input-min-beds" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-muted-foreground mb-1">Max Beds</label>
+          <input type="number" value={form.maxBeds} onChange={e => setForm(f => ({ ...f, maxBeds: e.target.value }))} placeholder="—" className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/30" data-testid="input-max-beds" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-muted-foreground mb-1">Min Baths</label>
+          <input type="number" step="0.5" value={form.minBaths} onChange={e => setForm(f => ({ ...f, minBaths: e.target.value }))} placeholder="—" className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/30" data-testid="input-min-baths" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-muted-foreground mb-1">Min Sqft</label>
+          <input type="number" value={form.minSqft} onChange={e => setForm(f => ({ ...f, minSqft: e.target.value }))} placeholder="—" className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/30" data-testid="input-min-sqft" />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-semibold text-muted-foreground mb-2">Home Types</label>
+        <div className="flex flex-wrap gap-2">
+          {HOME_TYPES.map(t => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => toggleHomeType(t)}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${form.homeTypes.includes(t) ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+              data-testid={`toggle-type-${t}`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-semibold text-muted-foreground mb-1">Preferred Cities (comma-separated)</label>
+        <input value={form.preferredCities} onChange={e => setForm(f => ({ ...f, preferredCities: e.target.value }))} placeholder="e.g. Austin, Dallas, San Antonio" className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/30" data-testid="input-cities" />
+      </div>
+
+      <div>
+        <label className="block text-xs font-semibold text-muted-foreground mb-2">Move-in Timeline</label>
+        <div className="flex flex-wrap gap-2">
+          {TIMELINES.map(t => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setForm(f => ({ ...f, moveInTimeline: f.moveInTimeline === t ? "" : t }))}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${form.moveInTimeline === t ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+              data-testid={`toggle-timeline-${t}`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-muted-foreground mb-1">Must-Haves</label>
+          <input value={form.mustHaves} onChange={e => setForm(f => ({ ...f, mustHaves: e.target.value }))} placeholder="Pool, Garage, etc." className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/30" data-testid="input-must-haves" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-muted-foreground mb-1">Nice-to-Haves</label>
+          <input value={form.niceToHaves} onChange={e => setForm(f => ({ ...f, niceToHaves: e.target.value }))} placeholder="View, Patio, etc." className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/30" data-testid="input-nice-haves" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-muted-foreground mb-1">Deal-Breakers</label>
+          <input value={form.dealBreakers} onChange={e => setForm(f => ({ ...f, dealBreakers: e.target.value }))} placeholder="HOA, Flood zone, etc." className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/30" data-testid="input-deal-breakers" />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-semibold text-muted-foreground mb-1">Bio / Notes</label>
+        <textarea
+          value={form.bio}
+          onChange={e => setForm(f => ({ ...f, bio: e.target.value }))}
+          placeholder="Brief description of what your client is looking for..."
+          rows={3}
+          className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-sm outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+          data-testid="input-bio"
+        />
+      </div>
+
+      <div className="flex items-center gap-3 pt-2">
+        <button
+          type="submit"
+          disabled={isPending || !form.displayName.trim() || !form.preApprovalAmount}
+          className="bg-foreground text-background px-6 py-2.5 rounded-xl font-bold hover:bg-primary hover:text-white transition-all disabled:opacity-50 text-sm"
+          data-testid="button-submit-buyer-client"
+        >
+          {isPending ? "Saving..." : initialData ? "Update Client" : "Add Client"}
+        </button>
+        <button type="button" onClick={onCancel} className="px-5 py-2.5 rounded-xl font-bold text-muted-foreground hover:text-foreground transition-colors text-sm" data-testid="button-cancel-buyer-client">
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }
 

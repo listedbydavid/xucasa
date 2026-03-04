@@ -81,6 +81,7 @@ export interface IStorage {
   updateBuyerProfile(id: number, userId: string, updates: Partial<InsertBuyerProfile>): Promise<BuyerProfile>;
   deleteBuyerProfile(id: number, userId: string): Promise<void>;
   getUserBuyerProfile(userId: string): Promise<BuyerProfile | undefined>;
+  getAgentBuyerProfiles(agentId: string): Promise<BuyerProfile[]>;
 
   // Buyer Matches
   createBuyerMatch(match: InsertBuyerMatch): Promise<BuyerMatch>;
@@ -450,6 +451,12 @@ export class DatabaseStorage implements IStorage {
   async getUserBuyerProfile(userId: string): Promise<BuyerProfile | undefined> {
     const rows = await db.select().from(buyerProfiles).where(eq(buyerProfiles.userId, userId)).limit(1);
     return rows[0];
+  }
+
+  async getAgentBuyerProfiles(agentId: string): Promise<BuyerProfile[]> {
+    return db.select().from(buyerProfiles)
+      .where(eq(buyerProfiles.agentId, agentId))
+      .orderBy(desc(buyerProfiles.createdAt));
   }
 
   async createBuyerMatch(match: InsertBuyerMatch): Promise<BuyerMatch> {

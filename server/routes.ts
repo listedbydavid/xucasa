@@ -1,6 +1,9 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
+import { buyerMatches, buyerProfiles, users } from "@shared/schema";
+import { eq, desc, sql } from "drizzle-orm";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { registerAuthRoutes } from "./replit_integrations/auth";
@@ -643,12 +646,41 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/buyer-pitches", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const allMatches = await db
+        .select({
+          match: buyerMatches,
+          buyerProfile: buyerProfiles,
+          sender: users,
+        })
+        .from(buyerMatches)
+        .innerJoin(buyerProfiles, eq(buyerMatches.buyerProfileId, buyerProfiles.id))
+        .leftJoin(users, eq(buyerMatches.senderId, users.id))
+        .where(sql`${buyerProfiles.agentId} IS NOT NULL`)
+        .orderBy(desc(buyerMatches.createdAt));
+
+      res.json(allMatches.map(r => ({
+        ...r.match,
+        buyerProfile: r.buyerProfile,
+        sender: r.sender,
+      })));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── Buyer Profiles ──────────────────────────────────────────────────────────
+
+  function redactBuyerProfile(profile: any) {
+    const { clientName, clientEmail, clientPhone, ...safe } = profile;
+    return safe;
+  }
 
   app.get("/api/buyer-profiles", async (req, res) => {
     try {
       const profiles = await storage.getBuyerProfiles(req.query);
-      res.json(profiles);
+      res.json(profiles.map(redactBuyerProfile));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -667,7 +699,7 @@ export async function registerRoutes(
     try {
       const profile = await storage.getBuyerProfile(parseInt(req.params.id));
       if (!profile) return res.status(404).json({ message: "Profile not found" });
-      res.json(profile);
+      res.json(redactBuyerProfile(profile));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -742,6 +774,68 @@ export async function registerRoutes(
   app.delete("/api/buyer-profiles/:id", isAuthenticated, async (req, res) => {
     try {
       await storage.deleteBuyerProfile(parseInt(req.params.id), req.user!.claims.sub);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/agent/buyer-clients", isAuthenticated, async (req, res) => {
+    try {
+      const profiles = await storage.getAgentBuyerProfiles(req.user!.claims.sub);
+      res.json(profiles);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/agent/buyer-clients", isAuthenticated, async (req, res) => {
+    try {
+      const { insertBuyerProfileSchema } = await import("@shared/schema");
+      const parsed = insertBuyerProfileSchema.omit({ userId: true, agentId: true }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
+      const textToCheck = [
+        ...(parsed.data.mustHaves || []),
+        ...(parsed.data.niceToHaves || []),
+        ...(parsed.data.dealBreakers || []),
+        parsed.data.bio || "",
+      ].join(" ");
+      const violation = checkFairHousing(textToCheck);
+      if (violation) return res.status(400).json({ message: violation });
+      const agentId = req.user!.claims.sub;
+      const data = { ...parsed.data, userId: agentId, agentId };
+      const profile = await storage.createBuyerProfile(data);
+      res.status(201).json(profile);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/agent/buyer-clients/:id", isAuthenticated, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const profile = await storage.getBuyerProfile(id);
+      if (!profile || profile.agentId !== req.user!.claims.sub) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const { insertBuyerProfileSchema } = await import("@shared/schema");
+      const parsed = insertBuyerProfileSchema.omit({ userId: true, agentId: true }).partial().safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
+      const updated = await storage.updateBuyerProfile(id, profile.userId, parsed.data);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/agent/buyer-clients/:id", isAuthenticated, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const profile = await storage.getBuyerProfile(id);
+      if (!profile || profile.agentId !== req.user!.claims.sub) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      await storage.deleteBuyerProfile(id, profile.userId);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ message: err.message });

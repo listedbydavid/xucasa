@@ -33,7 +33,7 @@ function checkFairHousingCompliance(text: string): string | null {
   return null;
 }
 
-type BuyerProfileWithUser = BuyerProfile & { user: { id: string; firstName?: string; lastName?: string; profileImageUrl?: string } | null };
+type BuyerProfileWithUser = BuyerProfile & { user: { id: string; firstName?: string; lastName?: string; profileImageUrl?: string } | null } & { agentId?: string | null; clientName?: string | null; clientEmail?: string | null; clientPhone?: string | null };
 
 function formatBudget(amount: number) {
   if (amount >= 1000000) return `$${(amount / 1000000).toFixed(1)}M`;
@@ -62,7 +62,7 @@ function BuyerCard({ profile, onPitch }: { profile: BuyerProfileWithUser; onPitc
               <h3 className="font-semibold text-foreground" data-testid={`text-buyer-name-${profile.id}`}>{profile.displayName}</h3>
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <ShieldCheck className="w-3.5 h-3.5 text-green-600" />
-                Pre-approved
+                {profile.agentId ? "Represented buyer" : "Pre-approved"}
               </div>
             </div>
           </div>
@@ -542,7 +542,12 @@ function PitchModal({ profile, onClose }: { profile: BuyerProfileWithUser; onClo
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/buyer-matches"] });
-      toast({ title: "Pitch sent!", description: `Your pitch has been sent to ${profile.displayName}.` });
+      toast({
+        title: "Pitch sent!",
+        description: profile.agentId
+          ? "Your pitch has been received. A doocasa representative will review it and connect you with this buyer's agent."
+          : `Your pitch has been sent to ${profile.displayName}.`,
+      });
       onClose();
     },
     onError: (err: any) => {
@@ -611,6 +616,15 @@ function PitchModal({ profile, onClose }: { profile: BuyerProfileWithUser; onClo
               Focus on your property's features and how they match this buyer's criteria. Do not make assumptions about the buyer based on personal characteristics.
             </p>
           </div>
+
+          {profile.agentId && (
+            <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl" data-testid="notice-represented-buyer">
+              <ShieldCheck className="w-4 h-4 text-blue-700 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-blue-800">
+                <span className="font-semibold">This buyer is represented by an agent.</span> Your contact information will be reviewed by doocasa and routed to their agent on your behalf.
+              </p>
+            </div>
+          )}
 
           <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl" data-testid="notice-fair-housing-pitch">
             <Scale className="w-4 h-4 text-amber-700 mt-0.5 flex-shrink-0" />
