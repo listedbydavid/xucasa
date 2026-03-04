@@ -215,7 +215,7 @@ function PitchCard({ pitch, onUpdateStatus }: { pitch: SellerPitch; onUpdateStat
 export default function Admin() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals">("overview");
+  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals" | "buyers">("overview");
 
   const isAdminUser = isAuthenticated && user?.id === ADMIN_USER_ID;
 
@@ -241,6 +241,11 @@ export default function Admin() {
 
   const { data: sellerReferrals, isLoading: sellerReferralsLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/seller-referrals"],
+    enabled: isAdminUser,
+  });
+
+  const { data: allBuyerProfiles, isLoading: buyersLoading } = useQuery<any[]>({
+    queryKey: ["/api/buyer-profiles"],
     enabled: isAdminUser,
   });
 
@@ -352,7 +357,7 @@ export default function Admin() {
         </div>
 
         <div className="flex gap-1 mb-6 bg-muted/30 rounded-xl p-1" data-testid="section-admin-tabs">
-          {(["overview", "pitches", "leads", "referrals"] as const).map(tab => (
+          {(["overview", "pitches", "leads", "buyers", "referrals"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -361,7 +366,11 @@ export default function Admin() {
               }`}
               data-testid={`button-tab-${tab}`}
             >
-              {tab === "overview" ? "Overview" : tab === "pitches" ? `Pitches (${pitches?.length || 0})` : tab === "leads" ? `Leads (${sellLeads?.length || 0})` : `Referrals (${(referrals?.length || 0) + (sellerReferrals?.length || 0)})`}
+              {tab === "overview" ? "Overview"
+                : tab === "pitches" ? `Pitches (${pitches?.length || 0})`
+                : tab === "leads" ? `Leads (${sellLeads?.length || 0})`
+                : tab === "buyers" ? `Buyers (${allBuyerProfiles?.length || 0})`
+                : `Referrals (${(referrals?.length || 0) + (sellerReferrals?.length || 0)})`}
             </button>
           ))}
         </div>
@@ -532,6 +541,147 @@ export default function Admin() {
                 <TrendingUp className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
                 <h3 className="font-semibold mb-1">No sell leads yet</h3>
                 <p className="text-sm text-muted-foreground">Leads from the sell wizard will appear here.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "buyers" && (
+          <div className="space-y-3">
+            {buyersLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="bg-white rounded-xl border p-5 animate-pulse">
+                    <div className="h-4 bg-muted rounded w-1/3 mb-2" />
+                    <div className="h-3 bg-muted rounded w-1/2" />
+                  </div>
+                ))}
+              </div>
+            ) : allBuyerProfiles && allBuyerProfiles.length > 0 ? (
+              allBuyerProfiles.map((bp: any) => (
+                <div key={bp.id} className="bg-white rounded-xl border p-5" data-testid={`card-admin-buyer-${bp.id}`}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      {bp.user?.profileImageUrl ? (
+                        <img src={bp.user.profileImageUrl} alt="" className="w-10 h-10 rounded-full border border-border" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold text-sm">
+                          {bp.displayName?.charAt(0)?.toUpperCase() || "?"}
+                        </div>
+                      )}
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-semibold" data-testid={`text-admin-buyer-name-${bp.id}`}>{bp.displayName}</h4>
+                          {bp.isPreApproved && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200">Pre-Approved</span>
+                          )}
+                          {bp.agentId && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700 border border-blue-200">Has Agent</span>
+                          )}
+                          {!bp.isActive && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600 border border-gray-200">Inactive</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                          {bp.user?.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {bp.user.email}</span>}
+                          {bp.userId && <span className="text-muted-foreground/60">ID: {bp.userId}</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-bold text-primary" data-testid={`text-admin-buyer-budget-${bp.id}`}>
+                        {bp.preApprovalAmount >= 1000000
+                          ? `$${(bp.preApprovalAmount / 1000000).toFixed(1)}M`
+                          : `$${(bp.preApprovalAmount / 1000).toFixed(0)}K`}
+                      </div>
+                      <span className="text-xs text-muted-foreground">budget</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                    {bp.minBeds && (
+                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                        <BedDouble className="w-4 h-4" /> {bp.minBeds}{bp.maxBeds ? `–${bp.maxBeds}` : "+"} beds
+                      </div>
+                    )}
+                    {bp.minBaths && (
+                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                        <Bath className="w-4 h-4" /> {bp.minBaths}+ baths
+                      </div>
+                    )}
+                    {bp.minSqft && (
+                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                        <Maximize2 className="w-4 h-4" /> {bp.minSqft.toLocaleString()}{bp.maxSqft ? `–${bp.maxSqft.toLocaleString()}` : "+"} sqft
+                      </div>
+                    )}
+                    {bp.moveInTimeline && (
+                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                        <Clock className="w-4 h-4" /> {bp.moveInTimeline}
+                      </div>
+                    )}
+                  </div>
+
+                  {bp.preferredCities && bp.preferredCities.length > 0 && (
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      <div className="flex flex-wrap gap-1">
+                        {bp.preferredCities.map((city: string, i: number) => (
+                          <span key={i} className="px-2 py-0.5 bg-primary/5 text-primary text-xs rounded-full font-medium">{city}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {bp.homeTypes && bp.homeTypes.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {bp.homeTypes.map((type: string, i: number) => (
+                        <span key={i} className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded-full">{type}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {bp.mustHaves && bp.mustHaves.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {bp.mustHaves.map((item: string, i: number) => (
+                        <span key={i} className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full border border-green-200">{item}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {bp.dealBreakers && bp.dealBreakers.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {bp.dealBreakers.map((item: string, i: number) => (
+                        <span key={i} className="px-2 py-0.5 bg-red-50 text-red-700 text-xs rounded-full border border-red-200">{item}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {bp.bio && (
+                    <p className="text-sm text-muted-foreground bg-muted/30 rounded-lg p-3 mb-2">{bp.bio}</p>
+                  )}
+
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {bp.needsLenderReferral && (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">Needs Lender</span>
+                    )}
+                    {bp.needsAgentReferral && (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200">Needs Agent</span>
+                    )}
+                    {bp.hasAgent === false && !bp.agentId && (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 border border-orange-200">Unrepresented</span>
+                    )}
+                  </div>
+
+                  <div className="text-xs text-muted-foreground mt-2">
+                    Created {new Date(bp.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="bg-white rounded-xl border p-12 text-center">
+                <Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                <h3 className="font-semibold mb-1">No buyer profiles yet</h3>
+                <p className="text-sm text-muted-foreground">Buyer profiles created on the marketplace will appear here.</p>
               </div>
             )}
           </div>
