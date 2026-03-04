@@ -36,17 +36,17 @@ const MOCK_ACTIVE_BUYERS = [
 
 function BuyerDemandSection({ onNavigateToBuyers }: { onNavigateToBuyers: () => void }) {
   return (
-    <div className="bg-gradient-to-br from-emerald-900 to-emerald-800 rounded-2xl p-6 sm:p-8 text-white relative overflow-hidden" data-testid="section-buyer-demand">
-      <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-      <div className="absolute bottom-0 left-0 w-48 h-48 bg-green-400/10 rounded-full translate-y-1/2 -translate-x-1/2" />
+    <div className="bg-gradient-to-br from-[#A02020] to-[#7B1818] rounded-2xl p-6 sm:p-8 text-white relative overflow-hidden" data-testid="section-buyer-demand">
+      <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+      <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
 
       <div className="relative">
         <div className="flex items-center gap-2 mb-2">
-          <Users className="w-5 h-5 text-emerald-300" />
-          <span className="text-emerald-300 text-sm font-semibold uppercase tracking-wide">Buyers Are Waiting</span>
+          <Users className="w-5 h-5 text-red-300" />
+          <span className="text-red-300 text-sm font-semibold uppercase tracking-wide">Buyers Are Waiting</span>
         </div>
         <h2 className="text-2xl sm:text-3xl font-bold mb-2">100,000+ pre-approved buyers are looking for homes like yours</h2>
-        <p className="text-emerald-200 text-sm sm:text-base mb-6 max-w-xl">
+        <p className="text-red-100 text-sm sm:text-base mb-6 max-w-xl">
           Skip the waiting game. Real buyers have already posted exactly what they want — budget, bedrooms, neighborhoods, and more. See if your home is a match.
         </p>
 
@@ -55,25 +55,25 @@ function BuyerDemandSection({ onNavigateToBuyers }: { onNavigateToBuyers: () => 
             <div key={i} className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-xl p-4" data-testid={`card-buyer-preview-${i}`}>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-xs font-bold text-white">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-400 to-red-600 flex items-center justify-center text-xs font-bold text-white">
                     {buyer.name.charAt(0)}
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-white">{buyer.name}</p>
-                    <div className="flex items-center gap-1 text-[10px] text-emerald-300">
+                    <div className="flex items-center gap-1 text-[10px] text-red-300">
                       <ShieldCheck className="w-3 h-3" />
                       Pre-approved
                     </div>
                   </div>
                 </div>
-                <span className="text-lg font-bold text-emerald-300">{buyer.budget}</span>
+                <span className="text-lg font-bold text-red-300">{buyer.budget}</span>
               </div>
               <div className="flex flex-wrap gap-1.5 text-[11px]">
                 <span className="px-2 py-0.5 bg-white/10 rounded-full">{buyer.beds}</span>
                 <span className="px-2 py-0.5 bg-white/10 rounded-full">{buyer.type}</span>
                 <span className="px-2 py-0.5 bg-white/10 rounded-full">{buyer.timeline}</span>
               </div>
-              <div className="flex items-center gap-1 mt-2 text-[11px] text-emerald-200">
+              <div className="flex items-center gap-1 mt-2 text-[11px] text-red-200">
                 <MapPin className="w-3 h-3" />
                 {buyer.cities.join(", ")}
               </div>
@@ -84,26 +84,26 @@ function BuyerDemandSection({ onNavigateToBuyers }: { onNavigateToBuyers: () => 
         <div className="flex flex-wrap items-center gap-3 mb-5">
           {MOCK_ACTIVE_BUYERS.slice(3).map((buyer, i) => (
             <div key={i} className="flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/10 rounded-full px-3 py-1.5">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-[10px] font-bold text-white">
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-red-400 to-red-600 flex items-center justify-center text-[10px] font-bold text-white">
                 {buyer.name.charAt(0)}
               </div>
               <span className="text-xs text-white font-medium">{buyer.name}</span>
-              <span className="text-xs text-emerald-300 font-bold">{buyer.budget}</span>
+              <span className="text-xs text-red-300 font-bold">{buyer.budget}</span>
             </div>
           ))}
-          <span className="text-xs text-emerald-200">+ 99,994 more buyers...</span>
+          <span className="text-xs text-red-200">+ 99,994 more buyers...</span>
         </div>
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
           <button
             onClick={onNavigateToBuyers}
-            className="px-6 py-3 bg-white text-emerald-900 hover:bg-emerald-50 rounded-xl font-semibold text-sm transition-all active:scale-[0.98] flex items-center gap-2 shadow-lg"
+            className="px-6 py-3 bg-white text-[#A02020] hover:bg-red-50 rounded-xl font-semibold text-sm transition-all active:scale-[0.98] flex items-center gap-2 shadow-lg"
             data-testid="button-view-all-buyers"
           >
             <Send className="w-4 h-4" />
             Browse All Buyers & Pitch Your Home
           </button>
-          <div className="flex items-center gap-2 text-sm text-emerald-200">
+          <div className="flex items-center gap-2 text-sm text-red-200">
             <Sparkles className="w-4 h-4 text-yellow-400" />
             <span>Average response in 48 hours</span>
           </div>
