@@ -207,7 +207,7 @@ function BuyerCard({ profile, onPitch }: { profile: BuyerProfileWithUser; onPitc
       <div className="px-5 pb-4">
         <button
           onClick={() => onPitch(profile)}
-          className="w-full py-2.5 bg-foreground text-background hover:bg-primary hover:text-primary-foreground rounded-xl font-semibold text-sm transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+          className="w-full py-2.5 bg-red-600 text-white hover:bg-red-700 rounded-xl font-semibold text-sm transition-all active:scale-[0.98] flex items-center justify-center gap-2"
           data-testid={`button-pitch-buyer-${profile.id}`}
         >
           <Send className="w-4 h-4" />
@@ -745,7 +745,7 @@ function PitchModal({ profile, onClose }: { profile: BuyerProfileWithUser; onClo
               pitchMutation.mutate();
             }}
             disabled={!message.trim() || pitchMutation.isPending}
-            className="flex-1 py-2.5 bg-foreground text-background hover:bg-primary hover:text-primary-foreground rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex-1 py-2.5 bg-red-600 text-white hover:bg-red-700 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             data-testid="button-send-pitch"
           >
             <Send className="w-4 h-4" />
