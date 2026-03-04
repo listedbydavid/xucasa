@@ -41,7 +41,7 @@ export default function Home() {
         <div className="absolute inset-0 z-0">
           <img 
             src="https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=1920&h=1080&fit=crop" 
-            alt="Beautiful home"
+            alt="Modern luxury home with large windows and landscaped yard"
             className="w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-background"></div>
@@ -82,7 +82,7 @@ export default function Home() {
             onClick={handleMapSearch}
             className="flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-md text-white px-6 py-3 rounded-full font-bold transition-all border border-white/30 active:scale-95 shadow-xl"
           >
-            <Map className="w-5 h-5" />
+            <Map className="w-5 h-5" aria-hidden="true" />
             Map Search
           </button>
         </div>

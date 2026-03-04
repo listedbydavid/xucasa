@@ -123,8 +123,9 @@ export default function Swipe() {
 
   if (isLoading) {
     return (
-      <div className="h-[calc(100vh-64px)] flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="h-[calc(100vh-64px)] flex items-center justify-center" role="status" aria-label="Loading properties">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+        <span className="sr-only">Loading properties</span>
       </div>
     );
   }

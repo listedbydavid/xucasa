@@ -18,7 +18,7 @@ export default function PropertyDetail() {
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
 
   if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div></div>;
+    return <div className="min-h-screen flex items-center justify-center" role="status" aria-label="Loading property details"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" aria-hidden="true"></div><span className="sr-only">Loading property details</span></div>;
   }
 
   if (!property) {

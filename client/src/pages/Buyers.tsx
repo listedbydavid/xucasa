@@ -359,12 +359,13 @@ function CreateProfileModal({ onClose, existingProfile }: { onClose: () => void;
 
           <div className="border border-blue-200 bg-blue-50/50 rounded-xl p-4 space-y-3">
             <label className="text-sm font-semibold text-foreground block">Are you pre-approved? *</label>
-            <div className="flex gap-3">
+            <div className="flex gap-3" role="group" aria-label="Pre-approval status">
               <button
                 type="button"
                 onClick={() => setForm(f => ({ ...f, isPreApproved: "yes" }))}
                 className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${form.isPreApproved === "yes" ? "border-green-500 bg-green-50 text-green-700" : "border-border bg-white text-muted-foreground hover:border-muted-foreground/40"}`}
                 data-testid="button-preapproved-yes"
+                aria-pressed={form.isPreApproved === "yes"}
               >
                 Yes
               </button>
@@ -373,6 +374,7 @@ function CreateProfileModal({ onClose, existingProfile }: { onClose: () => void;
                 onClick={() => setForm(f => ({ ...f, isPreApproved: "no" }))}
                 className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${form.isPreApproved === "no" ? "border-amber-500 bg-amber-50 text-amber-700" : "border-border bg-white text-muted-foreground hover:border-muted-foreground/40"}`}
                 data-testid="button-preapproved-no"
+                aria-pressed={form.isPreApproved === "no"}
               >
                 Not yet
               </button>

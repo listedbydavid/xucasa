@@ -18,6 +18,7 @@ Key features:
 - **Admin Dashboard** (`/admin`) — Master admin panel (restricted to user ID `55534280`) with overview stats, seller pitch management (view/update status/add notes), sell leads list, buyer and seller referral management. Tabs: Overview, Seller Pitches, Sell Leads, Referrals. Status workflow: new → reviewing → contacted → matched → rejected.
 - Agent dashboard for creating, editing, and deleting listings with Street View auto-photo
 - **PWA (Progressive Web App)** — installable on iOS/Android home screens, offline-capable service worker, app manifest with icons
+- **ADA / WCAG 2.1 AA Compliance** — skip-to-content link, global focus-visible outlines, semantic landmarks (header/nav/main/footer with ARIA roles), form label associations (htmlFor/id), accessible modals (role="dialog", aria-modal, focus trapping, Escape key), aria-labels on all icon-only buttons, aria-hidden on decorative icons, aria-pressed on toggle buttons, role="status" on loading spinners with sr-only text, descriptive image alt text, viewport allows user zoom
 - Authentication via Replit Auth (OpenID Connect)
 
 ## User Preferences

@@ -158,8 +158,9 @@ function ProfileSection({ user }: { user: any }) {
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-muted-foreground mb-1">First Name</label>
+                    <label htmlFor="edit-first-name" className="block text-xs font-bold text-muted-foreground mb-1">First Name</label>
                     <input
+                      id="edit-first-name"
                       value={firstName}
                       onChange={e => setFirstName(e.target.value)}
                       className="w-full bg-background border-2 border-border rounded-lg px-3 py-2 text-sm focus:border-primary outline-none"
@@ -167,8 +168,9 @@ function ProfileSection({ user }: { user: any }) {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-muted-foreground mb-1">Last Name</label>
+                    <label htmlFor="edit-last-name" className="block text-xs font-bold text-muted-foreground mb-1">Last Name</label>
                     <input
+                      id="edit-last-name"
                       value={lastName}
                       onChange={e => setLastName(e.target.value)}
                       className="w-full bg-background border-2 border-border rounded-lg px-3 py-2 text-sm focus:border-primary outline-none"
@@ -385,12 +387,12 @@ function AddHomeForm({ onSubmit, onCancel, isPending }: { onSubmit: (d: any) => 
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-bold text-muted-foreground mb-1">Nickname</label>
-          <input value={form.nickname} onChange={e => setForm({ ...form, nickname: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-3 py-2 text-sm focus:border-primary outline-none" placeholder="e.g. My House" data-testid="input-home-nickname" />
+          <label htmlFor="home-nickname" className="block text-xs font-bold text-muted-foreground mb-1">Nickname</label>
+          <input id="home-nickname" value={form.nickname} onChange={e => setForm({ ...form, nickname: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-3 py-2 text-sm focus:border-primary outline-none" placeholder="e.g. My House" data-testid="input-home-nickname" />
         </div>
         <div>
-          <label className="block text-xs font-bold text-muted-foreground mb-1">City</label>
-          <input value={form.addressCity} onChange={e => setForm({ ...form, addressCity: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-3 py-2 text-sm focus:border-primary outline-none" placeholder="City" />
+          <label htmlFor="home-city" className="block text-xs font-bold text-muted-foreground mb-1">City</label>
+          <input id="home-city" value={form.addressCity} onChange={e => setForm({ ...form, addressCity: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-3 py-2 text-sm focus:border-primary outline-none" placeholder="City" />
         </div>
       </div>
 
