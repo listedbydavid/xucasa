@@ -103,11 +103,11 @@ function buildHeaders(token: string): Record<string, string> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     Accept: "application/json",
+    Origin: "https://www.xucasa.com",
+    Referer: "https://www.xucasa.com",
   };
   if (RESO_API_KEY) {
     headers["x-api-key"] = RESO_API_KEY;
-    headers["Origin"] = RESO_API_KEY;
-    headers["Referer"] = RESO_API_KEY;
   }
   return headers;
 }
