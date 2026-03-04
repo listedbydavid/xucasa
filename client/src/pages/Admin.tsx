@@ -3,11 +3,13 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 import {
   Shield, Users, Home, TrendingUp, Mail, Phone, MapPin,
   Clock, BedDouble, Bath, Maximize2, DollarSign, Eye,
   ChevronDown, ChevronUp, CheckCircle2, X, AlertCircle,
-  MessageSquare, Image, FileText,
+  MessageSquare, Image, FileText, Search, Layers, Briefcase,
+  User, ExternalLink,
 } from "lucide-react";
 
 const ADMIN_USER_ID = "55534280";
@@ -321,6 +323,33 @@ export default function Admin() {
             </div>
           </div>
         )}
+
+        <div className="bg-white rounded-xl border p-4 mb-6" data-testid="section-admin-quicknav">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Navigation</h3>
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2">
+            {[
+              { href: "/", icon: Home, label: "Home", color: "text-foreground" },
+              { href: "/search", icon: Search, label: "Search", color: "text-blue-600" },
+              { href: "/sell", icon: TrendingUp, label: "Sell", color: "text-emerald-600" },
+              { href: "/buyers", icon: Users, label: "Buyers", color: "text-purple-600" },
+              { href: "/swipe", icon: Layers, label: "My Feed", color: "text-amber-600" },
+              { href: "/dashboard", icon: User, label: "My Account", color: "text-primary" },
+              { href: "/agent", icon: Briefcase, label: "Agent Hub", color: "text-indigo-600" },
+            ].map(({ href, icon: Icon, label, color }) => (
+              <Link
+                key={href}
+                href={href}
+                className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-transparent hover:border-border hover:bg-muted/40 transition-all group"
+                data-testid={`link-quicknav-${label.toLowerCase().replace(/\s/g, "-")}`}
+              >
+                <div className={`w-9 h-9 rounded-lg bg-muted/50 group-hover:bg-muted flex items-center justify-center transition-colors ${color}`}>
+                  <Icon className="w-4.5 h-4.5" />
+                </div>
+                <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors">{label}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
 
         <div className="flex gap-1 mb-6 bg-muted/30 rounded-xl p-1" data-testid="section-admin-tabs">
           {(["overview", "pitches", "leads", "referrals"] as const).map(tab => (
