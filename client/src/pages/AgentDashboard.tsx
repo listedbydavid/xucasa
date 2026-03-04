@@ -318,7 +318,7 @@ function AgentBuyerClientsSection() {
         <ShieldCheck className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
         <div className="text-sm text-blue-800">
           <p className="font-semibold mb-1">Your client's information is private</p>
-          <p className="text-blue-700">Contact details (name, email, phone) are never shown publicly. When a seller pitches a property to your buyer, the seller's information is routed through doocasa and delivered directly to you — so you stay in the loop on every opportunity.</p>
+          <p className="text-blue-700">Contact details (name, email, phone) are never shown publicly. When a seller pitches a property to your buyer, the seller's information is routed through xucasa and delivered directly to you — so you stay in the loop on every opportunity.</p>
         </div>
       </div>
 

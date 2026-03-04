@@ -86,7 +86,7 @@ export function AuthPromptModal({ feature, onClose }: AuthPromptModalProps) {
 
   const handleSignIn = () => {
     setAuthFailed(false);
-    const popup = openCenteredPopup("/api/login", "doocasa-auth", 520, 640);
+    const popup = openCenteredPopup("/api/login", "xucasa-auth", 520, 640);
     if (!popup) {
       // Popup blocked — fall back to redirect
       window.location.href = "/api/login";

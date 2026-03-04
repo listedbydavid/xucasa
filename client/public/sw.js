@@ -1,4 +1,4 @@
-const CACHE_NAME = "doocasa-v1";
+const CACHE_NAME = "xucasa-v1";
 const STATIC_ASSETS = [
   "/",
   "/manifest.json",

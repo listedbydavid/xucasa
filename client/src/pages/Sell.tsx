@@ -360,7 +360,7 @@ export default function Sell() {
         <div className="max-w-3xl mx-auto text-center">
           <div className="flex items-center justify-center gap-2 mb-3">
             <TrendingUp className="w-6 h-6" />
-            <span className="text-primary-foreground/80 text-sm font-medium uppercase tracking-wider">Sell with doocasa</span>
+            <span className="text-primary-foreground/80 text-sm font-medium uppercase tracking-wider">Sell with xucasa</span>
           </div>
           <h1 className="text-3xl md:text-4xl font-bold mb-2">
             {step < 3 ? "What's your home worth?" :
@@ -785,12 +785,12 @@ export default function Sell() {
                           data-testid="button-submit-pitch"
                         >
                           <Send className="w-4 h-4" />
-                          {pitchMutation.isPending ? "Submitting..." : "Submit to doocasa Team"}
+                          {pitchMutation.isPending ? "Submitting..." : "Submit to xucasa Team"}
                         </Button>
                       </div>
 
                       <p className="text-xs text-emerald-600/70 text-center">
-                        Your pitch goes directly to the doocasa team — we'll review it and connect you with matching buyers.
+                        Your pitch goes directly to the xucasa team — we'll review it and connect you with matching buyers.
                       </p>
                     </div>
                   )}
@@ -839,7 +839,7 @@ export default function Sell() {
                 <div className="flex items-end gap-3 mb-1">
                   <p className="text-5xl font-bold text-foreground">{fmt(valuation.estimatedMid)}</p>
                   <Badge className="mb-2 bg-primary/10 text-primary border-primary/20 hover:bg-primary/10">
-                    doocasa Estimate
+                    xucasa Estimate
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">
@@ -1163,7 +1163,7 @@ export default function Sell() {
                       <span className="font-semibold">MLS Listing</span>
                       <Badge variant="secondary" className="text-xs ml-auto">Most Popular</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">Listed publicly on MLS, Zillow, Realtor.com and doocasa. Maximum buyer exposure.</p>
+                    <p className="text-xs text-muted-foreground">Listed publicly on MLS, Zillow, Realtor.com and xucasa. Maximum buyer exposure.</p>
                     <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
                       <li className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-green-500" /> MLS syndication</li>
                       <li className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-green-500" /> Professional photos</li>
@@ -1186,7 +1186,7 @@ export default function Sell() {
                       <span className="font-semibold">Buy it Now</span>
                       <Badge className="text-xs ml-auto bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100">Private</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">Off-market, exclusively on doocasa. Attract serious buyers at your set price — no negotiation.</p>
+                    <p className="text-xs text-muted-foreground">Off-market, exclusively on xucasa. Attract serious buyers at your set price — no negotiation.</p>
                     <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
                       <li className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-amber-500" /> Off-market exclusivity</li>
                       <li className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-amber-500" /> Set your "Buy it Now" price</li>
@@ -1255,7 +1255,7 @@ export default function Sell() {
                 </div>
                 <h2 className="text-2xl font-bold mb-2">You're all set, {form.name.split(" ")[0]}!</h2>
                 <p className="text-muted-foreground text-sm max-w-sm mx-auto">
-                  A licensed doocasa agent will contact you at <strong>{form.email}</strong> within 24 hours
+                  A licensed xucasa agent will contact you at <strong>{form.email}</strong> within 24 hours
                   to discuss your selling strategy.
                 </p>
               </CardContent>
@@ -1332,7 +1332,7 @@ export default function Sell() {
 
             <p className="text-center text-xs text-muted-foreground">
               Questions? Contact us at{" "}
-              <a href="mailto:hello@doocasa.com" className="text-primary hover:underline">hello@doocasa.com</a>
+              <a href="mailto:hello@xucasa.com" className="text-primary hover:underline">hello@xucasa.com</a>
             </p>
           </div>
         )}

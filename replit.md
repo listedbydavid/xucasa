@@ -1,8 +1,8 @@
-# doocasa — Real Estate Listing Platform
+# xucasa — Real Estate Listing Platform
 
 ## Overview
 
-doocasa is a Redfin-inspired real estate web application that allows users to browse, search, save, and list properties. It features a buyer-facing interface with map integration, property detail pages with public records data, and an agent portal for managing listings.
+xucasa is a Redfin-inspired real estate web application that allows users to browse, search, save, and list properties. It features a buyer-facing interface with map integration, property detail pages with public records data, and an agent portal for managing listings.
 
 Key features:
 - Property search with filters (location, price, beds, baths, sqft, HOA fee, off-market)

@@ -10,7 +10,7 @@ import {
   Home as HomeIcon, TreePine, ShieldCheck, AlertTriangle, Scale
 } from "lucide-react";
 
-const FAIR_HOUSING_NOTICE = "doocasa supports fair housing. All profiles and communications must comply with the Fair Housing Act. Discrimination based on race, color, religion, national origin, sex, familial status, or disability is illegal and strictly prohibited.";
+const FAIR_HOUSING_NOTICE = "xucasa supports fair housing. All profiles and communications must comply with the Fair Housing Act. Discrimination based on race, color, religion, national origin, sex, familial status, or disability is illegal and strictly prohibited.";
 
 const PROHIBITED_TERMS = [
   "no kids", "no children", "no families", "adults only", "no section 8",
@@ -545,7 +545,7 @@ function PitchModal({ profile, onClose }: { profile: BuyerProfileWithUser; onClo
       toast({
         title: "Pitch sent!",
         description: profile.agentId
-          ? "Your pitch has been received. A doocasa representative will review it and connect you with this buyer's agent."
+          ? "Your pitch has been received. A xucasa representative will review it and connect you with this buyer's agent."
           : `Your pitch has been sent to ${profile.displayName}.`,
       });
       onClose();
@@ -621,7 +621,7 @@ function PitchModal({ profile, onClose }: { profile: BuyerProfileWithUser; onClo
             <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl" data-testid="notice-represented-buyer">
               <ShieldCheck className="w-4 h-4 text-blue-700 mt-0.5 flex-shrink-0" />
               <p className="text-xs text-blue-800">
-                <span className="font-semibold">This buyer is represented by an agent.</span> Your contact information will be reviewed by doocasa and routed to their agent on your behalf.
+                <span className="font-semibold">This buyer is represented by an agent.</span> Your contact information will be reviewed by xucasa and routed to their agent on your behalf.
               </p>
             </div>
           )}

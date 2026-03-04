@@ -1,7 +1,7 @@
 {
-  "name": "doocasa",
-  "short_name": "doocasa",
-  "description": "Find your dream home with doocasa — browse listings, search by map, swipe through homes, and connect with agents.",
+  "name": "xucasa",
+  "short_name": "xucasa",
+  "description": "Find your dream home with xucasa — browse listings, search by map, swipe through homes, and connect with agents.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

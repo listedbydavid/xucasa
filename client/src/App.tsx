@@ -41,7 +41,7 @@ function Footer() {
   return (
     <footer className="border-t border-border/40 bg-muted/20 py-6 px-4">
       <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
-        <span>doocasa</span>
+        <span>xucasa</span>
         {isAdmin && (
           <Link href="/admin" className="text-muted-foreground/60 hover:text-foreground transition-colors" data-testid="link-admin">
             Admin
