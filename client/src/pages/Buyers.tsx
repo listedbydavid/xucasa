@@ -7,7 +7,7 @@ import type { BuyerProfile, Property } from "@shared/schema";
 import {
   Users, DollarSign, Bed, Bath, Ruler, MapPin, Heart, Clock,
   Plus, Send, Filter, X, ChevronDown, ChevronUp, Sparkles, Upload,
-  Home as HomeIcon, TreePine, ShieldCheck, AlertTriangle, Scale
+  Home as HomeIcon, TreePine, ShieldCheck, AlertTriangle, Scale, Lock
 } from "lucide-react";
 
 const FAIR_HOUSING_NOTICE = "xucasa supports fair housing. All profiles and communications must comply with the Fair Housing Act. Discrimination based on race, color, religion, national origin, sex, familial status, or disability is illegal and strictly prohibited.";
@@ -40,15 +40,62 @@ function formatBudget(amount: number) {
   return `$${(amount / 1000).toFixed(0)}K`;
 }
 
+function LockedField({ icon: Icon, label }: { icon: typeof Bed; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5 text-sm text-muted-foreground/50">
+      <Icon className="w-4 h-4" />
+      <span className="flex items-center gap-1">
+        <Lock className="w-3 h-3" />
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function LockedPills({ icon: Icon, label, color }: { icon: typeof Heart; label: string; color: "green" | "blue" | "red" }) {
+  const colors = {
+    green: "bg-green-50/60 text-green-400 border-green-200/50",
+    blue: "bg-blue-50/60 text-blue-400 border-blue-200/50",
+    red: "bg-red-50/60 text-red-400 border-red-200/50",
+  };
+  const labelColors = { green: "text-green-400", blue: "text-blue-400", red: "text-red-400" };
+  return (
+    <div>
+      <div className={`flex items-center gap-1 text-xs font-semibold ${labelColors[color]} mb-1`}>
+        <Icon className="w-3.5 h-3.5" /> {label}
+      </div>
+      <div className="flex flex-wrap gap-1">
+        <span className={`px-2 py-0.5 text-xs rounded-full border ${colors[color]} flex items-center gap-1`}>
+          <Lock className="w-2.5 h-2.5" /> Unlock
+        </span>
+        <span className={`px-2 py-0.5 text-xs rounded-full border ${colors[color]} flex items-center gap-1`}>
+          <Lock className="w-2.5 h-2.5" /> Unlock
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function BuyerCard({ profile, onPitch }: { profile: BuyerProfileWithUser; onPitch: (profile: BuyerProfileWithUser) => void }) {
   const [expanded, setExpanded] = useState(false);
+
+  const hasBeds = !!(profile.minBeds || profile.maxBeds);
+  const hasBaths = !!profile.minBaths;
+  const hasSqft = !!(profile.minSqft || profile.maxSqft);
+  const hasTimeline = !!profile.moveInTimeline;
+  const hasCities = profile.preferredCities && profile.preferredCities.length > 0;
+  const hasHomeTypes = profile.homeTypes && profile.homeTypes.length > 0;
+  const hasBio = !!profile.bio;
+  const hasMustHaves = profile.mustHaves && profile.mustHaves.length > 0;
+  const hasNiceToHaves = profile.niceToHaves && profile.niceToHaves.length > 0;
+  const hasDealBreakers = profile.dealBreakers && profile.dealBreakers.length > 0;
 
   return (
     <div
       data-testid={`card-buyer-${profile.id}`}
-      className="bg-white rounded-2xl border border-border/60 shadow-sm hover:shadow-md transition-all overflow-hidden"
+      className="bg-white rounded-2xl border border-border/60 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col"
     >
-      <div className="p-5">
+      <div className="p-5 flex-1 flex flex-col">
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-3">
             {profile.user?.profileImageUrl ? (
@@ -80,7 +127,7 @@ function BuyerCard({ profile, onPitch }: { profile: BuyerProfileWithUser; onPitc
         </div>
 
         <div className="grid grid-cols-2 gap-2 mb-3">
-          {(profile.minBeds || profile.maxBeds) && (
+          {hasBeds ? (
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <Bed className="w-4 h-4" />
               {profile.minBeds && profile.maxBeds
@@ -89,14 +136,18 @@ function BuyerCard({ profile, onPitch }: { profile: BuyerProfileWithUser; onPitc
                   ? `${profile.minBeds}+ beds`
                   : `Up to ${profile.maxBeds} beds`}
             </div>
+          ) : (
+            <LockedField icon={Bed} label="Beds" />
           )}
-          {profile.minBaths && (
+          {hasBaths ? (
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <Bath className="w-4 h-4" />
               {profile.minBaths}+ baths
             </div>
+          ) : (
+            <LockedField icon={Bath} label="Baths" />
           )}
-          {(profile.minSqft || profile.maxSqft) && (
+          {hasSqft ? (
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <Ruler className="w-4 h-4" />
               {profile.minSqft && profile.maxSqft
@@ -105,40 +156,59 @@ function BuyerCard({ profile, onPitch }: { profile: BuyerProfileWithUser; onPitc
                   ? `${profile.minSqft.toLocaleString()}+ sqft`
                   : `Up to ${profile.maxSqft!.toLocaleString()} sqft`}
             </div>
+          ) : (
+            <LockedField icon={Ruler} label="Sq Ft" />
           )}
-          {profile.moveInTimeline && (
+          {hasTimeline ? (
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <Clock className="w-4 h-4" />
               {profile.moveInTimeline}
             </div>
+          ) : (
+            <LockedField icon={Clock} label="Timeline" />
           )}
         </div>
 
-        {profile.preferredCities && profile.preferredCities.length > 0 && (
+        {hasCities ? (
           <div className="flex items-center gap-1.5 mb-3">
             <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             <div className="flex flex-wrap gap-1">
-              {profile.preferredCities.map((city, i) => (
+              {profile.preferredCities!.map((city, i) => (
                 <span key={i} className="px-2 py-0.5 bg-primary/5 text-primary text-xs rounded-full font-medium">
                   {city}
                 </span>
               ))}
             </div>
           </div>
+        ) : (
+          <div className="flex items-center gap-1.5 mb-3 text-muted-foreground/50">
+            <MapPin className="w-4 h-4 flex-shrink-0" />
+            <span className="flex items-center gap-1 text-xs"><Lock className="w-3 h-3" /> Preferred cities hidden</span>
+          </div>
         )}
 
-        {profile.homeTypes && profile.homeTypes.length > 0 && (
+        {hasHomeTypes ? (
           <div className="flex flex-wrap gap-1 mb-3">
-            {profile.homeTypes.map((type, i) => (
+            {profile.homeTypes!.map((type, i) => (
               <span key={i} className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded-full">
                 {type}
               </span>
             ))}
           </div>
+        ) : (
+          <div className="flex flex-wrap gap-1 mb-3">
+            <span className="px-2 py-0.5 bg-muted/50 text-muted-foreground/50 text-xs rounded-full flex items-center gap-1">
+              <Lock className="w-2.5 h-2.5" /> Home type private
+            </span>
+          </div>
         )}
 
-        {profile.bio && (
+        {hasBio ? (
           <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{profile.bio}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground/50 line-clamp-2 mb-3 flex items-center gap-1">
+            <Lock className="w-3 h-3 flex-shrink-0" /> Bio not shared — upgrade to view
+          </p>
         )}
 
         <button
@@ -152,56 +222,66 @@ function BuyerCard({ profile, onPitch }: { profile: BuyerProfileWithUser; onPitc
 
         {expanded && (
           <div className="space-y-3 mb-3 animate-in slide-in-from-top-2">
-            {profile.mustHaves && profile.mustHaves.length > 0 && (
+            {hasMustHaves ? (
               <div>
                 <div className="flex items-center gap-1 text-xs font-semibold text-green-700 mb-1">
                   <Heart className="w-3.5 h-3.5" /> Must-Haves
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {profile.mustHaves.map((item, i) => (
+                  {profile.mustHaves!.map((item, i) => (
                     <span key={i} className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded-full border border-green-200">
                       {item}
                     </span>
                   ))}
                 </div>
               </div>
+            ) : (
+              <LockedPills icon={Heart} label="Must-Haves" color="green" />
             )}
-            {profile.niceToHaves && profile.niceToHaves.length > 0 && (
+            {hasNiceToHaves ? (
               <div>
                 <div className="flex items-center gap-1 text-xs font-semibold text-blue-700 mb-1">
                   <Sparkles className="w-3.5 h-3.5" /> Nice-to-Haves
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {profile.niceToHaves.map((item, i) => (
+                  {profile.niceToHaves!.map((item, i) => (
                     <span key={i} className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full border border-blue-200">
                       {item}
                     </span>
                   ))}
                 </div>
               </div>
+            ) : (
+              <LockedPills icon={Sparkles} label="Nice-to-Haves" color="blue" />
             )}
-            {profile.dealBreakers && profile.dealBreakers.length > 0 && (
+            {hasDealBreakers ? (
               <div>
                 <div className="flex items-center gap-1 text-xs font-semibold text-red-700 mb-1">
                   <AlertTriangle className="w-3.5 h-3.5" /> Deal-Breakers
                 </div>
                 <div className="flex flex-wrap gap-1">
-                  {profile.dealBreakers.map((item, i) => (
+                  {profile.dealBreakers!.map((item, i) => (
                     <span key={i} className="px-2 py-0.5 bg-red-50 text-red-700 text-xs rounded-full border border-red-200">
                       {item}
                     </span>
                   ))}
                 </div>
               </div>
+            ) : (
+              <LockedPills icon={AlertTriangle} label="Deal-Breakers" color="red" />
             )}
-            {profile.minLotSize && (
+            {profile.minLotSize ? (
               <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <TreePine className="w-4 h-4" />
                 Min lot: {profile.minLotSize.toLocaleString()} sqft
               </div>
+            ) : (
+              <LockedField icon={TreePine} label="Lot size" />
             )}
           </div>
         )}
+
+        <div className="flex-1" />
       </div>
 
       <div className="px-5 pb-4">
@@ -1030,7 +1110,8 @@ export default function Buyers() {
   };
 
   const realProfiles = profiles || [];
-  const allProfiles = [...realProfiles, ...MOCK_BUYERS.filter(mock => !realProfiles.some(p => p.id === mock.id))];
+  const combined = [...realProfiles, ...MOCK_BUYERS.filter(mock => !realProfiles.some(p => p.id === mock.id))];
+  const allProfiles = combined.length % 2 !== 0 ? combined.slice(0, combined.length - 1) : combined;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
