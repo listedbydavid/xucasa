@@ -219,6 +219,31 @@ export function useCreateSavedSearch() {
   });
 }
 
+export function useRenameSavedSearch() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, name }: { id: number; name: string }) => {
+      const res = await fetch(`/api/saved-searches/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to rename search");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.savedSearches.list.path] });
+      toast({ title: "Search Renamed" });
+    },
+    onError: (err) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+}
+
 export function useDeleteSavedSearch() {
   const queryClient = useQueryClient();
   const { toast } = useToast();

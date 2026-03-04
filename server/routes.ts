@@ -359,6 +359,22 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/saved-searches/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user.claims;
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      const { name } = req.body;
+      if (!name || typeof name !== "string" || name.trim().length === 0) {
+        return res.status(400).json({ message: "Name is required" });
+      }
+      await storage.renameSavedSearch(id, user.sub, name.trim());
+      res.status(200).json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
   // Profile update
   app.patch("/api/auth/user", isAuthenticated, async (req: any, res) => {
     try {

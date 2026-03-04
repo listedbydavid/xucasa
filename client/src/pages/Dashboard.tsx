@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { PropertyCard } from "@/components/PropertyCard";
 import {
-  useSavedProperties, useSavedSearches, useDeleteSavedSearch,
+  useSavedProperties, useSavedSearches, useDeleteSavedSearch, useRenameSavedSearch,
   useFavoriteLists, useCreateFavoriteList, useRenameFavoriteList,
   useDeleteFavoriteList, useMovePropertyToList,
 } from "@/hooks/use-saved";
@@ -949,6 +949,17 @@ function FavoritesSection() {
 function SavedSearchesSection() {
   const { data: savedSearches = [], isLoading } = useSavedSearches();
   const { mutate: deleteSearch } = useDeleteSavedSearch();
+  const { mutate: renameSearch } = useRenameSavedSearch();
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingName, setEditingName] = useState("");
+
+  const handleRename = (id: number) => {
+    if (editingName.trim()) {
+      renameSearch({ id, name: editingName.trim() });
+      setEditingId(null);
+      setEditingName("");
+    }
+  };
 
   const criteriaLabel = (key: string): string => {
     const map: Record<string, string> = {
@@ -980,8 +991,38 @@ function SavedSearchesSection() {
           {savedSearches.map(search => (
             <div key={search.id} className="bg-card border border-border rounded-2xl p-5 hover:shadow-md transition-shadow" data-testid={`card-saved-search-${search.id}`}>
               <div className="flex items-start justify-between mb-3">
-                <h3 className="font-bold text-foreground">{search.name}</h3>
-                <button onClick={() => deleteSearch(search.id)} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors">
+                {editingId === search.id ? (
+                  <div className="flex items-center gap-1.5 flex-1 mr-2">
+                    <input
+                      className="text-sm font-bold bg-transparent border-b-2 border-primary outline-none flex-1 py-0.5 text-foreground"
+                      value={editingName}
+                      onChange={e => setEditingName(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") handleRename(search.id);
+                        if (e.key === "Escape") setEditingId(null);
+                      }}
+                      autoFocus
+                      data-testid={`input-rename-search-${search.id}`}
+                    />
+                    <button onClick={() => handleRename(search.id)} className="p-1 text-green-600 hover:text-green-700">
+                      <Check className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => setEditingId(null)} className="p-1 text-muted-foreground hover:text-foreground">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <h3
+                    className="font-bold text-foreground cursor-pointer hover:text-primary transition-colors group flex items-center gap-1.5"
+                    onClick={() => { setEditingId(search.id); setEditingName(search.name); }}
+                    title="Click to rename"
+                    data-testid={`text-search-name-${search.id}`}
+                  >
+                    {search.name}
+                    <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+                  </h3>
+                )}
+                <button onClick={() => deleteSearch(search.id)} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors flex-shrink-0">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>

@@ -56,6 +56,7 @@ export interface IStorage {
   // Saved Searches
   getSavedSearches(userId: string): Promise<SavedSearch[]>;
   createSavedSearch(userId: string, search: Omit<InsertSavedSearch, 'userId'>): Promise<SavedSearch>;
+  renameSavedSearch(id: number, userId: string, name: string): Promise<void>;
   deleteSavedSearch(id: number, userId: string): Promise<void>;
 
   // Search History
@@ -226,6 +227,10 @@ export class DatabaseStorage implements IStorage {
   async createSavedSearch(userId: string, search: Omit<InsertSavedSearch, 'userId'>): Promise<SavedSearch> {
     const [saved] = await db.insert(savedSearches).values({ ...search, userId }).returning();
     return saved;
+  }
+
+  async renameSavedSearch(id: number, userId: string, name: string): Promise<void> {
+    await db.update(savedSearches).set({ name }).where(and(eq(savedSearches.id, id), eq(savedSearches.userId, userId)));
   }
 
   async deleteSavedSearch(id: number, userId: string): Promise<void> {

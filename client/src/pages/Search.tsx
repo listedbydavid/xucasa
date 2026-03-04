@@ -5,7 +5,7 @@ import { useProperties } from "@/hooks/use-properties";
 import { useCreateSavedSearch } from "@/hooks/use-saved";
 import { useAddSearchHistory } from "@/hooks/use-client-dashboard";
 import { useAuth } from "@/hooks/use-auth";
-import { Search as SearchIcon, MapPin, Map, BookmarkPlus, X } from "lucide-react";
+import { Search as SearchIcon, MapPin, Map, BookmarkPlus, X, Check } from "lucide-react";
 import { MapView } from "@/components/MapView";
 import { useJsApiLoader } from "@react-google-maps/api";
 import queryString from "query-string";
@@ -96,8 +96,9 @@ export default function Search() {
   const { isAuthenticated } = useAuth();
   const { mutate: addHistory } = useAddSearchHistory();
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
+  const [showSaveNameInput, setShowSaveNameInput] = useState(false);
+  const [saveSearchName, setSaveSearchName] = useState("");
 
-  // Log search history when user searches (debounced 2s, authenticated only)
   useEffect(() => {
     if (!isAuthenticated || !locationInput || locationInput.length < 3) return;
     const timer = setTimeout(() => {
@@ -111,8 +112,16 @@ export default function Search() {
       setShowAuthPrompt(true);
       return;
     }
-    const name = locationInput ? `Search in ${locationInput}` : "General Search";
+    const defaultName = locationInput ? `Search in ${locationInput}` : "General Search";
+    setSaveSearchName(defaultName);
+    setShowSaveNameInput(true);
+  };
+
+  const confirmSaveSearch = () => {
+    const name = saveSearchName.trim() || (locationInput ? `Search in ${locationInput}` : "General Search");
     saveSearch({ name, criteria: activeQuery });
+    setShowSaveNameInput(false);
+    setSaveSearchName("");
   };
 
   // When properties load with real coordinates, auto-fit the map to show all markers
@@ -193,15 +202,47 @@ export default function Search() {
               <option value="true">Buy it Now Only</option>
             </select>
 
-            <button
-              onClick={handleSaveSearch}
-              disabled={isSavingSearch}
-              className="ml-auto sm:ml-0 flex items-center gap-2 bg-primary/10 text-primary hover:bg-primary hover:text-white px-4 py-2.5 rounded-xl font-bold text-sm transition-colors"
-              data-testid="button-save-search"
-            >
-              <BookmarkPlus className="w-4 h-4" />
-              <span className="hidden lg:inline">Save Search</span>
-            </button>
+            {showSaveNameInput ? (
+              <div className="ml-auto sm:ml-0 flex items-center gap-1.5 bg-card border border-border rounded-xl px-3 py-1.5 shadow-md">
+                <input
+                  className="text-sm bg-transparent outline-none w-36 lg:w-48 placeholder-muted-foreground text-foreground"
+                  placeholder="Name your search..."
+                  value={saveSearchName}
+                  onChange={e => setSaveSearchName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") confirmSaveSearch();
+                    if (e.key === "Escape") { setShowSaveNameInput(false); setSaveSearchName(""); }
+                  }}
+                  autoFocus
+                  data-testid="input-save-search-name"
+                />
+                <button
+                  onClick={confirmSaveSearch}
+                  disabled={isSavingSearch}
+                  className="p-1 text-green-600 hover:text-green-700 disabled:opacity-40"
+                  data-testid="button-confirm-save-search"
+                >
+                  <Check className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => { setShowSaveNameInput(false); setSaveSearchName(""); }}
+                  className="p-1 text-muted-foreground hover:text-foreground"
+                  data-testid="button-cancel-save-search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleSaveSearch}
+                disabled={isSavingSearch}
+                className="ml-auto sm:ml-0 flex items-center gap-2 bg-primary/10 text-primary hover:bg-primary hover:text-white px-4 py-2.5 rounded-xl font-bold text-sm transition-colors"
+                data-testid="button-save-search"
+              >
+                <BookmarkPlus className="w-4 h-4" />
+                <span className="hidden lg:inline">Save Search</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
