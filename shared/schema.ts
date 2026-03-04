@@ -182,6 +182,17 @@ export const buyerProfiles = pgTable("buyer_profiles", {
   clientName: text("client_name"),
   clientEmail: text("client_email"),
   clientPhone: text("client_phone"),
+  isPreApproved: boolean("is_pre_approved").default(false),
+  preApprovalLetter: text("pre_approval_letter"),
+  lenderName: text("lender_name"),
+  lenderPhone: text("lender_phone"),
+  lenderEmail: text("lender_email"),
+  hasAgent: boolean("has_agent").default(false),
+  buyerAgentName: text("buyer_agent_name"),
+  buyerAgentPhone: text("buyer_agent_phone"),
+  buyerAgentEmail: text("buyer_agent_email"),
+  needsLenderReferral: boolean("needs_lender_referral").default(false),
+  needsAgentReferral: boolean("needs_agent_referral").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

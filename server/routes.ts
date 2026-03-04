@@ -670,10 +670,32 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/buyer-referrals", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const referrals = await db
+        .select({ profile: buyerProfiles, user: users })
+        .from(buyerProfiles)
+        .leftJoin(users, eq(buyerProfiles.userId, users.id))
+        .where(
+          sql`${buyerProfiles.needsLenderReferral} = true OR ${buyerProfiles.needsAgentReferral} = true`
+        )
+        .orderBy(desc(buyerProfiles.createdAt));
+      res.json(referrals.map(r => ({ ...r.profile, user: r.user })));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── Buyer Profiles ──────────────────────────────────────────────────────────
 
   function redactBuyerProfile(profile: any) {
-    const { clientName, clientEmail, clientPhone, ...safe } = profile;
+    const {
+      clientName, clientEmail, clientPhone,
+      preApprovalLetter, lenderName, lenderPhone, lenderEmail,
+      buyerAgentName, buyerAgentPhone, buyerAgentEmail,
+      needsLenderReferral, needsAgentReferral,
+      ...safe
+    } = profile;
     return safe;
   }
 
@@ -729,7 +751,7 @@ export async function registerRoutes(
   app.post("/api/buyer-profiles", isAuthenticated, async (req, res) => {
     try {
       const { insertBuyerProfileSchema } = await import("@shared/schema");
-      const parsed = insertBuyerProfileSchema.omit({ userId: true }).safeParse(req.body);
+      const parsed = insertBuyerProfileSchema.omit({ userId: true, agentId: true }).safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
       const textToCheck = [
         ...(parsed.data.mustHaves || []),
@@ -739,9 +761,28 @@ export async function registerRoutes(
       ].join(" ");
       const violation = checkFairHousing(textToCheck);
       if (violation) return res.status(400).json({ message: violation });
-      const data = { ...parsed.data, userId: req.user!.claims.sub };
+
+      let agentId: string | null = null;
+      let agentLinked = false;
+      if (parsed.data.hasAgent && parsed.data.buyerAgentEmail) {
+        const agentUser = await db.select().from(users)
+          .where(eq(users.email, parsed.data.buyerAgentEmail.trim().toLowerCase()))
+          .limit(1);
+        if (agentUser.length > 0) {
+          agentId = agentUser[0].id;
+          agentLinked = true;
+        }
+      }
+
+      const data = {
+        ...parsed.data,
+        userId: req.user!.claims.sub,
+        agentId,
+        needsLenderReferral: parsed.data.isPreApproved === false,
+        needsAgentReferral: parsed.data.hasAgent === false,
+      };
       const profile = await storage.createBuyerProfile(data);
-      res.status(201).json(profile);
+      res.status(201).json({ ...profile, agentLinked });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -760,10 +801,34 @@ export async function registerRoutes(
       ].join(" ");
       const violation = checkFairHousing(textToCheck);
       if (violation) return res.status(400).json({ message: violation });
+
+      const updateData: any = { ...parsed.data };
+
+      if (parsed.data.hasAgent !== undefined) {
+        updateData.needsAgentReferral = parsed.data.hasAgent === false;
+      }
+      if (parsed.data.isPreApproved !== undefined) {
+        updateData.needsLenderReferral = parsed.data.isPreApproved === false;
+      }
+
+      if (parsed.data.hasAgent && parsed.data.buyerAgentEmail) {
+        const agentUser = await db.select().from(users)
+          .where(eq(users.email, parsed.data.buyerAgentEmail.trim().toLowerCase()))
+          .limit(1);
+        if (agentUser.length > 0) {
+          updateData.agentId = agentUser[0].id;
+        }
+      } else if (parsed.data.hasAgent === false) {
+        updateData.agentId = null;
+        updateData.buyerAgentName = null;
+        updateData.buyerAgentPhone = null;
+        updateData.buyerAgentEmail = null;
+      }
+
       const updated = await storage.updateBuyerProfile(
         parseInt(req.params.id),
         req.user!.claims.sub,
-        parsed.data
+        updateData
       );
       res.json(updated);
     } catch (err: any) {

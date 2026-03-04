@@ -213,7 +213,7 @@ function PitchCard({ pitch, onUpdateStatus }: { pitch: SellerPitch; onUpdateStat
 export default function Admin() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview">("overview");
+  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals">("overview");
 
   const isAdminUser = isAuthenticated && user?.id === ADMIN_USER_ID;
 
@@ -229,6 +229,11 @@ export default function Admin() {
 
   const { data: sellLeads, isLoading: leadsLoading } = useQuery<SellLead[]>({
     queryKey: ["/api/admin/sell-leads"],
+    enabled: isAdminUser,
+  });
+
+  const { data: referrals, isLoading: referralsLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/buyer-referrals"],
     enabled: isAdminUser,
   });
 
@@ -313,7 +318,7 @@ export default function Admin() {
         )}
 
         <div className="flex gap-1 mb-6 bg-muted/30 rounded-xl p-1" data-testid="section-admin-tabs">
-          {(["overview", "pitches", "leads"] as const).map(tab => (
+          {(["overview", "pitches", "leads", "referrals"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -322,7 +327,7 @@ export default function Admin() {
               }`}
               data-testid={`button-tab-${tab}`}
             >
-              {tab === "overview" ? "Overview" : tab === "pitches" ? `Seller Pitches (${pitches?.length || 0})` : `Sell Leads (${sellLeads?.length || 0})`}
+              {tab === "overview" ? "Overview" : tab === "pitches" ? `Pitches (${pitches?.length || 0})` : tab === "leads" ? `Leads (${sellLeads?.length || 0})` : `Referrals (${referrals?.length || 0})`}
             </button>
           ))}
         </div>
@@ -493,6 +498,66 @@ export default function Admin() {
                 <TrendingUp className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
                 <h3 className="font-semibold mb-1">No sell leads yet</h3>
                 <p className="text-sm text-muted-foreground">Leads from the sell wizard will appear here.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "referrals" && (
+          <div className="space-y-3">
+            {referralsLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="bg-white rounded-xl border p-5 animate-pulse">
+                    <div className="h-4 bg-muted rounded w-1/3 mb-2" />
+                    <div className="h-3 bg-muted rounded w-1/2" />
+                  </div>
+                ))}
+              </div>
+            ) : referrals && referrals.length > 0 ? (
+              referrals.map((r: any) => (
+                <div key={r.id} className="bg-white rounded-xl border p-5" data-testid={`card-referral-${r.id}`}>
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <h4 className="font-semibold">{r.displayName}</h4>
+                      {r.user && (
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {r.user.email}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-bold text-primary">{fmt(r.preApprovalAmount || 0)}</div>
+                      <span className="text-xs text-muted-foreground">{r.isPreApproved ? "pre-approved" : "estimated"}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {r.needsLenderReferral && (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200" data-testid={`badge-needs-lender-${r.id}`}>
+                        Needs Lender
+                      </span>
+                    )}
+                    {r.needsAgentReferral && (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200" data-testid={`badge-needs-agent-${r.id}`}>
+                        Needs Agent
+                      </span>
+                    )}
+                  </div>
+                  {r.preferredCities && r.preferredCities.length > 0 && (
+                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-2">
+                      <MapPin className="w-4 h-4" /> {r.preferredCities.join(", ")}
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground mt-2">
+                    {new Date(r.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="bg-white rounded-xl border p-12 text-center">
+                <Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                <h3 className="font-semibold mb-1">No buyer referrals yet</h3>
+                <p className="text-sm text-muted-foreground">Buyers who need a lender or agent will appear here.</p>
               </div>
             )}
           </div>
