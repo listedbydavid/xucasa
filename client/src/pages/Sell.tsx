@@ -1,8 +1,8 @@
 import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useJsApiLoader, Autocomplete } from "@react-google-maps/api";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -158,10 +158,9 @@ interface ValuationResult {
 const STEPS = [
   { icon: MapPin, label: "Address" },
   { icon: Home, label: "Details" },
-  { icon: TrendingUp, label: "Value" },
   { icon: Target, label: "Goals" },
   { icon: User, label: "Connect" },
-  { icon: CheckCircle2, label: "Done" },
+  { icon: TrendingUp, label: "Estimate" },
 ];
 
 function fmt(n: number) {
@@ -311,37 +310,26 @@ export default function Sell() {
     }));
   }, [autocompleteRef]);
 
-  const valuationQuery = useQuery<ValuationResult>({
-    queryKey: ["/api/valuation", form.beds, form.sqft],
-    enabled: false,
-  });
-
   const submitMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/sell-leads", data),
-    onSuccess: () => {
-      setStep(6);
+    onSuccess: async () => {
+      try {
+        const params = new URLSearchParams({
+          beds: String(form.beds),
+          sqft: String(form.sqft),
+        });
+        if (form.lat) params.set("lat", String(form.lat));
+        if (form.lng) params.set("lng", String(form.lng));
+        const res = await fetch(`/api/valuation?${params}`);
+        const data = await res.json();
+        setValuation(data);
+      } catch {}
+      setStep(5);
     },
     onError: () => {
       toast({ title: "Error", description: "Something went wrong. Please try again.", variant: "destructive" });
     },
   });
-
-  const fetchValuation = async () => {
-    try {
-      const params = new URLSearchParams({
-        beds: String(form.beds),
-        sqft: String(form.sqft),
-      });
-      if (form.lat) params.set("lat", String(form.lat));
-      if (form.lng) params.set("lng", String(form.lng));
-      const res = await fetch(`/api/valuation?${params}`);
-      const data = await res.json();
-      setValuation(data);
-      setStep(3);
-    } catch {
-      toast({ title: "Error", description: "Could not load valuation.", variant: "destructive" });
-    }
-  };
 
   const handleSubmit = () => {
     if (!form.name || !form.email) {
@@ -391,13 +379,11 @@ export default function Sell() {
           </div>
           <h1 className="text-3xl md:text-4xl font-bold mb-2">
             {step < 3 ? "What's your home worth?" :
-             step === 3 ? "Your Home Valuation" :
-             step === 6 ? "You're All Set!" : "List Your Home"}
+             step === 5 ? "Your Home Estimate" : "List Your Home"}
           </h1>
           <p className="text-primary-foreground/80 text-base">
-            {step < 3 ? "Get an instant estimate based on recent comparable sales in your area." :
-             step === 3 ? "Based on comparable homes sold nearby." :
-             step === 6 ? "An agent will reach out within 24 hours." :
+            {step < 3 ? "Tell us about your home and we'll prepare your free estimate." :
+             step === 5 ? "Here's your instant estimate based on comparable sales." :
              "Tell us a little more to help find the right buyers."}
           </p>
         </div>
@@ -848,176 +834,16 @@ export default function Sell() {
                 data-testid="button-step2-next"
                 size="lg"
                 className="flex-1 gap-2"
-                onClick={fetchValuation}
+                onClick={() => setStep(3)}
               >
-                Get My Valuation <TrendingUp className="w-4 h-4" />
+                Continue <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
           </div>
         )}
 
-        {/* ── STEP 3: Valuation ────────────────────────────────────── */}
-        {step === 3 && valuation && (
-          <div className="space-y-6">
-            {/* Main valuation card */}
-            <Card className="shadow-md border-primary/20 overflow-hidden">
-              <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-6 pt-6 pb-2">
-                <p className="text-sm text-muted-foreground font-medium mb-1 uppercase tracking-wide">Estimated Home Value</p>
-                <div className="flex items-end gap-3 mb-1">
-                  <p className="text-5xl font-bold text-foreground">{fmt(valuation.estimatedMid)}</p>
-                  <Badge className="mb-2 bg-primary/10 text-primary border-primary/20 hover:bg-primary/10">
-                    xucasa Estimate
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Range: <span className="font-medium text-foreground">{fmt(valuation.estimatedLow)}</span>
-                  {" – "}
-                  <span className="font-medium text-foreground">{fmt(valuation.estimatedHigh)}</span>
-                </p>
-
-                {/* Visual range bar */}
-                <div className="relative mb-6">
-                  <div className="h-3 bg-gradient-to-r from-amber-300 via-green-400 to-amber-300 rounded-full" />
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 bg-white border-2 border-primary rounded-full shadow-md" />
-                  <div className="flex justify-between text-xs text-muted-foreground mt-1.5">
-                    <span>{fmt(valuation.estimatedLow)}</span>
-                    <span className="font-semibold text-foreground">{fmt(valuation.estimatedMid)}</span>
-                    <span>{fmt(valuation.estimatedHigh)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stats row */}
-              <CardContent className="pt-4 pb-5">
-                <div className="grid grid-cols-3 divide-x text-center">
-                  <div className="px-4">
-                    <p className="text-2xl font-bold text-foreground">${valuation.pricePerSqft}</p>
-                    <p className="text-xs text-muted-foreground">Price per sq ft</p>
-                  </div>
-                  <div className="px-4">
-                    <p className="text-2xl font-bold text-foreground">{form.sqft.toLocaleString()}</p>
-                    <p className="text-xs text-muted-foreground">Sq ft</p>
-                  </div>
-                  <div className="px-4">
-                    <p className="text-2xl font-bold text-foreground">{valuation.compsCount}</p>
-                    <p className="text-xs text-muted-foreground">Comparable sales</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Home details summary */}
-            <Card className="shadow-sm">
-              <CardContent className="pt-5 pb-4">
-                <p className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wide">Your Home</p>
-                <div className="flex flex-wrap gap-3">
-                  {[
-                    { icon: BedDouble, label: `${form.beds} beds` },
-                    { icon: Bath, label: `${form.baths} baths` },
-                    { icon: Maximize2, label: `${form.sqft.toLocaleString()} sq ft` },
-                    { icon: Ruler, label: `${form.lotSize.toLocaleString()} lot` },
-                    { icon: Calendar, label: `Built ${form.yearBuilt}` },
-                  ].map(({ icon: Icon, label }) => (
-                    <div key={label} className="flex items-center gap-1.5 bg-muted/40 px-3 py-1.5 rounded-full text-sm">
-                      <Icon className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span>{label}</span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Comparable homes */}
-            {valuation.comps.length > 0 && (
-              <div>
-                <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-primary" />
-                  Comparable Homes Used
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {valuation.comps.map(comp => (
-                    <Card key={comp.id} className="shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/property/${comp.id}`)}>
-                      <CardContent className="pt-4 pb-3">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <p className="font-semibold text-sm line-clamp-1">{comp.title}</p>
-                            <p className="text-xs text-muted-foreground">{comp.location}</p>
-                          </div>
-                          <p className="text-sm font-bold text-primary ml-2">{fmt(comp.price)}</p>
-                        </div>
-                        <div className="flex gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
-                          <span>{comp.beds} bd</span>
-                          <span>{comp.sqft.toLocaleString()} sqft</span>
-                          <span className="text-primary font-medium">${Math.round(comp.price / comp.sqft)}/sqft</span>
-                          {comp.distanceMiles !== undefined && (
-                            <span className="ml-auto text-green-700 font-medium">{comp.distanceMiles} mi away</span>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Market insights */}
-            <Card className="shadow-sm bg-blue-50/50 border-blue-100">
-              <CardContent className="pt-5 pb-4">
-                <h3 className="text-sm font-semibold mb-3 text-blue-900 flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4" />
-                  Market Insights
-                </h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Avg. days on market</span>
-                    <span className="font-medium">18–32 days</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Seller's market score</span>
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div className="h-full bg-green-500 rounded-full" style={{ width: "72%" }} />
-                      </div>
-                      <span className="font-medium text-green-700">72/100</span>
-                    </div>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">List-to-sale ratio</span>
-                    <span className="font-medium text-green-700">+2.4% above ask</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Your price/sqft vs. market</span>
-                    <span className="font-medium">${valuation.pricePerSqft} (avg)</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="flex gap-3">
-              <Button
-                data-testid="button-step3-back"
-                variant="outline"
-                size="lg"
-                className="gap-2"
-                onClick={() => setStep(2)}
-              >
-                <ChevronLeft className="w-4 h-4" />
-                Back
-              </Button>
-              <Button
-                data-testid="button-step3-next"
-                size="lg"
-                className="flex-1 gap-2"
-                onClick={() => setStep(4)}
-              >
-                Continue to Selling Goals <ChevronRight className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* ── STEP 4: Goals ────────────────────────────────────────── */}
-        {step === 4 && (
+        {/* ── STEP 3: Goals ────────────────────────────────────────── */}
+        {step === 3 && (
           <div className="space-y-5">
             <Card className="shadow-sm">
               <CardContent className="pt-6 space-y-6">
@@ -1102,20 +928,20 @@ export default function Sell() {
 
             <div className="flex gap-3">
               <Button
-                data-testid="button-step4-back"
+                data-testid="button-step3-back"
                 variant="outline"
                 size="lg"
                 className="gap-2"
-                onClick={() => setStep(3)}
+                onClick={() => setStep(2)}
               >
                 <ChevronLeft className="w-4 h-4" />
                 Back
               </Button>
               <Button
-                data-testid="button-step4-next"
+                data-testid="button-step3-next"
                 size="lg"
                 className="flex-1 gap-2"
-                onClick={() => setStep(5)}
+                onClick={() => setStep(4)}
               >
                 Connect with an Agent <ChevronRight className="w-4 h-4" />
               </Button>
@@ -1123,8 +949,8 @@ export default function Sell() {
           </div>
         )}
 
-        {/* ── STEP 5: Contact + Listing Options ────────────────────── */}
-        {step === 5 && (
+        {/* ── STEP 4: Contact + Listing Options ────────────────────── */}
+        {step === 4 && (
           <div className="space-y-5">
             <Card className="shadow-sm">
               <CardContent className="pt-6 space-y-5">
@@ -1350,31 +1176,31 @@ export default function Sell() {
 
             <div className="flex gap-3">
               <Button
-                data-testid="button-step5-back"
+                data-testid="button-step4-back"
                 variant="outline"
                 size="lg"
                 className="gap-2"
-                onClick={() => setStep(4)}
+                onClick={() => setStep(3)}
               >
                 <ChevronLeft className="w-4 h-4" />
                 Back
               </Button>
               <Button
-                data-testid="button-step5-submit"
+                data-testid="button-step4-submit"
                 size="lg"
                 className="flex-1 gap-2"
                 onClick={handleSubmit}
                 disabled={submitMutation.isPending}
               >
-                {submitMutation.isPending ? "Submitting..." : "Submit & Get Connected"}
+                {submitMutation.isPending ? "Submitting..." : "Submit & See My Estimate"}
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
           </div>
         )}
 
-        {/* ── STEP 6: Confirmation ─────────────────────────────────── */}
-        {step === 6 && (
+        {/* ── STEP 5: Estimate + Confirmation ─────────────────────── */}
+        {step === 5 && (
           <div className="space-y-6">
             {/* Success card */}
             <Card className="shadow-md border-green-200 bg-green-50/50 text-center">
@@ -1390,7 +1216,138 @@ export default function Sell() {
               </CardContent>
             </Card>
 
-            {/* Summary card */}
+            {valuation && (
+              <>
+                <Card className="shadow-md border-primary/20 overflow-hidden">
+                  <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-6 pt-6 pb-2">
+                    <p className="text-sm text-muted-foreground font-medium mb-1 uppercase tracking-wide">Estimated Home Value</p>
+                    <div className="flex items-end gap-3 mb-1">
+                      <p className="text-5xl font-bold text-foreground">{fmt(valuation.estimatedMid)}</p>
+                      <Badge className="mb-2 bg-primary/10 text-primary border-primary/20 hover:bg-primary/10">
+                        xucasa Estimate
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Range: <span className="font-medium text-foreground">{fmt(valuation.estimatedLow)}</span>
+                      {" – "}
+                      <span className="font-medium text-foreground">{fmt(valuation.estimatedHigh)}</span>
+                    </p>
+
+                    <div className="relative mb-6">
+                      <div className="h-3 bg-gradient-to-r from-amber-300 via-green-400 to-amber-300 rounded-full" />
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 bg-white border-2 border-primary rounded-full shadow-md" />
+                      <div className="flex justify-between text-xs text-muted-foreground mt-1.5">
+                        <span>{fmt(valuation.estimatedLow)}</span>
+                        <span className="font-semibold text-foreground">{fmt(valuation.estimatedMid)}</span>
+                        <span>{fmt(valuation.estimatedHigh)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <CardContent className="pt-4 pb-5">
+                    <div className="grid grid-cols-3 divide-x text-center">
+                      <div className="px-4">
+                        <p className="text-2xl font-bold text-foreground">${valuation.pricePerSqft}</p>
+                        <p className="text-xs text-muted-foreground">Price per sq ft</p>
+                      </div>
+                      <div className="px-4">
+                        <p className="text-2xl font-bold text-foreground">{form.sqft.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">Sq ft</p>
+                      </div>
+                      <div className="px-4">
+                        <p className="text-2xl font-bold text-foreground">{valuation.compsCount}</p>
+                        <p className="text-xs text-muted-foreground">Comparable sales</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="shadow-sm">
+                  <CardContent className="pt-5 pb-4">
+                    <p className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wide">Your Home</p>
+                    <div className="flex flex-wrap gap-3">
+                      {[
+                        { icon: BedDouble, label: `${form.beds} beds` },
+                        { icon: Bath, label: `${form.baths} baths` },
+                        { icon: Maximize2, label: `${form.sqft.toLocaleString()} sq ft` },
+                        { icon: Ruler, label: `${form.lotSize.toLocaleString()} lot` },
+                        { icon: Calendar, label: `Built ${form.yearBuilt}` },
+                      ].map(({ icon: Icon, label }) => (
+                        <div key={label} className="flex items-center gap-1.5 bg-muted/40 px-3 py-1.5 rounded-full text-sm">
+                          <Icon className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span>{label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {valuation.comps.length > 0 && (
+                  <div>
+                    <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-primary" />
+                      Comparable Homes Used
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {valuation.comps.map(comp => (
+                        <Card key={comp.id} className="shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/property/${comp.id}`)}>
+                          <CardContent className="pt-4 pb-3">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <p className="font-semibold text-sm line-clamp-1">{comp.title}</p>
+                                <p className="text-xs text-muted-foreground">{comp.location}</p>
+                              </div>
+                              <p className="text-sm font-bold text-primary ml-2">{fmt(comp.price)}</p>
+                            </div>
+                            <div className="flex gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
+                              <span>{comp.beds} bd</span>
+                              <span>{comp.sqft.toLocaleString()} sqft</span>
+                              <span className="text-primary font-medium">${Math.round(comp.price / comp.sqft)}/sqft</span>
+                              {comp.distanceMiles !== undefined && (
+                                <span className="ml-auto text-green-700 font-medium">{comp.distanceMiles} mi away</span>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <Card className="shadow-sm bg-blue-50/50 border-blue-100">
+                  <CardContent className="pt-5 pb-4">
+                    <h3 className="text-sm font-semibold mb-3 text-blue-900 flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4" />
+                      Market Insights
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Avg. days on market</span>
+                        <span className="font-medium">18–32 days</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Seller's market score</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="h-full bg-green-500 rounded-full" style={{ width: "72%" }} />
+                          </div>
+                          <span className="font-medium text-green-700">72/100</span>
+                        </div>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">List-to-sale ratio</span>
+                        <span className="font-medium text-green-700">+2.4% above ask</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Your price/sqft vs. market</span>
+                        <span className="font-medium">${valuation.pricePerSqft} (avg)</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
+
             <Card className="shadow-sm">
               <CardContent className="pt-5 pb-5">
                 <h3 className="font-semibold mb-4 text-muted-foreground uppercase tracking-wide text-xs">Your Listing Summary</h3>
@@ -1402,15 +1359,6 @@ export default function Sell() {
                       <p className="text-sm font-medium">{form.fullAddress || "Address provided"}</p>
                     </div>
                   </div>
-                  {valuation && (
-                    <div className="flex items-start gap-3">
-                      <TrendingUp className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-                      <div>
-                        <p className="text-xs text-muted-foreground">Estimated Value</p>
-                        <p className="text-sm font-medium">{fmt(valuation.estimatedMid)} ({fmt(valuation.estimatedLow)} – {fmt(valuation.estimatedHigh)})</p>
-                      </div>
-                    </div>
-                  )}
                   <div className="flex items-start gap-3">
                     <Home className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
                     <div>
@@ -1458,7 +1406,6 @@ export default function Sell() {
 
             <BuyerDemandSection onNavigateToBuyers={() => navigate("/buyers")} />
 
-            {/* CTA buttons */}
             <div className="grid grid-cols-2 gap-3">
               <Button
                 data-testid="button-browse-comps"
