@@ -144,10 +144,12 @@ All API routes are defined in `shared/routes.ts` with typed paths and Zod schema
 4. **Force new token**: Append `?force_new_token=true` to token endpoint (max 50/day, resets at 00:00 UTC)
 
 When activated it:
-- Fetches all active MLS listings via RESO OData (paginated, 200/page, `$expand=Media`)
-- Upserts them into the `properties` table with `source = 'idx'` and a unique `idx_id` (= `ListingKey`)
+- **Geographic filter**: `geo.distance()` OData filter — 50km radius from downtown San Diego (32.7157, -117.1611). Reduces dataset from ~45K all-CA to ~5.5K SD-area listings
+- Fetches active MLS listings via RESO OData (paginated, 200/page, `$expand=Media`)
+- **Batch upserts**: Inserts/updates in batches of 50 (not one-by-one) for significantly faster sync
+- Upserts into the `properties` table with `source = 'idx'` and a unique `idx_id` (= `ListingKey`)
 - Captures listing agent info: name, email, phone, brokerage
-- Marks listings removed from the feed as `status = 'removed'`
+- Marks listings removed from the feed as `status = 'removed'` (batched in chunks of 500)
 - Auto-syncs every 4 hours in the background
 - Falls back to legacy IDX Broker REST API if `IDX_BROKER_API_KEY` is set instead
 

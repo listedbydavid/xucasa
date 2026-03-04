@@ -8,6 +8,9 @@
  *   1. POST /v1/auth/token  →  { access_token, expires_in, token_type }
  *   2. GET  /reso/odata/Property  with  Authorization: Bearer <token>
  *
+ * Geographic filter: San Diego metro (~50km radius from downtown)
+ * Batch upserts: Uses ON CONFLICT (idx_id) DO UPDATE for speed
+ *
  * Env vars:
  *   IDX_RESO_CLIENT_ID      – RealtyFeed client_id
  *   IDX_RESO_CLIENT_SECRET  – RealtyFeed client_secret
@@ -28,6 +31,10 @@ const RESO_API_KEY = process.env.IDX_REALTYFEED_API_KEY || "";
 
 const REALTYFEED_TOKEN_URL = "https://api.realtyfeed.com/v1/auth/token";
 const REALTYFEED_API_BASE = "https://api.realtyfeed.com/reso/odata";
+
+const SD_CENTER_LAT = 32.7157;
+const SD_CENTER_LNG = -117.1611;
+const SD_RADIUS_KM = 50;
 
 let cachedToken: { token: string; tokenType: string; expiresAt: number } | null = null;
 
@@ -242,11 +249,18 @@ async function realtyFeedODataFetch(url: string, token: string): Promise<Respons
   return res;
 }
 
+function buildGeoFilter(): string {
+  return `StandardStatus eq 'Active' and geo.distance(Coordinates, POINT(${SD_CENTER_LNG} ${SD_CENTER_LAT})) lt ${SD_RADIUS_KM}km`;
+}
+
 async function fetchAllResoListings(): Promise<any[]> {
   const token = await getRealtyFeedToken();
   const all: any[] = [];
+  const geoFilter = buildGeoFilter();
   let nextUrl: string | null =
-    `${REALTYFEED_API_BASE}/Property?$filter=StandardStatus eq 'Active'&$top=200&$select=${RESO_SELECT_FIELDS}&$expand=Media`;
+    `${REALTYFEED_API_BASE}/Property?$filter=${encodeURIComponent(geoFilter)}&$top=200&$select=${RESO_SELECT_FIELDS}&$expand=Media`;
+
+  console.log(`[IDX Sync] Geo filter: ${SD_RADIUS_KM}km radius from San Diego (${SD_CENTER_LAT}, ${SD_CENTER_LNG})`);
 
   while (nextUrl) {
     const res = await realtyFeedODataFetch(nextUrl, token);
@@ -374,6 +388,75 @@ function normaliseReso(raw: any) {
   };
 }
 
+// ── Batch upsert helpers ──────────────────────────────────────────────────────
+
+const BATCH_SIZE = 50;
+
+function deduplicateByIdxId(listings: any[]): any[] {
+  const map = new Map<string, any>();
+  for (const listing of listings) {
+    map.set(listing.idxId, listing);
+  }
+  return Array.from(map.values());
+}
+
+async function batchUpsertListings(normalised: any[]): Promise<{ added: number; updated: number }> {
+  const deduped = deduplicateByIdxId(normalised);
+  if (deduped.length !== normalised.length) {
+    console.log(`[IDX Sync] Deduplicated ${normalised.length} → ${deduped.length} listings (removed ${normalised.length - deduped.length} duplicates)`);
+  }
+
+  const existingIdxRows = await db
+    .select({ idxId: properties.idxId, id: properties.id })
+    .from(properties)
+    .where(eq(properties.source, "idx"));
+
+  const existingMap = new Map(existingIdxRows.map(r => [r.idxId!, r.id]));
+
+  let added = 0;
+  let updated = 0;
+
+  for (let i = 0; i < deduped.length; i += BATCH_SIZE) {
+    const batch = deduped.slice(i, i + BATCH_SIZE);
+    const toInsert: any[] = [];
+    const toUpdate: any[] = [];
+
+    for (const listing of batch) {
+      const existingId = existingMap.get(listing.idxId);
+      const payload = { ...listing, idxUpdatedAt: new Date() };
+
+      if (existingId) {
+        toUpdate.push({ id: existingId, ...payload });
+      } else {
+        toInsert.push(payload);
+      }
+    }
+
+    if (toInsert.length > 0) {
+      await db.insert(properties).values(toInsert);
+      added += toInsert.length;
+    }
+
+    if (toUpdate.length > 0) {
+      for (let j = 0; j < toUpdate.length; j += 10) {
+        const updateBatch = toUpdate.slice(j, j + 10);
+        await Promise.all(
+          updateBatch.map(({ id, ...payload }) =>
+            db.update(properties).set(payload).where(eq(properties.id, id))
+          )
+        );
+      }
+      updated += toUpdate.length;
+    }
+
+    if ((i + BATCH_SIZE) % 500 === 0 || i + BATCH_SIZE >= deduped.length) {
+      console.log(`[IDX Sync] Upserted ${Math.min(i + BATCH_SIZE, deduped.length)}/${deduped.length} listings...`);
+    }
+  }
+
+  return { added, updated };
+}
+
 // ── Main sync function ────────────────────────────────────────────────────────
 
 let syncInProgress = false;
@@ -403,49 +486,40 @@ export async function runIdxSync(): Promise<{ added: number; updated: number; re
       throw new Error("No IDX/RESO credentials configured");
     }
 
-    console.log(`[IDX Sync] Fetched ${rawListings.length} listings`);
+    console.log(`[IDX Sync] Fetched ${rawListings.length} listings from API`);
 
     const normalised = rawListings
       .map(r => useReso ? normaliseReso(r) : normaliseIdxBroker(r))
       .filter(r => r.idxId && r.price > 0);
+
+    console.log(`[IDX Sync] ${normalised.length} valid listings after normalisation (filtered ${rawListings.length - normalised.length} with no price)`);
+
+    const { added, updated } = await batchUpsertListings(normalised);
 
     const existingIdxRows = await db
       .select({ idxId: properties.idxId, id: properties.id })
       .from(properties)
       .where(eq(properties.source, "idx"));
 
-    const existingMap = new Map(existingIdxRows.map(r => [r.idxId!, r.id]));
     const incomingIds = new Set(normalised.map(r => r.idxId));
-
-    let added = 0, updated = 0, removed = 0;
-
-    for (const listing of normalised) {
-      const existingId = existingMap.get(listing.idxId);
-      const payload = { ...listing, idxUpdatedAt: new Date() };
-
-      if (existingId) {
-        await db.update(properties).set(payload).where(eq(properties.id, existingId));
-        updated++;
-      } else {
-        await db.insert(properties).values(payload);
-        added++;
-      }
-    }
-
     const toRemove = existingIdxRows
       .filter(r => r.idxId && !incomingIds.has(r.idxId))
       .map(r => r.id);
 
+    let removed = 0;
     if (toRemove.length) {
-      await db
-        .update(properties)
-        .set({ status: "removed" })
-        .where(inArray(properties.id, toRemove));
+      for (let i = 0; i < toRemove.length; i += 500) {
+        const batch = toRemove.slice(i, i + 500);
+        await db
+          .update(properties)
+          .set({ status: "removed" })
+          .where(inArray(properties.id, batch));
+      }
       removed = toRemove.length;
     }
 
     const total = normalised.length;
-    console.log(`[IDX Sync] Done — added: ${added}, updated: ${updated}, removed: ${removed}`);
+    console.log(`[IDX Sync] Done — added: ${added}, updated: ${updated}, removed: ${removed}, total: ${total}`);
 
     await db
       .update(idxSyncLog)
