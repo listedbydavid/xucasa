@@ -686,6 +686,27 @@ export default function Sell() {
               </CardContent>
             </Card>
 
+            <div className="flex gap-3">
+              <Button
+                data-testid="button-step2-back"
+                variant="outline"
+                size="lg"
+                className="gap-2"
+                onClick={() => setStep(1)}
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Back
+              </Button>
+              <Button
+                data-testid="button-step2-next"
+                size="lg"
+                className="flex-1 gap-2"
+                onClick={() => setStep(3)}
+              >
+                Continue <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+
             {/* Pitch to Buyers CTA */}
             {!pitchSent ? (
               <Card className="shadow-sm border-emerald-200 bg-gradient-to-r from-emerald-50 to-green-50 overflow-hidden">
@@ -818,27 +839,6 @@ export default function Sell() {
                 </CardContent>
               </Card>
             )}
-
-            <div className="flex gap-3">
-              <Button
-                data-testid="button-step2-back"
-                variant="outline"
-                size="lg"
-                className="gap-2"
-                onClick={() => setStep(1)}
-              >
-                <ChevronLeft className="w-4 h-4" />
-                Back
-              </Button>
-              <Button
-                data-testid="button-step2-next"
-                size="lg"
-                className="flex-1 gap-2"
-                onClick={() => setStep(3)}
-              >
-                Continue <ChevronRight className="w-4 h-4" />
-              </Button>
-            </div>
           </div>
         )}
 
