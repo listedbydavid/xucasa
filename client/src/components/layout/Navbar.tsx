@@ -3,13 +3,11 @@ import { useAuth } from "@/hooks/use-auth";
 import { Home, Search, User, LogOut, Briefcase, Layers, TrendingUp, Users, Shield, Menu, X } from "lucide-react";
 import { useState } from "react";
 
-const ADMIN_USER_ID = "55534280";
-
 export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const isAdmin = isAuthenticated && user?.id === ADMIN_USER_ID;
+  const isAdmin = isAuthenticated && (user as any)?.isAdmin;
 
   const navLink = (href: string, icon: any, label: string, testId?: string) => {
     const Icon = icon;
@@ -97,14 +95,16 @@ export function Navbar() {
           ) : (
             <div className="flex items-center gap-3">
               <a 
-                href="/api/login" 
+                href="/api/auth/google" 
                 className="text-sm font-medium text-foreground hover:text-primary transition-colors px-2"
+                data-testid="link-login"
               >
                 Log in
               </a>
               <a 
-                href="/api/login" 
+                href="/api/auth/google" 
                 className="px-5 py-2.5 text-sm font-semibold bg-foreground text-background hover:bg-primary hover:text-primary-foreground rounded-full transition-all shadow-sm hover:shadow active:scale-95"
+                data-testid="link-signup"
               >
                 Sign up
               </a>

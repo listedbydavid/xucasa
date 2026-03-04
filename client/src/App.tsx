@@ -36,7 +36,7 @@ function Router() {
 
 function Footer() {
   const { user, isAuthenticated } = useAuth();
-  const isAdmin = isAuthenticated && user?.id === "55534280";
+  const isAdmin = isAuthenticated && (user as any)?.isAdmin;
 
   return (
     <footer className="border-t border-border/40 bg-muted/20 py-6 px-4">

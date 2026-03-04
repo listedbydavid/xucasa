@@ -42,6 +42,17 @@ function openCenteredPopup(url: string, title: string, w: number, h: number) {
   return window.open(url, title, `width=${w},height=${h},left=${left},top=${top},scrollbars=yes,resizable=yes`);
 }
 
+function GoogleIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.96 10.96 0 0 0 1 12c0 1.77.42 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+    </svg>
+  );
+}
+
 export function AuthPromptModal({ feature, onClose }: AuthPromptModalProps) {
   const { icon: FeatureIcon, headline, subtext } = FEATURE_COPY[feature];
   const [step, setStep] = useState<Step>("wizard");
@@ -53,13 +64,10 @@ export function AuthPromptModal({ feature, onClose }: AuthPromptModalProps) {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   };
 
-  // Poll for popup completion
   const startPolling = (popup: Window) => {
     timerRef.current = setInterval(async () => {
-      // Popup was closed by the user without completing auth
       if (popup.closed) {
         clearTimer();
-        // Check if auth succeeded anyway (e.g. they finished before closing)
         const res = await fetch("/api/auth/user");
         if (res.ok) {
           window.location.reload();
@@ -70,7 +78,6 @@ export function AuthPromptModal({ feature, onClose }: AuthPromptModalProps) {
         return;
       }
 
-      // Check if popup landed back on our domain (auth finished, redirected to "/")
       try {
         const href = popup.location.href;
         if (href && !href.includes("/api/") && href.includes(window.location.hostname)) {
@@ -79,17 +86,16 @@ export function AuthPromptModal({ feature, onClose }: AuthPromptModalProps) {
           window.location.reload();
         }
       } catch {
-        // Still on the OAuth provider (cross-origin) — keep waiting
+        // Still on OAuth provider (cross-origin)
       }
     }, 600);
   };
 
-  const handleSignIn = () => {
+  const handleGoogleSignIn = () => {
     setAuthFailed(false);
-    const popup = openCenteredPopup("/api/login", "xucasa-auth", 520, 640);
+    const popup = openCenteredPopup("/api/auth/google", "xucasa-auth", 520, 640);
     if (!popup) {
-      // Popup blocked — fall back to redirect
-      window.location.href = "/api/login";
+      window.location.href = "/api/auth/google";
       return;
     }
     popupRef.current = popup;
@@ -100,7 +106,7 @@ export function AuthPromptModal({ feature, onClose }: AuthPromptModalProps) {
   const handleResend = () => {
     if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
     clearTimer();
-    handleSignIn();
+    handleGoogleSignIn();
   };
 
   useEffect(() => () => clearTimer(), []);
@@ -152,10 +158,8 @@ export function AuthPromptModal({ feature, onClose }: AuthPromptModalProps) {
           <X className="w-4 h-4" aria-hidden="true" />
         </button>
 
-        {/* ── WIZARD STEP ── */}
         {step === "wizard" && (
           <>
-            {/* Header band */}
             <div className="bg-primary/5 border-b border-border px-8 pt-8 pb-6 text-center">
               <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <FeatureIcon className="w-7 h-7 text-primary" />
@@ -164,7 +168,6 @@ export function AuthPromptModal({ feature, onClose }: AuthPromptModalProps) {
               <p className="text-sm text-muted-foreground mt-1">{subtext}</p>
             </div>
 
-            {/* Benefits */}
             <div className="px-8 py-6 space-y-3">
               {authFailed && (
                 <p className="text-xs text-center text-amber-600 bg-amber-50 border border-amber-200 rounded-lg py-2 px-3">
@@ -185,14 +188,14 @@ export function AuthPromptModal({ feature, onClose }: AuthPromptModalProps) {
               ))}
             </div>
 
-            {/* CTA */}
             <div className="px-8 pb-8 space-y-3">
               <button
-                onClick={handleSignIn}
-                className="w-full bg-primary text-white py-3 rounded-xl font-bold text-sm hover:bg-primary/90 active:scale-[.98] transition-all"
-                data-testid="button-auth-prompt-login"
+                onClick={handleGoogleSignIn}
+                className="w-full flex items-center justify-center gap-3 bg-white border-2 border-border hover:border-primary/30 text-foreground py-3 rounded-xl font-semibold text-sm hover:shadow-md active:scale-[.98] transition-all"
+                data-testid="button-auth-google"
               >
-                Create free account
+                <GoogleIcon className="w-5 h-5" />
+                Continue with Google
               </button>
               <button
                 onClick={handleClose}
@@ -201,17 +204,10 @@ export function AuthPromptModal({ feature, onClose }: AuthPromptModalProps) {
               >
                 Maybe later
               </button>
-              <p className="text-center text-xs text-muted-foreground">
-                Already have an account?{" "}
-                <button onClick={handleSignIn} className="text-primary font-bold hover:underline">
-                  Sign in
-                </button>
-              </p>
             </div>
           </>
         )}
 
-        {/* ── WAITING STEP ── */}
         {step === "waiting" && (
           <div className="px-8 py-12 text-center">
             <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-5">
@@ -221,7 +217,7 @@ export function AuthPromptModal({ feature, onClose }: AuthPromptModalProps) {
               Finish signing in
             </h2>
             <p className="text-sm text-muted-foreground mb-8 leading-relaxed max-w-xs mx-auto">
-              Complete sign-in in the window that just opened. This will update automatically once you're done.
+              Complete sign-in with Google in the window that just opened. This will update automatically once you're done.
             </p>
             <button
               onClick={handleResend}

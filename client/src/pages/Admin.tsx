@@ -12,7 +12,6 @@ import {
   User, ExternalLink,
 } from "lucide-react";
 
-const ADMIN_USER_ID = "55534280";
 
 type SellerPitch = {
   id: number;
@@ -217,7 +216,7 @@ export default function Admin() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals" | "buyers">("overview");
 
-  const isAdminUser = isAuthenticated && user?.id === ADMIN_USER_ID;
+  const isAdminUser = isAuthenticated && (user as any)?.isAdmin;
 
   const { data: stats } = useQuery<AdminStats>({
     queryKey: ["/api/admin/stats"],

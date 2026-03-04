@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
+import { authStorage } from "./replit_integrations/auth/storage";
 import { db } from "./db";
 import { buyerMatches, buyerProfiles, sellLeads, users } from "@shared/schema";
 import { eq, desc, sql } from "drizzle-orm";
@@ -657,10 +658,13 @@ export async function registerRoutes(
 
   // ── Seller Pitches ─────────────────────────────────────────────────────────
 
-  const ADMIN_USER_ID = "55534280";
-
-  const isAdmin = (req: any, res: any, next: any) => {
-    if (!req.user?.claims?.sub || req.user.claims.sub !== ADMIN_USER_ID) {
+  const isAdmin = async (req: any, res: any, next: any) => {
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (!adminEmail || !req.user?.claims?.sub) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    const user = await authStorage.getUser(req.user.claims.sub);
+    if (!user?.email || user.email.toLowerCase() !== adminEmail.toLowerCase()) {
       return res.status(403).json({ message: "Admin access required" });
     }
     next();
