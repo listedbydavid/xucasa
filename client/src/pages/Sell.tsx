@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { useJsApiLoader, Autocomplete } from "@react-google-maps/api";
+import { Autocomplete } from "@react-google-maps/api";
+import { useGoogleMaps } from "@/hooks/use-google-maps";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
@@ -113,7 +114,6 @@ function BuyerDemandSection({ onNavigateToBuyers }: { onNavigateToBuyers: () => 
   );
 }
 
-const LIBRARIES: ("places" | "marker")[] = ["places", "marker"];
 
 interface FormData {
   fullAddress: string;
@@ -265,10 +265,7 @@ export default function Sell() {
     sellerAgentEmail: "",
   });
 
-  const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    libraries: LIBRARIES,
-  });
+  const { isLoaded } = useGoogleMaps();
 
   const set = (key: keyof FormData, value: any) =>
     setForm(f => ({ ...f, [key]: value }));

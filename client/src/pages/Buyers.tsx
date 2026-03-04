@@ -40,14 +40,12 @@ function formatBudget(amount: number) {
   return `$${(amount / 1000).toFixed(0)}K`;
 }
 
-function LockedField({ icon: Icon, label }: { icon: typeof Bed; label: string }) {
+function LockedValue({ icon: Icon, blurText }: { icon: typeof Bed; blurText: string }) {
   return (
-    <div className="flex items-center gap-1.5 text-sm text-muted-foreground/50">
-      <Icon className="w-4 h-4" />
-      <span className="flex items-center gap-1">
-        <Lock className="w-3 h-3" />
-        {label}
-      </span>
+    <div className="flex items-center gap-1.5 text-sm">
+      <Icon className="w-4 h-4 text-muted-foreground" />
+      <span className="text-muted-foreground/40 blur-[3px] select-none" aria-hidden="true">{blurText}</span>
+      <Lock className="w-3 h-3 text-muted-foreground/40 -ml-1" />
     </div>
   );
 }
@@ -59,16 +57,19 @@ function LockedPills({ icon: Icon, label, color }: { icon: typeof Heart; label: 
     red: "bg-red-50/60 text-red-400 border-red-200/50",
   };
   const labelColors = { green: "text-green-400", blue: "text-blue-400", red: "text-red-400" };
+  const blurPills = { green: ["Garage", "Updated"], blue: ["Pool", "View"], red: ["Busy Road", "HOA"] };
   return (
     <div>
       <div className={`flex items-center gap-1 text-xs font-semibold ${labelColors[color]} mb-1`}>
         <Icon className="w-3.5 h-3.5" /> {label}
       </div>
       <div className="flex flex-wrap gap-1">
-        <span className={`px-2 py-0.5 text-xs rounded-full border ${colors[color]} flex items-center gap-1`}>
-          <Lock className="w-2.5 h-2.5" /> Unlock
-        </span>
-        <span className={`px-2 py-0.5 text-xs rounded-full border ${colors[color]} flex items-center gap-1`}>
+        {blurPills[color].map((text, i) => (
+          <span key={i} className={`px-2 py-0.5 text-xs rounded-full border ${colors[color]} flex items-center gap-1 blur-[3px] select-none`} aria-hidden="true">
+            {text}
+          </span>
+        ))}
+        <span className="px-2 py-0.5 text-xs rounded-full border border-muted-foreground/20 text-muted-foreground/50 bg-muted/30 flex items-center gap-1">
           <Lock className="w-2.5 h-2.5" /> Unlock
         </span>
       </div>
@@ -93,7 +94,7 @@ function BuyerCard({ profile, onPitch }: { profile: BuyerProfileWithUser; onPitc
   return (
     <div
       data-testid={`card-buyer-${profile.id}`}
-      className="bg-white rounded-2xl border border-border/60 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col"
+      className="bg-white rounded-2xl border border-border/60 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col h-full"
     >
       <div className="p-5 flex-1 flex flex-col">
         <div className="flex items-start justify-between mb-3">
@@ -137,7 +138,7 @@ function BuyerCard({ profile, onPitch }: { profile: BuyerProfileWithUser; onPitc
                   : `Up to ${profile.maxBeds} beds`}
             </div>
           ) : (
-            <LockedField icon={Bed} label="Beds" />
+            <LockedValue icon={Bed} blurText="3-4 beds" />
           )}
           {hasBaths ? (
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -145,7 +146,7 @@ function BuyerCard({ profile, onPitch }: { profile: BuyerProfileWithUser; onPitc
               {profile.minBaths}+ baths
             </div>
           ) : (
-            <LockedField icon={Bath} label="Baths" />
+            <LockedValue icon={Bath} blurText="2+ baths" />
           )}
           {hasSqft ? (
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -157,7 +158,7 @@ function BuyerCard({ profile, onPitch }: { profile: BuyerProfileWithUser; onPitc
                   : `Up to ${profile.maxSqft!.toLocaleString()} sqft`}
             </div>
           ) : (
-            <LockedField icon={Ruler} label="Sq Ft" />
+            <LockedValue icon={Ruler} blurText="1,800 sqft" />
           )}
           {hasTimeline ? (
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -165,7 +166,7 @@ function BuyerCard({ profile, onPitch }: { profile: BuyerProfileWithUser; onPitc
               {profile.moveInTimeline}
             </div>
           ) : (
-            <LockedField icon={Clock} label="Timeline" />
+            <LockedValue icon={Clock} blurText="1-3 months" />
           )}
         </div>
 
@@ -181,9 +182,15 @@ function BuyerCard({ profile, onPitch }: { profile: BuyerProfileWithUser; onPitc
             </div>
           </div>
         ) : (
-          <div className="flex items-center gap-1.5 mb-3 text-muted-foreground/50">
-            <MapPin className="w-4 h-4 flex-shrink-0" />
-            <span className="flex items-center gap-1 text-xs"><Lock className="w-3 h-3" /> Preferred cities hidden</span>
+          <div className="flex items-center gap-1.5 mb-3">
+            <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <div className="flex flex-wrap gap-1">
+              <span className="px-2 py-0.5 bg-primary/5 text-primary/30 text-xs rounded-full font-medium blur-[3px] select-none" aria-hidden="true">San Diego</span>
+              <span className="px-2 py-0.5 bg-primary/5 text-primary/30 text-xs rounded-full font-medium blur-[3px] select-none" aria-hidden="true">La Jolla</span>
+              <span className="px-2 py-0.5 bg-muted/30 text-muted-foreground/50 text-xs rounded-full flex items-center gap-0.5">
+                <Lock className="w-2.5 h-2.5" /> Unlock
+              </span>
+            </div>
           </div>
         )}
 
@@ -197,19 +204,23 @@ function BuyerCard({ profile, onPitch }: { profile: BuyerProfileWithUser; onPitc
           </div>
         ) : (
           <div className="flex flex-wrap gap-1 mb-3">
-            <span className="px-2 py-0.5 bg-muted/50 text-muted-foreground/50 text-xs rounded-full flex items-center gap-1">
-              <Lock className="w-2.5 h-2.5" /> Home type private
+            <span className="px-2 py-0.5 bg-muted/50 text-muted-foreground/30 text-xs rounded-full blur-[3px] select-none" aria-hidden="true">Single Family</span>
+            <span className="px-2 py-0.5 bg-muted/30 text-muted-foreground/50 text-xs rounded-full flex items-center gap-0.5">
+              <Lock className="w-2.5 h-2.5" /> Unlock
             </span>
           </div>
         )}
 
-        {hasBio ? (
-          <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{profile.bio}</p>
-        ) : (
-          <p className="text-sm text-muted-foreground/50 line-clamp-2 mb-3 flex items-center gap-1">
-            <Lock className="w-3 h-3 flex-shrink-0" /> Bio not shared — upgrade to view
-          </p>
-        )}
+        <div className="min-h-[2.75rem] mb-3">
+          {hasBio ? (
+            <p className="text-sm text-muted-foreground line-clamp-2">{profile.bio}</p>
+          ) : (
+            <div>
+              <p className="text-sm text-muted-foreground/30 blur-[3px] select-none line-clamp-2" aria-hidden="true">Looking for a move-in ready home in a great neighborhood with good schools nearby.</p>
+              <p className="text-xs text-muted-foreground/50 flex items-center gap-1 mt-0.5"><Lock className="w-3 h-3" /> Upgrade to view full bio</p>
+            </div>
+          )}
+        </div>
 
         <button
           onClick={() => setExpanded(!expanded)}
@@ -276,7 +287,7 @@ function BuyerCard({ profile, onPitch }: { profile: BuyerProfileWithUser; onPitc
                 Min lot: {profile.minLotSize.toLocaleString()} sqft
               </div>
             ) : (
-              <LockedField icon={TreePine} label="Lot size" />
+              <LockedValue icon={TreePine} blurText="5,000 sqft" />
             )}
           </div>
         )}

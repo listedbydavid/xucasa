@@ -22,10 +22,8 @@ import {
   UserPlus, CalendarDays, Mail, CheckCircle2, AlertCircle,
   FolderPlus, FolderOpen, MoreHorizontal, Pencil, List,
 } from "lucide-react";
-import { useJsApiLoader, Autocomplete } from "@react-google-maps/api";
-
-const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
-const LIBRARIES: ('places')[] = ['places'];
+import { Autocomplete } from "@react-google-maps/api";
+import { useGoogleMaps } from "@/hooks/use-google-maps";
 
 type Section = "profile" | "myhome" | "favorites" | "searches" | "history" | "agent" | "openhouses";
 
@@ -339,7 +337,7 @@ function MyHomeSection() {
 }
 
 function AddHomeForm({ onSubmit, onCancel, isPending }: { onSubmit: (d: any) => void; onCancel: () => void; isPending: boolean }) {
-  const { isLoaded } = useJsApiLoader({ googleMapsApiKey: MAPS_KEY, libraries: LIBRARIES });
+  const { isLoaded } = useGoogleMaps();
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const [form, setForm] = useState({
     nickname: "", addressStreetNumber: "", addressStreetName: "", addressUnitNumber: "",

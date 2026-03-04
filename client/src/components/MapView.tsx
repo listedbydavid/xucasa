@@ -1,9 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { GoogleMap, useJsApiLoader, InfoWindow, StreetViewPanorama } from '@react-google-maps/api';
+import { GoogleMap, InfoWindow, StreetViewPanorama } from '@react-google-maps/api';
 import { Property } from '@shared/schema';
 import { EyeOff } from 'lucide-react';
-
-const GOOGLE_MAPS_LIBRARIES: ('places' | 'marker')[] = ['places', 'marker'];
+import { useGoogleMaps } from '@/hooks/use-google-maps';
 
 interface MapViewProps {
   properties: Property[];
@@ -12,11 +11,7 @@ interface MapViewProps {
 }
 
 export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }: MapViewProps) {
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
-    libraries: GOOGLE_MAPS_LIBRARIES,
-    mapIds: ['real_estate_map'],
-  });
+  const { isLoaded, loadError } = useGoogleMaps();
 
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [selectedPosition, setSelectedPosition] = useState<google.maps.LatLngLiteral | null>(null);

@@ -7,11 +7,9 @@ import { useAddSearchHistory } from "@/hooks/use-client-dashboard";
 import { useAuth } from "@/hooks/use-auth";
 import { Search as SearchIcon, MapPin, Map, BookmarkPlus, X, Check } from "lucide-react";
 import { MapView } from "@/components/MapView";
-import { useJsApiLoader } from "@react-google-maps/api";
+import { useGoogleMaps } from "@/hooks/use-google-maps";
 import queryString from "query-string";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
-
-const LIBRARIES: ('places' | 'marker')[] = ['places', 'marker'];
 
 export default function Search() {
   const [location] = useLocation();
@@ -32,11 +30,7 @@ export default function Search() {
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
-  const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
-    libraries: LIBRARIES,
-    mapIds: ['real_estate_map'],
-  });
+  const { isLoaded } = useGoogleMaps();
 
   // Initialize Places Autocomplete once API is ready
   useEffect(() => {

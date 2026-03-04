@@ -4,15 +4,14 @@ import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty 
 import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck } from "lucide-react";
 import { IdxSyncPanel } from "@/components/IdxSyncPanel";
 import type { PropertyResponse, CreatePropertyRequest } from "@shared/schema";
-import { useJsApiLoader, Autocomplete } from "@react-google-maps/api";
+import { Autocomplete } from "@react-google-maps/api";
+import { useGoogleMaps } from "@/hooks/use-google-maps";
 import { useAgentClients, useClientFavorites, useClientSearches, useOpenHouses } from "@/hooks/use-client-dashboard";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 type AgentTab = "listings" | "clients" | "openhouses" | "idx";
-
-const GOOGLE_MAPS_LIBRARIES: ('places' | 'geometry')[] = ['places'];
 
 const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
@@ -798,10 +797,7 @@ function PropertyFormModal({
   onSubmit: (data: any) => void;
   isPending: boolean;
 }) {
-  const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: MAPS_KEY,
-    libraries: GOOGLE_MAPS_LIBRARIES,
-  });
+  const { isLoaded } = useGoogleMaps();
 
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
