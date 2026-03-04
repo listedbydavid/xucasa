@@ -135,20 +135,35 @@ All API routes are defined in `shared/routes.ts` with typed paths and Zod schema
 | `vite` | Frontend build tool and dev server |
 | `memoizee` | Memoize OIDC config fetch |
 
-### IDX Broker / MLS Sync
+### RealtyFeed / MLS Sync
 
-`server/idxSync.ts` is a complete IDX Broker REST API sync engine. When activated it:
-- Fetches all active MLS listings (paginated, 500/page)
-- Upserts them into the `properties` table with `source = 'idx'` and a unique `idx_id`
+`server/idxSync.ts` implements the RealtyFeed (Realtyna) RESO OData sync engine. Auth flow:
+1. **Token**: `POST https://api.realtyfeed.com/v1/auth/token` with `client_id` + `client_secret` → returns JWT `access_token` (24h TTL)
+2. **Data**: `GET https://api.realtyfeed.com/reso/odata/Property` with `Authorization: Bearer <token>`, optional `x-api-key`, `Origin`, `Referer` headers set to API key value
+3. **Token caching**: 24h with 60s early refresh, auto-retry on 401/403 with forced token refresh
+4. **Force new token**: Append `?force_new_token=true` to token endpoint (max 50/day, resets at 00:00 UTC)
+
+When activated it:
+- Fetches all active MLS listings via RESO OData (paginated, 200/page, `$expand=Media`)
+- Upserts them into the `properties` table with `source = 'idx'` and a unique `idx_id` (= `ListingKey`)
+- Captures listing agent info: name, email, phone, brokerage
 - Marks listings removed from the feed as `status = 'removed'`
 - Auto-syncs every 4 hours in the background
-- Also supports RESO Web API (OAuth2 / OData) as an alternative
+- Falls back to legacy IDX Broker REST API if `IDX_BROKER_API_KEY` is set instead
+
+**RealtyFeed API notes:**
+- `$select=ALL` returns all available fields (default returns only important fields)
+- `$expand=Media,OpenHouse,Member,Office` pulls related resources
+- `$filter` supports OData operators: eq, ne, gt, ge, lt, le, and, or, in, contains(), geo.distance(), geo.intersects()
+- `@odata.nextLink` for pagination, `@odata.count` for total record count
+- RealtyFeed Output (`/realtyfeed/odata/`) is deprecated (Sep 2025); use RESO Output (`/reso/odata/`)
+- Origin/IP restrictions configured in RealtyFeed dashboard may cause 403; tokens blocked by 403 are unusable for 1 hour
 
 **To activate:**
-1. Sign up at idxbroker.com and get MLS-approved
-2. Copy API key from: Account → API → Access Key
-3. Add `IDX_BROKER_API_KEY` as an environment secret
-4. Server auto-syncs on startup and every 4 hours
+1. Set `IDX_RESO_CLIENT_ID` and `IDX_RESO_CLIENT_SECRET` (from RealtyFeed dashboard)
+2. Set `IDX_REALTYFEED_API_KEY` (optional, for x-api-key/Origin/Referer headers)
+3. Configure allowed origins/IPs in RealtyFeed dashboard API Key Settings
+4. Server auto-syncs on startup (30s delay) and every 4 hours
 
 **Admin UI:** The IDX Sync Panel is visible at the bottom of the Agent Dashboard (`/agent`).
 
@@ -159,13 +174,14 @@ All API routes are defined in `shared/routes.ts` with typed paths and Zod schema
 ### Environment Variables Required
 
 ```
-DATABASE_URL          # PostgreSQL connection string
-SESSION_SECRET        # Secret for signing session cookies
-GOOGLE_CLIENT_ID      # Google OAuth 2.0 client ID
-GOOGLE_CLIENT_SECRET  # Google OAuth 2.0 client secret
-ADMIN_EMAIL           # Admin user email for admin panel access
+DATABASE_URL              # PostgreSQL connection string
+SESSION_SECRET            # Secret for signing session cookies
+GOOGLE_CLIENT_ID          # Google OAuth 2.0 client ID
+GOOGLE_CLIENT_SECRET      # Google OAuth 2.0 client secret
+ADMIN_EMAIL               # Admin user email for admin panel access
 VITE_GOOGLE_MAPS_API_KEY  # Google Maps JS API key (client-side)
-IDX_BROKER_API_KEY    # (optional) IDX Broker API key — activates MLS sync
-IDX_RESO_URL          # (optional) RESO Web API base URL — alternative to IDX Broker
-IDX_RESO_TOKEN        # (optional) RESO Web API Bearer token
+IDX_RESO_CLIENT_ID        # RealtyFeed client_id (OAuth2)
+IDX_RESO_CLIENT_SECRET    # RealtyFeed client_secret (OAuth2)
+IDX_REALTYFEED_API_KEY    # (optional) RealtyFeed API key for x-api-key/Origin/Referer headers
+IDX_BROKER_API_KEY        # (optional, legacy) IDX Broker API key — fallback MLS sync
 ```

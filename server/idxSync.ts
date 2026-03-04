@@ -28,7 +28,6 @@ const RESO_API_KEY = process.env.IDX_REALTYFEED_API_KEY || "";
 
 const REALTYFEED_TOKEN_URL = "https://api.realtyfeed.com/v1/auth/token";
 const REALTYFEED_API_BASE = "https://api.realtyfeed.com/reso/odata";
-const REALTYFEED_ORIGIN = "https://www.xucasa.com";
 
 let cachedToken: { token: string; tokenType: string; expiresAt: number } | null = null;
 
@@ -104,10 +103,11 @@ function buildHeaders(token: string): Record<string, string> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     Accept: "application/json",
-    Origin: REALTYFEED_ORIGIN,
   };
   if (RESO_API_KEY) {
     headers["x-api-key"] = RESO_API_KEY;
+    headers["Origin"] = RESO_API_KEY;
+    headers["Referer"] = RESO_API_KEY;
   }
   return headers;
 }
