@@ -159,10 +159,10 @@ export default function Swipe() {
         </div>
 
         {/* Header */}
-        <div className="w-full max-w-sm flex items-center justify-between px-5 pt-4 pb-2">
+        <div className="w-full max-w-sm md:max-w-lg lg:max-w-2xl xl:max-w-3xl flex items-center justify-between px-5 pt-4 pb-2">
           <div className="flex items-center gap-2">
             <Flame className="w-5 h-5 text-primary" />
-            <h1 className="font-display font-bold text-lg">My Feed</h1>
+            <h1 className="font-display font-bold text-lg lg:text-xl">My Feed</h1>
           </div>
           <span className="text-xs font-bold text-muted-foreground bg-muted px-3 py-1 rounded-full">
             {Math.max(0, activeProps.length - currentIndex)} remaining
@@ -171,13 +171,13 @@ export default function Swipe() {
 
         {/* Hint */}
         {!done && (
-          <p className="text-xs text-muted-foreground mb-2">
+          <p className="text-xs text-muted-foreground mb-2 lg:mb-3">
             ← Pass &nbsp;·&nbsp; ♥ Like → &nbsp;·&nbsp; ↑↓ Arrow keys
           </p>
         )}
 
         {/* Card stack area */}
-        <div className="relative flex-1 w-full max-w-sm mx-auto px-4">
+        <div className="relative flex-1 w-full max-w-sm md:max-w-lg lg:max-w-2xl xl:max-w-3xl mx-auto px-4">
 
           {done && (
             <div className="h-full flex flex-col items-center justify-center text-center space-y-4">
@@ -296,7 +296,7 @@ export default function Swipe() {
                       className="absolute top-10 left-5 rotate-[-22deg] pointer-events-none"
                       style={{ opacity: likeOpacity }}
                     >
-                      <span className="border-4 border-green-400 text-green-400 rounded-xl px-3 py-1.5 font-black text-2xl tracking-widest uppercase">
+                      <span className="border-4 border-green-400 text-green-400 rounded-xl px-3 py-1.5 lg:px-5 lg:py-2.5 font-black text-2xl lg:text-4xl tracking-widest uppercase">
                         LIKE ♥
                       </span>
                     </div>
@@ -305,7 +305,7 @@ export default function Swipe() {
                       className="absolute top-10 right-5 rotate-[22deg] pointer-events-none"
                       style={{ opacity: passOpacity }}
                     >
-                      <span className="border-4 border-red-400 text-red-400 rounded-xl px-3 py-1.5 font-black text-2xl tracking-widest uppercase">
+                      <span className="border-4 border-red-400 text-red-400 rounded-xl px-3 py-1.5 lg:px-5 lg:py-2.5 font-black text-2xl lg:text-4xl tracking-widest uppercase">
                         NOPE ✕
                       </span>
                     </div>
@@ -329,18 +329,18 @@ export default function Swipe() {
                   </>
                 )}
 
-                <div className="absolute bottom-0 left-0 right-0 p-5 text-white pointer-events-none">
-                  <div className="font-display font-bold text-2xl leading-tight">
+                <div className="absolute bottom-0 left-0 right-0 p-5 lg:p-8 text-white pointer-events-none">
+                  <div className="font-display font-bold text-2xl lg:text-4xl leading-tight">
                     ${prop.price.toLocaleString()}
                   </div>
-                  <div className="flex items-center gap-1 text-white/75 text-sm mt-0.5 mb-2">
-                    <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                  <div className="flex items-center gap-1 text-white/75 text-sm lg:text-base mt-0.5 mb-2">
+                    <MapPin className="w-3.5 h-3.5 lg:w-4 lg:h-4 flex-shrink-0" />
                     <span className="truncate">{prop.location}</span>
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-white/60 font-medium">
-                    <span className="flex items-center gap-1"><BedDouble className="w-3.5 h-3.5" />{prop.beds} bd</span>
-                    <span className="flex items-center gap-1"><Bath className="w-3.5 h-3.5" />{prop.baths} ba</span>
-                    <span className="flex items-center gap-1"><Maximize className="w-3.5 h-3.5" />{prop.sqft.toLocaleString()} sqft</span>
+                  <div className="flex items-center gap-4 lg:gap-6 text-xs lg:text-sm text-white/60 font-medium">
+                    <span className="flex items-center gap-1"><BedDouble className="w-3.5 h-3.5 lg:w-4 lg:h-4" />{prop.beds} bd</span>
+                    <span className="flex items-center gap-1"><Bath className="w-3.5 h-3.5 lg:w-4 lg:h-4" />{prop.baths} ba</span>
+                    <span className="flex items-center gap-1"><Maximize className="w-3.5 h-3.5 lg:w-4 lg:h-4" />{prop.sqft.toLocaleString()} sqft</span>
                   </div>
                 </div>
               </div>
@@ -350,42 +350,42 @@ export default function Swipe() {
 
         {/* Bottom action buttons */}
         {!done && (
-          <div className="flex items-center justify-center gap-5 py-5">
+          <div className="flex items-center justify-center gap-5 lg:gap-7 py-5 lg:py-6">
             <button
               onClick={() => currentIndex > 0 && setCurrentIndex(i => i - 1)}
               disabled={currentIndex === 0}
-              className="w-11 h-11 bg-card border border-border rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-all shadow-md disabled:opacity-25"
+              className="w-11 h-11 lg:w-14 lg:h-14 bg-card border border-border rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-all shadow-md disabled:opacity-25"
               title="Undo"
               data-testid="button-swipe-undo"
             >
-              <RotateCcw className="w-4 h-4" />
+              <RotateCcw className="w-4 h-4 lg:w-5 lg:h-5" />
             </button>
 
             <button
               onClick={swipeLeft}
-              className="w-16 h-16 bg-white border-2 border-red-200 rounded-full flex items-center justify-center text-red-400 hover:bg-red-50 hover:border-red-400 transition-all shadow-lg active:scale-95"
+              className="w-16 h-16 lg:w-20 lg:h-20 bg-white border-2 border-red-200 rounded-full flex items-center justify-center text-red-400 hover:bg-red-50 hover:border-red-400 transition-all shadow-lg active:scale-95"
               title="Pass (←)"
               data-testid="button-swipe-pass"
             >
-              <X className="w-8 h-8" strokeWidth={2.5} />
+              <X className="w-8 h-8 lg:w-10 lg:h-10" strokeWidth={2.5} />
             </button>
 
             <button
               onClick={swipeRight}
-              className="w-16 h-16 bg-white border-2 border-green-200 rounded-full flex items-center justify-center text-green-500 hover:bg-green-50 hover:border-green-400 transition-all shadow-lg active:scale-95"
+              className="w-16 h-16 lg:w-20 lg:h-20 bg-white border-2 border-green-200 rounded-full flex items-center justify-center text-green-500 hover:bg-green-50 hover:border-green-400 transition-all shadow-lg active:scale-95"
               title="Like (→)"
               data-testid="button-swipe-like"
             >
-              <Heart className="w-8 h-8" strokeWidth={2.5} />
+              <Heart className="w-8 h-8 lg:w-10 lg:h-10" strokeWidth={2.5} />
             </button>
 
             <Link
               href={`/property/${current?.id}`}
-              className="w-11 h-11 bg-card border border-border rounded-full flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary transition-all shadow-md"
+              className="w-11 h-11 lg:w-14 lg:h-14 bg-card border border-border rounded-full flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary transition-all shadow-md"
               title="View details"
               data-testid="link-swipe-view"
             >
-              <ChevronRight className="w-5 h-5" />
+              <ChevronRight className="w-5 h-5 lg:w-6 lg:h-6" />
             </Link>
           </div>
         )}
