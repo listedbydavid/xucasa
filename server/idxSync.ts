@@ -1,21 +1,18 @@
 /**
- * IDX Broker Sync Service
+ * IDX / RealtyFeed Sync Service
  * ─────────────────────────────────────────────────────────────────────────────
- * Pulls live MLS listings from the IDX Broker REST API and upserts them into
- * the local properties table.
+ * Pulls live MLS listings from RealtyFeed RESO OData API and upserts them
+ * into the local properties table.
  *
- * HOW TO ACTIVATE:
- *   1. Sign up at https://idxbroker.com and get approved by your MLS
- *   2. Grab your API key from: Account → API → Access Key
- *   3. Add it as the environment variable:  IDX_BROKER_API_KEY=your_key_here
- *   4. The sync will run automatically every 4 hours, or hit POST /api/idx/sync
+ * Auth flow (RealtyFeed / Realtyna):
+ *   1. POST /v1/auth/token  →  { access_token, expires_in, token_type }
+ *   2. GET  /reso/odata/Property  with  Authorization: Bearer <token>
  *
- * IDX Broker API docs: https://middleware.idxbroker.com/api/
- *
- * RESO Web API note:
- *   If your MLS provides RESO Web API credentials instead (OAuth2 + JSON:API),
- *   set IDX_RESO_URL and IDX_RESO_TOKEN env vars — the resoSync() helper below
- *   handles that path automatically.
+ * Env vars:
+ *   IDX_RESO_CLIENT_ID      – RealtyFeed client_id
+ *   IDX_RESO_CLIENT_SECRET  – RealtyFeed client_secret
+ *   IDX_REALTYFEED_API_KEY  – RealtyFeed API key (optional, for x-api-key header)
+ *   IDX_BROKER_API_KEY      – Legacy IDX Broker key (fallback)
  */
 
 import { db } from "./db";
@@ -24,217 +21,95 @@ import { eq, and, inArray, notInArray, sql } from "drizzle-orm";
 
 const IDX_BASE = "https://middleware.idxbroker.com/api";
 const IDX_KEY = process.env.IDX_BROKER_API_KEY || "";
-const RESO_URL = process.env.IDX_RESO_URL || "";
-const RESO_TOKEN = process.env.IDX_RESO_TOKEN || "";
+
 const RESO_CLIENT_ID = process.env.IDX_RESO_CLIENT_ID || "";
 const RESO_CLIENT_SECRET = process.env.IDX_RESO_CLIENT_SECRET || "";
+const RESO_API_KEY = process.env.IDX_REALTYFEED_API_KEY || "";
 
-interface ResoProvider {
-  name: string;
-  tokenUrl: string | null;
-  apiBase: string;
-  scope?: string;
-  directToken?: boolean;
-  dualHeader?: boolean;
-}
+const REALTYFEED_TOKEN_URL = "https://api.realtyfeed.com/v1/auth/token";
+const REALTYFEED_API_BASE = "https://api.realtyfeed.com/reso/odata";
+const REALTYFEED_ORIGIN = "https://www.xucasa.com";
 
-const RESO_PROVIDERS: ResoProvider[] = [
-  {
-    name: "RealtyFeed (Realtyna)",
-    tokenUrl: null,
-    apiBase: "https://api.realtyfeed.com/reso/odata",
-    directToken: true,
-    dualHeader: true,
-  },
-  {
-    name: "Trestle (CoreLogic)",
-    tokenUrl: "https://api-trestle.corelogic.com/trestle/oidc/connect/token",
-    apiBase: "https://api-trestle.corelogic.com/trestle/odata",
-    scope: "api",
-  },
-  {
-    name: "Bridge Interactive",
-    tokenUrl: "https://api.bridgedataoutput.com/api/v2/OData/test/oauth/token",
-    apiBase: "https://api.bridgedataoutput.com/api/v2/OData/test",
-  },
-  {
-    name: "Spark (FBS)",
-    tokenUrl: "https://sparkplatform.com/v1/oauth2/token",
-    apiBase: "https://replication.sparkapi.com/Reso/OData",
-  },
-  {
-    name: "CRMLS",
-    tokenUrl: "https://crmls-api.corelogic.com/trestle/oidc/connect/token",
-    apiBase: "https://crmls-api.corelogic.com/trestle/odata",
-    scope: "api",
-  },
-];
-
-let cachedResoToken: { token: string; expiresAt: number } | null = null;
-let discoveredProvider: ResoProvider | null = null;
+let cachedToken: { token: string; tokenType: string; expiresAt: number } | null = null;
 
 export function idxConfigured(): boolean {
-  return !!(IDX_KEY || (RESO_URL && RESO_TOKEN) || (RESO_CLIENT_ID && RESO_CLIENT_SECRET));
+  return !!(IDX_KEY || (RESO_CLIENT_ID && RESO_CLIENT_SECRET));
 }
 
-function resoOAuthConfigured(): boolean {
+function realtyFeedConfigured(): boolean {
   return !!(RESO_CLIENT_ID && RESO_CLIENT_SECRET);
 }
 
-async function tryDirectTokenAccess(provider: ResoProvider, token: string, headerStyle: "bearer" | "referer" = "bearer", extraHeaders?: Record<string, string>): Promise<boolean> {
-  try {
-    const testUrl = `${provider.apiBase}/Property?$top=1&$select=ListingKey`;
-    const headers: Record<string, string> = { Accept: "application/json", ...extraHeaders };
-    if (headerStyle === "bearer") {
-      headers["Authorization"] = `Bearer ${token}`;
-    } else {
-      headers["Referer"] = token;
-    }
-    const res = await fetch(testUrl, { headers });
-    if (res.ok) {
-      const body = await res.json();
-      if (body.value !== undefined) return true;
-    }
-    const errText = await res.text().catch(() => "");
-    console.log(`[IDX Sync] ${provider.name} (${headerStyle}) → HTTP ${res.status}: ${errText.slice(0, 200)}`);
-    return false;
-  } catch (err: any) {
-    console.log(`[IDX Sync] ${provider.name} (${headerStyle}) → Error: ${err.message}`);
-    return false;
-  }
-}
+async function fetchRealtyFeedToken(forceNew = false): Promise<{ token: string; tokenType: string; expiresIn: number }> {
+  const url = forceNew
+    ? `${REALTYFEED_TOKEN_URL}?force_new_token=true`
+    : REALTYFEED_TOKEN_URL;
 
-let discoveredAuthStyle: "bearer" | "referer" = "bearer";
-let discoveredDualHeader: { bearer: string; apiKey: string } | null = null;
-
-async function tryTokenEndpoint(provider: ResoProvider): Promise<{ token: string; expiresIn: number } | null> {
-  if (provider.directToken && provider.dualHeader) {
-    const combos = [
-      { bearer: RESO_CLIENT_SECRET, apiKey: RESO_CLIENT_ID, label: "secret=Bearer, id=x-api-key" },
-      { bearer: RESO_CLIENT_ID, apiKey: RESO_CLIENT_SECRET, label: "id=Bearer, secret=x-api-key" },
-    ];
-    for (const combo of combos) {
-      if (!combo.bearer || !combo.apiKey) continue;
-      console.log(`[IDX Sync] ${provider.name} → Testing dual-header: ${combo.label}...`);
-      const ok = await tryDirectTokenAccess(provider, combo.bearer, "bearer", { "x-api-key": combo.apiKey });
-      if (ok) {
-        discoveredAuthStyle = "bearer";
-        discoveredDualHeader = { bearer: combo.bearer, apiKey: combo.apiKey };
-        console.log(`[IDX Sync] ✓ ${provider.name} dual-header auth succeeded (${combo.label})`);
-        return { token: combo.bearer, expiresIn: 86400 * 365 };
-      }
-    }
-
-    for (const combo of combos) {
-      if (!combo.bearer || !combo.apiKey) continue;
-      console.log(`[IDX Sync] ${provider.name} → Testing single Bearer: ${combo.label.split(",")[0]}...`);
-      const ok = await tryDirectTokenAccess(provider, combo.bearer, "bearer");
-      if (ok) {
-        discoveredAuthStyle = "bearer";
-        discoveredDualHeader = null;
-        return { token: combo.bearer, expiresIn: 86400 * 365 };
-      }
-    }
-
-    const refererCandidates = [RESO_CLIENT_SECRET, RESO_CLIENT_ID];
-    for (const candidate of refererCandidates) {
-      if (!candidate) continue;
-      console.log(`[IDX Sync] ${provider.name} → Testing Referer with ${candidate === RESO_CLIENT_SECRET ? "client_secret" : "client_id"}...`);
-      const ok = await tryDirectTokenAccess(provider, candidate, "referer");
-      if (ok) {
-        discoveredAuthStyle = "referer";
-        discoveredDualHeader = null;
-        return { token: candidate, expiresIn: 86400 * 365 };
-      }
-    }
-
-    return null;
-  }
-
-  if (provider.directToken) {
-    const candidates = [RESO_CLIENT_SECRET, RESO_CLIENT_ID];
-    const styles: Array<"bearer" | "referer"> = ["bearer", "referer"];
-    for (const style of styles) {
-      for (const candidate of candidates) {
-        if (!candidate) continue;
-        console.log(`[IDX Sync] ${provider.name} → Testing ${style} with ${candidate === RESO_CLIENT_SECRET ? "client_secret" : "client_id"}...`);
-        const ok = await tryDirectTokenAccess(provider, candidate, style);
-        if (ok) {
-          discoveredAuthStyle = style;
-          return { token: candidate, expiresIn: 86400 * 365 };
-        }
-      }
-    }
-    return null;
-  }
-
-  if (!provider.tokenUrl) return null;
-
-  const params: Record<string, string> = {
-    grant_type: "client_credentials",
+  const form = new URLSearchParams({
     client_id: RESO_CLIENT_ID,
     client_secret: RESO_CLIENT_SECRET,
+  });
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: form,
+    signal: AbortSignal.timeout(20000),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`RealtyFeed auth failed (HTTP ${res.status}): ${text.slice(0, 300)}`);
+  }
+
+  const data = await res.json();
+  if (!data.access_token) {
+    throw new Error(`RealtyFeed auth response missing access_token: ${JSON.stringify(data).slice(0, 300)}`);
+  }
+
+  console.log(`[IDX Sync] RealtyFeed token obtained (expires_in: ${data.expires_in}s${forceNew ? ", forced new" : ""})`);
+  return {
+    token: data.access_token,
+    tokenType: data.token_type || "Bearer",
+    expiresIn: parseInt(data.expires_in || "0") || 86400,
   };
-  if (provider.scope) params.scope = provider.scope;
-
-  try {
-    const res = await fetch(provider.tokenUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams(params),
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      console.log(`[IDX Sync] ${provider.name} → HTTP ${res.status}: ${errText.slice(0, 150)}`);
-      return null;
-    }
-    const data = await res.json();
-    if (!data.access_token) {
-      console.log(`[IDX Sync] ${provider.name} → No access_token in response`);
-      return null;
-    }
-    return { token: data.access_token, expiresIn: data.expires_in || 3600 };
-  } catch (err: any) {
-    console.log(`[IDX Sync] ${provider.name} → Network error: ${err.message}`);
-    return null;
-  }
 }
 
-async function getResoOAuthToken(): Promise<string> {
-  if (cachedResoToken && cachedResoToken.expiresAt > Date.now() + 60000) {
-    return cachedResoToken.token;
+async function getRealtyFeedToken(): Promise<string> {
+  const SKEW = 60;
+  if (cachedToken && Date.now() / 1000 < cachedToken.expiresAt - SKEW) {
+    return cachedToken.token;
   }
 
-  if (discoveredProvider) {
-    console.log(`[IDX Sync] Refreshing token from ${discoveredProvider.name}...`);
-    const result = await tryTokenEndpoint(discoveredProvider);
-    if (result) {
-      cachedResoToken = { token: result.token, expiresAt: Date.now() + result.expiresIn * 1000 };
-      console.log(`[IDX Sync] Token refreshed (expires in ${result.expiresIn}s)`);
-      return result.token;
-    }
-    discoveredProvider = null;
-  }
-
-  console.log("[IDX Sync] Discovering RESO provider — trying all known OAuth2 endpoints...");
-  for (const provider of RESO_PROVIDERS) {
-    const result = await tryTokenEndpoint(provider);
-    if (result) {
-      discoveredProvider = provider;
-      cachedResoToken = { token: result.token, expiresAt: Date.now() + result.expiresIn * 1000 };
-      console.log(`[IDX Sync] ✓ Authenticated with ${provider.name} (expires in ${result.expiresIn}s)`);
-      return result.token;
-    }
-  }
-
-  throw new Error("RESO OAuth2 failed — none of the known providers accepted the credentials. Tried: " +
-    RESO_PROVIDERS.map(p => p.name).join(", "));
+  const result = await fetchRealtyFeedToken();
+  cachedToken = {
+    token: result.token,
+    tokenType: result.tokenType,
+    expiresAt: Date.now() / 1000 + result.expiresIn,
+  };
+  return cachedToken.token;
 }
 
-function getResoApiBase(): string {
-  if (RESO_URL) return RESO_URL;
-  if (discoveredProvider) return discoveredProvider.apiBase;
-  return RESO_PROVIDERS[0].apiBase;
+async function forceRefreshToken(): Promise<string> {
+  const result = await fetchRealtyFeedToken(true);
+  cachedToken = {
+    token: result.token,
+    tokenType: result.tokenType,
+    expiresAt: Date.now() / 1000 + result.expiresIn,
+  };
+  return cachedToken.token;
+}
+
+function buildHeaders(token: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/json",
+    Origin: REALTYFEED_ORIGIN,
+  };
+  if (RESO_API_KEY) {
+    headers["x-api-key"] = RESO_API_KEY;
+  }
+  return headers;
 }
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -256,7 +131,7 @@ export async function getSyncLogs(limit = 10) {
     .limit(limit);
 }
 
-// ── IDX Broker API helpers ────────────────────────────────────────────────────
+// ── IDX Broker API helpers (legacy fallback) ─────────────────────────────────
 
 async function idxFetch(endpoint: string, params: Record<string, string> = {}) {
   const url = new URL(`${IDX_BASE}${endpoint}`);
@@ -274,7 +149,7 @@ async function idxFetch(endpoint: string, params: Record<string, string> = {}) {
   if (res.status === 302 || res.status === 301) {
     const location = res.headers.get("location") || "";
     if (location.includes("404")) {
-      throw new Error(`IDX API ${endpoint} → redirected to 404. Your API key may not be fully activated yet. Contact IDX Broker support or your MLS to confirm API access is enabled.`);
+      throw new Error(`IDX API ${endpoint} → redirected to 404. Your API key may not be fully activated yet.`);
     }
     throw new Error(`IDX API ${endpoint} → HTTP ${res.status} redirect to ${location}`);
   }
@@ -286,12 +161,6 @@ async function idxFetch(endpoint: string, params: Record<string, string> = {}) {
   return res.json();
 }
 
-/**
- * Fetch ALL active listings from IDX Broker, paginated.
- * Tries multiple endpoint patterns: /clients/featured, /clients/listings,
- * /clients/soldpending, and /mls/searchresults as fallbacks.
- * IDX Broker returns max 500 per page.
- */
 async function fetchAllIdxListings(): Promise<any[]> {
   const endpoints = [
     { path: "/clients/featured", label: "featured" },
@@ -305,7 +174,7 @@ async function fetchAllIdxListings(): Promise<any[]> {
   for (const ep of endpoints) {
     try {
       console.log(`[IDX Sync] Trying endpoint: ${ep.path}...`);
-      const test = await idxFetch(ep.path, { limit: "1" });
+      await idxFetch(ep.path, { limit: "1" });
       workingEndpoint = ep.path;
       console.log(`[IDX Sync] Endpoint ${ep.path} (${ep.label}) is accessible`);
       break;
@@ -316,11 +185,7 @@ async function fetchAllIdxListings(): Promise<any[]> {
 
   if (!workingEndpoint) {
     throw new Error(
-      "No IDX Broker API endpoints are accessible. Your API key may not be fully activated yet. " +
-      "Please contact IDX Broker support or your MLS (SD MLS) to confirm:\n" +
-      "  1. API access is enabled for your account\n" +
-      "  2. Your API key has 'client' level access\n" +
-      "  3. Your MLS data feed is provisioned"
+      "No IDX Broker API endpoints are accessible. Your API key may not be fully activated yet."
     );
   }
 
@@ -347,42 +212,58 @@ async function fetchAllIdxListings(): Promise<any[]> {
   return all;
 }
 
-// ── RESO Web API helpers ──────────────────────────────────────────────────────
+// ── RealtyFeed RESO OData fetcher ─────────────────────────────────────────────
 
-async function fetchAllResoListings(): Promise<any[]> {
-  let token: string;
-  let baseUrl: string;
+const RESO_SELECT_FIELDS = [
+  "ListingKey", "ListingId", "ListPrice", "BedroomsTotal",
+  "BathroomsTotalInteger", "BathroomsFull", "BathroomsHalf",
+  "LivingArea", "LotSizeSquareFeet", "LotSizeAcres",
+  "StreetNumber", "StreetName", "UnitNumber",
+  "City", "StateOrProvince", "PostalCode",
+  "Latitude", "Longitude", "PublicRemarks",
+  "ListDate", "AssociationFee", "MlsStatus", "StandardStatus",
+  "PropertyType", "PropertySubType", "YearBuilt",
+  "ListAgentFullName", "ListAgentFirstName", "ListAgentLastName",
+  "ListAgentEmail", "ListAgentDirectPhone", "ListAgentOfficePhone",
+  "ListOfficeName",
+].join(",");
 
-  if (resoOAuthConfigured()) {
-    token = await getResoOAuthToken();
-    baseUrl = getResoApiBase();
-  } else {
-    token = RESO_TOKEN;
-    baseUrl = RESO_URL;
+async function realtyFeedODataFetch(url: string, token: string): Promise<Response> {
+  const headers = buildHeaders(token);
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(30000) });
+
+  if (res.status === 401 || res.status === 403) {
+    console.log(`[IDX Sync] Got ${res.status}, forcing token refresh and retrying...`);
+    const newToken = await forceRefreshToken();
+    const retryHeaders = buildHeaders(newToken);
+    return fetch(url, { headers: retryHeaders, signal: AbortSignal.timeout(30000) });
   }
 
+  return res;
+}
+
+async function fetchAllResoListings(): Promise<any[]> {
+  const token = await getRealtyFeedToken();
   const all: any[] = [];
-  let nextUrl: string | null = `${baseUrl}/Property?$filter=StandardStatus eq 'Active'&$top=200&$select=ListingKey,ListingId,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,LivingArea,LotSizeSquareFeet,StreetNumber,StreetName,UnitNumber,City,StateOrProvince,PostalCode,Latitude,Longitude,PublicRemarks,Media,ListDate,AssociationFee,MlsStatus,PropertyType,YearBuilt,ListAgentFullName,ListAgentFirstName,ListAgentLastName,ListAgentEmail,ListAgentDirectPhone,ListAgentOfficePhone,ListOfficeName`;
+  let nextUrl: string | null =
+    `${REALTYFEED_API_BASE}/Property?$filter=StandardStatus eq 'Active'&$top=200&$select=${RESO_SELECT_FIELDS}&$expand=Media`;
 
   while (nextUrl) {
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (discoveredDualHeader) {
-      headers["Authorization"] = `Bearer ${discoveredDualHeader.bearer}`;
-      headers["x-api-key"] = discoveredDualHeader.apiKey;
-    } else if (discoveredProvider?.directToken && discoveredAuthStyle === "referer") {
-      headers["Referer"] = token;
-    } else {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
-    const res = await fetch(nextUrl, { headers });
+    const res = await realtyFeedODataFetch(nextUrl, token);
+
     if (!res.ok) {
-      const errBody = await res.text();
-      throw new Error(`RESO API → HTTP ${res.status}: ${errBody.slice(0, 300)}`);
+      const errBody = await res.text().catch(() => "");
+      throw new Error(`RealtyFeed RESO API → HTTP ${res.status}: ${errBody.slice(0, 400)}`);
     }
+
     const body = await res.json();
     const records = body.value || [];
     all.push(...records);
-    console.log(`[IDX Sync] RESO fetched ${all.length} listings so far...`);
+
+    const count = body["@odata.count"];
+    const pageInfo = count ? ` (total: ${count})` : "";
+    console.log(`[IDX Sync] RealtyFeed fetched ${all.length} listings so far${pageInfo}...`);
+
     nextUrl = body["@odata.nextLink"] || null;
     if (nextUrl) await new Promise(r => setTimeout(r, 300));
   }
@@ -405,7 +286,6 @@ function normaliseIdxBroker(raw: any) {
   const city = raw.cityName || raw.city || "";
   const state = raw.state || raw.stateOrProvince || "";
 
-  // First photo from IDX Broker's photo object
   let imageUrl: string | null = null;
   if (raw.image) {
     const imgs = typeof raw.image === "object" ? Object.values(raw.image) : [];
@@ -446,7 +326,7 @@ function normaliseReso(raw: any) {
 
   if (raw.Media && Array.isArray(raw.Media)) {
     const photoMedia = raw.Media
-      .filter((m: any) => m.MediaCategory === "Photo" || m.MediaType === "image/jpeg")
+      .filter((m: any) => m.MediaCategory === "Photo" || m.MediaType === "image/jpeg" || m.MediaURL)
       .sort((a: any, b: any) => (a.Order || 0) - (b.Order || 0));
     if (photoMedia.length > 0) {
       imageUrl = photoMedia[0].MediaURL || null;
@@ -457,6 +337,9 @@ function normaliseReso(raw: any) {
   const bathsFull = parseInt(raw.BathroomsFull || raw.BathroomsTotalInteger || "0") || 0;
   const bathsHalf = parseInt(raw.BathroomsHalf || "0") || 0;
   const baths = String(bathsFull + bathsHalf * 0.5);
+
+  const agentName = raw.ListAgentFullName ||
+    (raw.ListAgentFirstName ? `${raw.ListAgentFirstName || ""} ${raw.ListAgentLastName || ""}`.trim() : null);
 
   return {
     idxId: String(raw.ListingKey || raw.ListingId || ""),
@@ -484,7 +367,7 @@ function normaliseReso(raw: any) {
     source: "idx" as const,
     isOffMarket: false,
     listDate: raw.ListDate ? new Date(raw.ListDate) : null,
-    listingAgentName: raw.ListAgentFullName || raw.ListAgentFirstName ? `${raw.ListAgentFirstName || ""} ${raw.ListAgentLastName || ""}`.trim() : null,
+    listingAgentName: agentName,
     listingAgentEmail: raw.ListAgentEmail || null,
     listingAgentPhone: raw.ListAgentDirectPhone || raw.ListAgentOfficePhone || null,
     listingBrokerage: raw.ListOfficeName || null,
@@ -497,11 +380,10 @@ let syncInProgress = false;
 
 export async function runIdxSync(): Promise<{ added: number; updated: number; removed: number; total: number }> {
   if (syncInProgress) throw new Error("Sync already in progress");
-  if (!idxConfigured()) throw new Error("IDX not configured — set IDX_BROKER_API_KEY, or IDX_RESO_CLIENT_ID + IDX_RESO_CLIENT_SECRET, or IDX_RESO_URL + IDX_RESO_TOKEN");
+  if (!idxConfigured()) throw new Error("IDX not configured — set IDX_RESO_CLIENT_ID + IDX_RESO_CLIENT_SECRET, or IDX_BROKER_API_KEY");
 
   syncInProgress = true;
 
-  // Create log entry
   const [log] = await db.insert(idxSyncLog).values({ status: "running" }).returning();
 
   try {
@@ -510,16 +392,12 @@ export async function runIdxSync(): Promise<{ added: number; updated: number; re
     let rawListings: any[];
     let useReso = false;
 
-    if (resoOAuthConfigured()) {
-      console.log("[IDX Sync] Using RESO Web API (OAuth2 client_credentials)");
-      rawListings = await fetchAllResoListings();
-      useReso = true;
-    } else if (RESO_URL && RESO_TOKEN) {
-      console.log("[IDX Sync] Using RESO Web API (static Bearer token)");
+    if (realtyFeedConfigured()) {
+      console.log("[IDX Sync] Using RealtyFeed RESO OData API (OAuth2)");
       rawListings = await fetchAllResoListings();
       useReso = true;
     } else if (IDX_KEY) {
-      console.log("[IDX Sync] Using IDX Broker API");
+      console.log("[IDX Sync] Using IDX Broker API (legacy)");
       rawListings = await fetchAllIdxListings();
     } else {
       throw new Error("No IDX/RESO credentials configured");
@@ -531,7 +409,6 @@ export async function runIdxSync(): Promise<{ added: number; updated: number; re
       .map(r => useReso ? normaliseReso(r) : normaliseIdxBroker(r))
       .filter(r => r.idxId && r.price > 0);
 
-    // Get current IDX ids in DB
     const existingIdxRows = await db
       .select({ idxId: properties.idxId, id: properties.id })
       .from(properties)
@@ -542,7 +419,6 @@ export async function runIdxSync(): Promise<{ added: number; updated: number; re
 
     let added = 0, updated = 0, removed = 0;
 
-    // Upsert listings in batches
     for (const listing of normalised) {
       const existingId = existingMap.get(listing.idxId);
       const payload = { ...listing, idxUpdatedAt: new Date() };
@@ -556,7 +432,6 @@ export async function runIdxSync(): Promise<{ added: number; updated: number; re
       }
     }
 
-    // Mark IDX listings no longer in feed as "removed"
     const toRemove = existingIdxRows
       .filter(r => r.idxId && !incomingIds.has(r.idxId))
       .map(r => r.id);
@@ -605,13 +480,11 @@ export function startIdxAutoSync() {
   const FOUR_HOURS = 4 * 60 * 60 * 1000;
   console.log("[IDX Sync] Auto-sync scheduled every 4 hours");
 
-  // Run once on startup (after 30s to let server settle)
   setTimeout(async () => {
     try { await runIdxSync(); }
     catch (e: any) { console.error("[IDX Sync] Startup sync failed:", e.message); }
   }, 30_000);
 
-  // Then every 4 hours
   setInterval(async () => {
     try { await runIdxSync(); }
     catch (e: any) { console.error("[IDX Sync] Scheduled sync failed:", e.message); }
