@@ -25,8 +25,9 @@ export function Navbar() {
         }`}
         data-testid={testId}
         onClick={() => setMobileOpen(false)}
+        aria-current={active ? "page" : undefined}
       >
-        <Icon className="w-4 h-4" />
+        <Icon className="w-4 h-4" aria-hidden="true" />
         {label}
       </Link>
     );
@@ -43,19 +44,19 @@ export function Navbar() {
   ];
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60">
+    <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60" role="banner">
       <div className="max-w-7xl mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-2 group">
+          <Link href="/" className="flex items-center gap-2 group" aria-label="xucasa home">
             <div className="bg-primary text-white p-1.5 rounded-lg group-hover:scale-105 transition-transform">
-              <Home className="w-5 h-5" />
+              <Home className="w-5 h-5" aria-hidden="true" />
             </div>
             <span className="font-display font-bold text-xl tracking-tight text-foreground">
               xucasa
             </span>
           </Link>
           
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden md:flex items-center gap-1" aria-label="Main navigation">
             {links.map(l => navLink(l.href, l.icon, l.label, (l as any).testId))}
           </nav>
         </div>
@@ -65,17 +66,20 @@ export function Navbar() {
             className="md:hidden p-2 text-muted-foreground hover:text-foreground transition-colors rounded-full hover:bg-muted/50"
             onClick={() => setMobileOpen(!mobileOpen)}
             data-testid="button-mobile-menu"
+            aria-expanded={mobileOpen}
+            aria-controls="mobile-nav"
+            aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
           >
-            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {mobileOpen ? <X className="w-5 h-5" aria-hidden="true" /> : <Menu className="w-5 h-5" aria-hidden="true" />}
           </button>
 
           {isAuthenticated ? (
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2 text-sm font-medium">
                 {user?.profileImageUrl ? (
-                  <img src={user.profileImageUrl} alt="Avatar" className="w-8 h-8 rounded-full border border-border" />
+                  <img src={user.profileImageUrl} alt={`${user?.firstName || "User"}'s profile photo`} className="w-8 h-8 rounded-full border border-border" />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center" aria-hidden="true">
                     <User className="w-4 h-4" />
                   </div>
                 )}
@@ -84,10 +88,10 @@ export function Navbar() {
               <button 
                 onClick={() => logout()}
                 className="p-2 text-muted-foreground hover:text-destructive transition-colors rounded-full hover:bg-destructive/10"
-                title="Sign out"
+                aria-label="Sign out"
                 data-testid="button-sign-out"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
           ) : (
@@ -110,9 +114,9 @@ export function Navbar() {
       </div>
 
       {mobileOpen && (
-        <div className="md:hidden border-t border-border/50 bg-white/95 backdrop-blur px-4 py-3 space-y-1 animate-in slide-in-from-top-2">
+        <nav id="mobile-nav" className="md:hidden border-t border-border/50 bg-white/95 backdrop-blur px-4 py-3 space-y-1 animate-in slide-in-from-top-2" aria-label="Mobile navigation">
           {links.map(l => navLink(l.href, l.icon, l.label, (l as any).testId))}
-        </div>
+        </nav>
       )}
     </header>
   );

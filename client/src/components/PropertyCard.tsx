@@ -123,18 +123,20 @@ export function PropertyCard({ property }: PropertyCardProps) {
               <button
                 data-testid={`btn-photo-prev-${property.id}`}
                 onClick={(e) => goTo(photoIndex - 1, e)}
+                aria-label="Previous photo"
                 className={`absolute left-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/80 text-foreground shadow transition-all
-                  opacity-0 group-hover:opacity-100 ${photoIndex === 0 ? "invisible" : ""}`}
+                  opacity-0 group-hover:opacity-100 focus:opacity-100 ${photoIndex === 0 ? "invisible" : ""}`}
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="w-4 h-4" aria-hidden="true" />
               </button>
               <button
                 data-testid={`btn-photo-next-${property.id}`}
                 onClick={(e) => goTo(photoIndex + 1, e)}
+                aria-label="Next photo"
                 className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/80 text-foreground shadow transition-all
-                  opacity-0 group-hover:opacity-100 ${photoIndex === photos.length - 1 ? "invisible" : ""}`}
+                  opacity-0 group-hover:opacity-100 focus:opacity-100 ${photoIndex === photos.length - 1 ? "invisible" : ""}`}
               >
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-4 h-4" aria-hidden="true" />
               </button>
             </>
           )}
@@ -162,13 +164,15 @@ export function PropertyCard({ property }: PropertyCardProps) {
               onPointerDown={(e) => e.stopPropagation()}
               onClick={handleSave}
               disabled={isPending}
+              aria-label={isSaved ? "Remove from saved properties" : "Save property"}
+              aria-pressed={isSaved}
               className={`p-2.5 rounded-full backdrop-blur-md shadow-sm transition-all active:scale-95 ${
                 isSaved
                   ? "bg-white text-primary"
                   : "bg-white/70 text-foreground hover:bg-white"
               }`}
             >
-              <Heart className={`w-5 h-5 ${isSaved ? "fill-current" : ""}`} />
+              <Heart className={`w-5 h-5 ${isSaved ? "fill-current" : ""}`} aria-hidden="true" />
             </button>
           </div>
 
@@ -207,10 +211,13 @@ export function PropertyCard({ property }: PropertyCardProps) {
           </div>
         </div>
 
-        {/* Card content — clicking navigates */}
         <div
-          className="p-5"
+          className="p-5 cursor-pointer"
           onClick={() => navigate(`/property/${property.id}`)}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/property/${property.id}`); } }}
+          role="link"
+          tabIndex={0}
+          aria-label={`View details for ${property.title || property.location}, $${property.price.toLocaleString()}`}
         >
           <div className="flex items-end gap-2 mb-2">
             <h3 className="font-display font-bold text-2xl tracking-tight text-foreground">

@@ -355,37 +355,37 @@ export default function Swipe() {
               onClick={() => currentIndex > 0 && setCurrentIndex(i => i - 1)}
               disabled={currentIndex === 0}
               className="w-11 h-11 lg:w-14 lg:h-14 bg-card border border-border rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-all shadow-md disabled:opacity-25"
-              title="Undo"
+              aria-label="Undo last action"
               data-testid="button-swipe-undo"
             >
-              <RotateCcw className="w-4 h-4 lg:w-5 lg:h-5" />
+              <RotateCcw className="w-4 h-4 lg:w-5 lg:h-5" aria-hidden="true" />
             </button>
 
             <button
               onClick={swipeLeft}
               className="w-16 h-16 lg:w-20 lg:h-20 bg-white border-2 border-red-200 rounded-full flex items-center justify-center text-red-400 hover:bg-red-50 hover:border-red-400 transition-all shadow-lg active:scale-95"
-              title="Pass (←)"
+              aria-label="Pass on this property"
               data-testid="button-swipe-pass"
             >
-              <X className="w-8 h-8 lg:w-10 lg:h-10" strokeWidth={2.5} />
+              <X className="w-8 h-8 lg:w-10 lg:h-10" strokeWidth={2.5} aria-hidden="true" />
             </button>
 
             <button
               onClick={swipeRight}
               className="w-16 h-16 lg:w-20 lg:h-20 bg-white border-2 border-green-200 rounded-full flex items-center justify-center text-green-500 hover:bg-green-50 hover:border-green-400 transition-all shadow-lg active:scale-95"
-              title="Like (→)"
+              aria-label="Like this property"
               data-testid="button-swipe-like"
             >
-              <Heart className="w-8 h-8 lg:w-10 lg:h-10" strokeWidth={2.5} />
+              <Heart className="w-8 h-8 lg:w-10 lg:h-10" strokeWidth={2.5} aria-hidden="true" />
             </button>
 
             <Link
               href={`/property/${current?.id}`}
               className="w-11 h-11 lg:w-14 lg:h-14 bg-card border border-border rounded-full flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary transition-all shadow-md"
-              title="View details"
+              aria-label="View property details"
               data-testid="link-swipe-view"
             >
-              <ChevronRight className="w-5 h-5 lg:w-6 lg:h-6" />
+              <ChevronRight className="w-5 h-5 lg:w-6 lg:h-6" aria-hidden="true" />
             </Link>
           </div>
         )}

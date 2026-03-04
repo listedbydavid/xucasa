@@ -153,8 +153,10 @@ export default function Search() {
       <div className="bg-card border-b border-border p-4 z-10 shadow-sm">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center gap-4">
           <div className="flex-1 flex items-center bg-muted rounded-xl px-4 py-2 border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all">
-            <SearchIcon className="w-5 h-5 text-muted-foreground mr-2 flex-shrink-0" />
+            <SearchIcon className="w-5 h-5 text-muted-foreground mr-2 flex-shrink-0" aria-hidden="true" />
+            <label htmlFor="search-location" className="sr-only">Search by address, city, or ZIP code</label>
             <input
+              id="search-location"
               ref={inputRef}
               type="text"
               placeholder="Search by address, city, ZIP..."
@@ -171,6 +173,7 @@ export default function Search() {
               value={filters.minPrice}
               onChange={(e) => setFilters(prev => ({ ...prev, minPrice: e.target.value }))}
               data-testid="select-min-price"
+              aria-label="Filter by minimum price"
             >
               <option value="">Any Price</option>
               <option value="500000">$500k+</option>
@@ -183,6 +186,7 @@ export default function Search() {
               value={filters.beds}
               onChange={(e) => setFilters(prev => ({ ...prev, beds: e.target.value }))}
               data-testid="select-beds"
+              aria-label="Filter by number of bedrooms"
             >
               <option value="">Beds</option>
               <option value="1">1+ Beds</option>
@@ -196,6 +200,7 @@ export default function Search() {
               value={filters.isOffMarket}
               onChange={(e) => setFilters(prev => ({ ...prev, isOffMarket: e.target.value }))}
               data-testid="select-listing-type"
+              aria-label="Filter by listing type"
             >
               <option value="">All Types</option>
               <option value="false">Active Only</option>

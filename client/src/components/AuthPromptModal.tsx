@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Heart, BookmarkPlus, Home, X, CheckCircle2, Loader2,
   RefreshCw, ShieldCheck,
@@ -103,7 +103,6 @@ export function AuthPromptModal({ feature, onClose }: AuthPromptModalProps) {
     handleSignIn();
   };
 
-  // Cleanup on unmount
   useEffect(() => () => clearTimer(), []);
 
   const handleClose = () => {
@@ -112,18 +111,45 @@ export function AuthPromptModal({ feature, onClose }: AuthPromptModalProps) {
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
+  const dialogRef = useRef<HTMLDivElement>(null);
 
-      <div className="relative bg-card rounded-3xl shadow-2xl w-full max-w-md z-10 overflow-hidden">
-        {/* Close */}
+  useEffect(() => {
+    const el = dialogRef.current;
+    if (el) el.focus();
+  }, []);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      handleClose();
+      return;
+    }
+    if (e.key === "Tab") {
+      const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusable || focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+      } else {
+        if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    }
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title" onKeyDown={handleKeyDown}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} aria-hidden="true" />
+
+      <div ref={dialogRef} className="relative bg-card rounded-3xl shadow-2xl w-full max-w-md z-10 overflow-hidden" tabIndex={-1}>
         <button
           onClick={handleClose}
           className="absolute top-4 right-4 p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full transition-colors z-20"
           data-testid="button-auth-prompt-close"
+          aria-label="Close sign-in dialog"
         >
-          <X className="w-4 h-4" />
+          <X className="w-4 h-4" aria-hidden="true" />
         </button>
 
         {/* ── WIZARD STEP ── */}
@@ -134,7 +160,7 @@ export function AuthPromptModal({ feature, onClose }: AuthPromptModalProps) {
               <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <FeatureIcon className="w-7 h-7 text-primary" />
               </div>
-              <h2 className="font-display font-bold text-xl text-foreground">{headline}</h2>
+              <h2 id="auth-modal-title" className="font-display font-bold text-xl text-foreground">{headline}</h2>
               <p className="text-sm text-muted-foreground mt-1">{subtext}</p>
             </div>
 

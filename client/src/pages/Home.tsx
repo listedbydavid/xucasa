@@ -55,10 +55,14 @@ export default function Home() {
           <form 
             onSubmit={handleSearch}
             className="w-full max-w-2xl bg-background rounded-full p-2 flex items-center shadow-2xl hover:shadow-primary/20 transition-shadow duration-300 mb-4"
+            role="search"
+            aria-label="Property search"
           >
             <div className="flex-1 flex items-center pl-4 pr-2">
-              <Search className="w-5 h-5 text-muted-foreground mr-3" />
+              <Search className="w-5 h-5 text-muted-foreground mr-3" aria-hidden="true" />
+              <label htmlFor="home-search" className="sr-only">Search by city, neighborhood, or ZIP code</label>
               <input 
+                id="home-search"
                 type="text" 
                 placeholder="City, Neighborhood, or ZIP"
                 className="w-full bg-transparent border-none outline-none focus:ring-0 text-lg py-3 text-foreground placeholder:text-muted-foreground"

@@ -157,11 +157,11 @@ export default function AgentDashboard() {
                         )}
                       </td>
                       <td className="p-4 text-right">
-                        <button onClick={() => openEdit(property)} className="p-2 text-muted-foreground hover:text-primary transition-colors" data-testid={`button-edit-${property.id}`}>
-                          <Edit3 className="w-5 h-5" />
+                        <button onClick={() => openEdit(property)} className="p-2 text-muted-foreground hover:text-primary transition-colors" data-testid={`button-edit-${property.id}`} aria-label={`Edit listing ${property.title}`}>
+                          <Edit3 className="w-5 h-5" aria-hidden="true" />
                         </button>
-                        <button onClick={() => handleDelete(property.id)} className="p-2 text-muted-foreground hover:text-destructive transition-colors ml-2" data-testid={`button-delete-${property.id}`}>
-                          <Trash2 className="w-5 h-5" />
+                        <button onClick={() => handleDelete(property.id)} className="p-2 text-muted-foreground hover:text-destructive transition-colors ml-2" data-testid={`button-delete-${property.id}`} aria-label={`Delete listing ${property.title}`}>
+                          <Trash2 className="w-5 h-5" aria-hidden="true" />
                         </button>
                       </td>
                     </tr>
@@ -917,12 +917,12 @@ function PropertyFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="property-form-modal-title" onKeyDown={e => { if (e.key === "Escape") onClose(); }}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <div className="bg-card rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative z-10">
         <div className="sticky top-0 bg-card/90 backdrop-blur-md p-6 border-b border-border flex justify-between items-center">
-          <h2 className="text-2xl font-display font-bold">{property ? 'Edit Listing' : 'Create Listing'}</h2>
-          <button onClick={onClose} className="p-2 hover:bg-muted rounded-full transition-colors"><X className="w-5 h-5" /></button>
+          <h2 id="property-form-modal-title" className="text-2xl font-display font-bold">{property ? 'Edit Listing' : 'Create Listing'}</h2>
+          <button onClick={onClose} className="p-2 hover:bg-muted rounded-full transition-colors" aria-label="Close listing form"><X className="w-5 h-5" aria-hidden="true" /></button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">

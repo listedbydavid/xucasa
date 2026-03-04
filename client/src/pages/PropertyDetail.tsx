@@ -92,13 +92,14 @@ export default function PropertyDetail() {
             <button 
               onClick={handleSave}
               disabled={isSaving}
+              aria-pressed={isSaved}
               className={`flex items-center gap-2 px-8 py-4 rounded-full font-bold text-lg transition-all shadow-lg active:scale-95 ${
                 isSaved 
                   ? "bg-primary text-white hover:bg-primary/90 hover:shadow-primary/30" 
                   : "bg-muted text-foreground hover:bg-muted/80 border border-border"
               }`}
             >
-              <Heart className={`w-5 h-5 ${isSaved ? "fill-current" : ""}`} />
+              <Heart className={`w-5 h-5 ${isSaved ? "fill-current" : ""}`} aria-hidden="true" />
               {isSaved ? "Saved" : "Save Home"}
             </button>
           </div>

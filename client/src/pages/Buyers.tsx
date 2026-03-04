@@ -326,15 +326,22 @@ function CreateProfileModal({ onClose, existingProfile }: { onClose: () => void;
   const inputClass = "w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="buyer-profile-modal-title"
+      onClick={onClose}
+      onKeyDown={e => { if (e.key === "Escape") onClose(); }}
+    >
       <div
         className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-5 border-b">
-          <h2 className="text-lg font-bold" data-testid="text-profile-modal-title">{isEdit ? "Edit" : "Create"} Buyer Profile</h2>
-          <button onClick={onClose} className="p-1 hover:bg-muted rounded-lg" data-testid="button-close-profile-modal">
-            <X className="w-5 h-5" />
+          <h2 id="buyer-profile-modal-title" className="text-lg font-bold" data-testid="text-profile-modal-title">{isEdit ? "Edit" : "Create"} Buyer Profile</h2>
+          <button onClick={onClose} className="p-1 hover:bg-muted rounded-lg" data-testid="button-close-profile-modal" aria-label="Close buyer profile form">
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
 
