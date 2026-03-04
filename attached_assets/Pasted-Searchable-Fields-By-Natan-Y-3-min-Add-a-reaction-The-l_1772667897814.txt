@@ -1,0 +1,368 @@
+Searchable Fields
+
+
+
+By Natan Y.
+
+3 min
+
+Add a reaction
+The list may vary depending on which feed or MLS you have access to. For information on any additional searchable fields, please contact support@mlsrouter.com.
+
+ 
+
+Property Resource
+
+Field
+
+Description
+
+ListingKey
+
+ 
+
+ModificationTimestamp
+
+last modified timestamp by MLS
+
+RFModificationTimestamp
+
+last modified timestamp by MLS Router
+Recommended field for replication process as well as detecting latest updated records.
+
+ListingId
+
+ 
+
+PropertyType
+
+A list of types of properties such as Residential, Land, Commercial Sale, etc...
+
+PropertySubType
+
+A list of sub types to Residential, Residential Lease, Manufactured in Park, Commercial and Business Opportunity listings. e.g. Single Family Residence, Condominium, Manufactured on Land, Townhouse, Multi Family, Office, Retail, etc.
+
+ListPrice
+
+The current price of the property as determined by the seller and the seller's broker. For auctions this is the minimum or reserve price.
+
+BathroomsTotalInteger
+
+The simple sum of the number of bathrooms. For example for a property with two Full Bathrooms and one Half Bathroom, the Bathrooms Total Integer will be 3.
+
+BedroomsTotal
+
+The total number of bedrooms in the dwelling.
+
+StandardStatus
+
+The status of the listing on RF
+
+MlsStatus
+
+The status of the listing on MLS
+
+DaysOnMarket
+
+ 
+
+LotSizeArea
+
+The total area of the lot.
+
+LivingArea
+
+The total livable area within the structure.
+
+BuildingAreaTotal
+
+Total area of the structure. Includes both finished and unfinished areas.
+
+OriginatingSystemName
+
+The name of the Originating record provider. Most commonly the name of the MLS.
+
+StateOrProvince
+
+ 
+
+CountyOrParish
+
+ 
+
+City
+
+ 
+
+PostalCode
+
+The postal code portion of a street or mailing address.
+
+UnparsedAddress
+
+The UnparsedAddress is a text representation of the address with the full civic location as a single entity. It may optionally include any of City, StateOrProvince, PostalCode and Country.
+
+YearBuilt
+
+The year that an occupancy permit is first granted for the house or other local measure of initial habitability of the build.
+
+ListAgentFullName
+
+The full name of the listing agent. (First Middle Last)
+
+ListAgentMlsId
+
+ 
+
+CoListAgentMlsId
+
+ 
+
+BuyerAgentMlsId
+
+ 
+
+CoBuyerAgentMlsId
+
+ 
+
+ListOfficeName
+
+The legal name of the brokerage representing the seller.
+
+ListOfficeMlsId
+
+ 
+
+ListAOR
+
+ 
+
+ListAgentAOR
+
+ 
+
+ListOfficeAOR
+
+ 
+
+CoListOfficeMlsId
+
+ 
+
+BuyerOfficeMlsId
+
+ 
+
+CoBuyerOfficeMlsId
+
+ 
+
+StoriesTotal
+
+The total number of floors in the building.
+
+TaxYear
+
+A type of legal description for land in developed areas where streets or other rights-of-ways delineate large parcels of land referred to as divided into lots on which homes or other types of developments are built.
+
+TaxAnnualAmount
+
+A type of legal description for land in developed areas where streets or other rights-of-ways delineate large parcels of land referred to as divided into lots on which homes or other types of developments are built.
+
+GarageSpaces
+
+The number of spaces in the garage(s).
+
+Cooling
+
+A list describing the cooling or air conditioning features of the property.
+
+InteriorFeatures
+
+A list of features or description of the interior of the property included in the sale/lease.
+
+ExteriorFeatures
+
+A list of features or description of the exterior of the property included in the sale/lease.
+
+PublicRemarks
+
+Text remarks that may be displayed to the public.
+
+LaundryFeatures
+
+A list of features and locations where the laundry is located in the property being sold. i.e. Gas Dryer Hookup, In Kitchen, In Garage, etc.
+
+FireplacesTotal
+
+The total number of fireplaces included in the property.
+
+PoolFeatures
+
+A list of features or description of the pool included in the sale/lease.
+
+PetsAllowed
+
+Are pets allowed at the property? A list of yes, no and more detailed restrictions/allowances.
+
+WaterfrontFeatures
+
+Features of the waterfront on which the property is located.
+
+AccessibilityFeatures
+
+A list or description of the accessibility features included in the sale/lease.
+
+LotFeatures
+
+A list of features or description of the lot included in the sale/lease.
+
+ 
+
+Member Resource
+
+Field
+
+Description
+
+MemberFullName
+
+ 
+
+MemberEmail
+
+ 
+
+MemberMlsId
+
+MLS ID of the agent in MLS
+
+OfficeMlsId
+
+MLS ID of the agent’s Office in MLS
+
+ModificationTimestamp
+
+ 
+
+OriginatingSystemName
+
+ 
+
+MemberKey
+
+Agent’s system Key in MLS
+
+MemberStatus
+
+ 
+
+OfficeKey
+
+ 
+
+MemberDirectPhone
+
+ 
+
+ 
+
+Office Resource
+
+Field
+
+Description
+
+OfficeName
+
+ 
+
+OfficeEmail
+
+ 
+
+OfficeMlsId
+
+MLS ID of the agent in MLS
+
+ModificationTimestamp
+
+ 
+
+OriginatingSystemName
+
+ 
+
+OfficeStatus
+
+ 
+
+OfficeKey
+
+ 
+
+ 
+
+OpenHouse Resource
+
+Field
+
+Description
+
+OpenHouseKey
+
+ 
+
+ListingKey
+
+Get Openhouse records based on associated ListingKey
+
+ListingId
+
+Get Openhouse records based on associated ListingID
+
+ModificationTimestamp
+
+ 
+
+OriginatingSystemName
+
+ 
+
+OpenHouseStatus
+
+ 
+
+OpenHouseDate
+
+ 
+
+ 
+
+PropertyRooms Resource
+
+Field
+
+Description
+
+RoomKey
+
+ 
+
+ListingKey
+
+Get Room records based on associated ListingKey
+
+ListingId
+
+Get Room records based on associated ListingID
+
+ModificationTimestamp
+
+ 
+
+OriginatingSystemName
+
+ 
+
