@@ -35,6 +35,7 @@ interface ResoProvider {
   apiBase: string;
   scope?: string;
   directToken?: boolean;
+  dualHeader?: boolean;
 }
 
 const RESO_PROVIDERS: ResoProvider[] = [
@@ -43,6 +44,7 @@ const RESO_PROVIDERS: ResoProvider[] = [
     tokenUrl: null,
     apiBase: "https://api.realtyfeed.com/reso/odata",
     directToken: true,
+    dualHeader: true,
   },
   {
     name: "Trestle (CoreLogic)",
@@ -79,10 +81,10 @@ function resoOAuthConfigured(): boolean {
   return !!(RESO_CLIENT_ID && RESO_CLIENT_SECRET);
 }
 
-async function tryDirectTokenAccess(provider: ResoProvider, token: string, headerStyle: "bearer" | "referer" = "bearer"): Promise<boolean> {
+async function tryDirectTokenAccess(provider: ResoProvider, token: string, headerStyle: "bearer" | "referer" = "bearer", extraHeaders?: Record<string, string>): Promise<boolean> {
   try {
     const testUrl = `${provider.apiBase}/Property?$top=1&$select=ListingKey`;
-    const headers: Record<string, string> = { Accept: "application/json" };
+    const headers: Record<string, string> = { Accept: "application/json", ...extraHeaders };
     if (headerStyle === "bearer") {
       headers["Authorization"] = `Bearer ${token}`;
     } else {
@@ -94,7 +96,7 @@ async function tryDirectTokenAccess(provider: ResoProvider, token: string, heade
       if (body.value !== undefined) return true;
     }
     const errText = await res.text().catch(() => "");
-    console.log(`[IDX Sync] ${provider.name} (${headerStyle}) → HTTP ${res.status}: ${errText.slice(0, 120)}`);
+    console.log(`[IDX Sync] ${provider.name} (${headerStyle}) → HTTP ${res.status}: ${errText.slice(0, 200)}`);
     return false;
   } catch (err: any) {
     console.log(`[IDX Sync] ${provider.name} (${headerStyle}) → Error: ${err.message}`);
@@ -103,8 +105,52 @@ async function tryDirectTokenAccess(provider: ResoProvider, token: string, heade
 }
 
 let discoveredAuthStyle: "bearer" | "referer" = "bearer";
+let discoveredDualHeader: { bearer: string; apiKey: string } | null = null;
 
 async function tryTokenEndpoint(provider: ResoProvider): Promise<{ token: string; expiresIn: number } | null> {
+  if (provider.directToken && provider.dualHeader) {
+    const combos = [
+      { bearer: RESO_CLIENT_SECRET, apiKey: RESO_CLIENT_ID, label: "secret=Bearer, id=x-api-key" },
+      { bearer: RESO_CLIENT_ID, apiKey: RESO_CLIENT_SECRET, label: "id=Bearer, secret=x-api-key" },
+    ];
+    for (const combo of combos) {
+      if (!combo.bearer || !combo.apiKey) continue;
+      console.log(`[IDX Sync] ${provider.name} → Testing dual-header: ${combo.label}...`);
+      const ok = await tryDirectTokenAccess(provider, combo.bearer, "bearer", { "x-api-key": combo.apiKey });
+      if (ok) {
+        discoveredAuthStyle = "bearer";
+        discoveredDualHeader = { bearer: combo.bearer, apiKey: combo.apiKey };
+        console.log(`[IDX Sync] ✓ ${provider.name} dual-header auth succeeded (${combo.label})`);
+        return { token: combo.bearer, expiresIn: 86400 * 365 };
+      }
+    }
+
+    for (const combo of combos) {
+      if (!combo.bearer || !combo.apiKey) continue;
+      console.log(`[IDX Sync] ${provider.name} → Testing single Bearer: ${combo.label.split(",")[0]}...`);
+      const ok = await tryDirectTokenAccess(provider, combo.bearer, "bearer");
+      if (ok) {
+        discoveredAuthStyle = "bearer";
+        discoveredDualHeader = null;
+        return { token: combo.bearer, expiresIn: 86400 * 365 };
+      }
+    }
+
+    const refererCandidates = [RESO_CLIENT_SECRET, RESO_CLIENT_ID];
+    for (const candidate of refererCandidates) {
+      if (!candidate) continue;
+      console.log(`[IDX Sync] ${provider.name} → Testing Referer with ${candidate === RESO_CLIENT_SECRET ? "client_secret" : "client_id"}...`);
+      const ok = await tryDirectTokenAccess(provider, candidate, "referer");
+      if (ok) {
+        discoveredAuthStyle = "referer";
+        discoveredDualHeader = null;
+        return { token: candidate, expiresIn: 86400 * 365 };
+      }
+    }
+
+    return null;
+  }
+
   if (provider.directToken) {
     const candidates = [RESO_CLIENT_SECRET, RESO_CLIENT_ID];
     const styles: Array<"bearer" | "referer"> = ["bearer", "referer"];
@@ -316,11 +362,14 @@ async function fetchAllResoListings(): Promise<any[]> {
   }
 
   const all: any[] = [];
-  let nextUrl: string | null = `${baseUrl}/Property?$filter=StandardStatus eq 'Active'&$top=200&$select=ListingKey,ListingId,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,LivingArea,LotSizeSquareFeet,StreetNumber,StreetName,UnitNumber,City,StateOrProvince,PostalCode,Latitude,Longitude,PublicRemarks,Media,ListDate,AssociationFee,MlsStatus,PropertyType,YearBuilt`;
+  let nextUrl: string | null = `${baseUrl}/Property?$filter=StandardStatus eq 'Active'&$top=200&$select=ListingKey,ListingId,ListPrice,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,LivingArea,LotSizeSquareFeet,StreetNumber,StreetName,UnitNumber,City,StateOrProvince,PostalCode,Latitude,Longitude,PublicRemarks,Media,ListDate,AssociationFee,MlsStatus,PropertyType,YearBuilt,ListAgentFullName,ListAgentFirstName,ListAgentLastName,ListAgentEmail,ListAgentDirectPhone,ListAgentOfficePhone,ListOfficeName`;
 
   while (nextUrl) {
     const headers: Record<string, string> = { Accept: "application/json" };
-    if (discoveredProvider?.directToken && discoveredAuthStyle === "referer") {
+    if (discoveredDualHeader) {
+      headers["Authorization"] = `Bearer ${discoveredDualHeader.bearer}`;
+      headers["x-api-key"] = discoveredDualHeader.apiKey;
+    } else if (discoveredProvider?.directToken && discoveredAuthStyle === "referer") {
       headers["Referer"] = token;
     } else {
       headers["Authorization"] = `Bearer ${token}`;
@@ -435,6 +484,10 @@ function normaliseReso(raw: any) {
     source: "idx" as const,
     isOffMarket: false,
     listDate: raw.ListDate ? new Date(raw.ListDate) : null,
+    listingAgentName: raw.ListAgentFullName || raw.ListAgentFirstName ? `${raw.ListAgentFirstName || ""} ${raw.ListAgentLastName || ""}`.trim() : null,
+    listingAgentEmail: raw.ListAgentEmail || null,
+    listingAgentPhone: raw.ListAgentDirectPhone || raw.ListAgentOfficePhone || null,
+    listingBrokerage: raw.ListOfficeName || null,
   };
 }
 
