@@ -1,0 +1,109 @@
+Get schools by polygon
+
+
+
+By abraham.gh
+
+1 min
+
+Add a reaction
+Base URL
+The base URL for the API is https://api.realtyfeed.com.
+
+Endpoint
+POST /geo/schooldistrict/polygon
+
+QueryParams
+
+
+    # pagination
+    skip: Optional[NonNegativeInt] = 0
+    limit: Optional[PositiveInt] = 10
+    # filter
+    fetch_geometry: Optional[bool] = False
+    ratio_simplify: Optional[float] = Field(0.10, ge=0, le=0.50)
+Body
+
+
+{
+  "polygon_list": [
+    {
+      "latitude": 37.990688000000034,
+      "longitude": -77.642518
+    },
+    {
+      "latitude": 40,
+      "longitude": -76.46154521268548
+    },
+    {
+      "latitude": 50,
+      "longitude": -76.46154521268548
+    },
+    {
+      "latitude": 37.719940283981074,
+      "longitude": -77.642518
+    },
+    {
+      "latitude": 37.990688000000034,
+      "longitude": -77.642518
+    }
+  ]
+}
+Response
+
+
+{
+  "result": [
+    {
+      "property": {
+        "STATEFP": "51",
+        "ELSDLEA": "",
+        "SCSDLEA": "",
+        "UNSDLEA": "02360",
+        "SDADMLEA": "",
+        "GEOID": "5102360",
+        "NAME": "Manassas City Public Schools",
+        "LSAD": "00",
+        "LOGRADE": "PK",
+        "HIGRADE": "12",
+        "MTFCC": "G5420",
+        "SDTYP": "",
+        "FUNCSTAT": "E",
+        "ALAND": 25493247,
+        "AWATER": 146287,
+        "INTPTLAT": "+38.7468077",
+        "INTPTLON": "-077.4826328",
+        "GEO_YEAR": "2023",
+        "SCHOOLYEAR": "2022-2023"
+      }
+    },
+    {
+      "property": {
+        "STATEFP": "36",
+        "ELSDLEA": "",
+        "SCSDLEA": "",
+        "UNSDLEA": "24930",
+        "SDADMLEA": "",
+        "GEOID": "3624930",
+        "NAME": "Romulus Central School District",
+        "LSAD": "00",
+        "LOGRADE": "PK",
+        "HIGRADE": "12",
+        "MTFCC": "G5420",
+        "SDTYP": "",
+        "FUNCSTAT": "E",
+        "ALAND": 168117332,
+        "AWATER": 61422252,
+        "INTPTLAT": "+42.7744309",
+        "INTPTLON": "-076.8577662",
+        "GEO_YEAR": "2023",
+        "SCHOOLYEAR": "2022-2023"
+      }
+    }, ...
+  ],
+  "pagination": {
+    "skip": 0,
+    "limit": 10,
+    "total": 163
+  }
+}
