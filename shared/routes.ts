@@ -87,7 +87,7 @@ export const api = {
     create: {
       method: 'POST' as const,
       path: '/api/saved-properties' as const,
-      input: z.object({ propertyId: z.number() }),
+      input: z.object({ propertyId: z.number(), listId: z.number().nullable().optional() }),
       responses: {
         201: z.any(),
         400: errorSchemas.validation,

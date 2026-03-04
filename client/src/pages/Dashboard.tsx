@@ -1,7 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { PropertyCard } from "@/components/PropertyCard";
-import { useSavedProperties, useSavedSearches, useDeleteSavedSearch } from "@/hooks/use-saved";
+import {
+  useSavedProperties, useSavedSearches, useDeleteSavedSearch,
+  useFavoriteLists, useCreateFavoriteList, useRenameFavoriteList,
+  useDeleteFavoriteList, useMovePropertyToList,
+} from "@/hooks/use-saved";
 import {
   useSearchHistory, useDeleteSearchHistory, useClearSearchHistory,
   useMyHomes, useCreateMyHome, useDeleteMyHome, useMyHomeIntelligence,
@@ -16,6 +20,7 @@ import {
   Droplets, TreeDeciduous, School, ShoppingCart, Building,
   Flame, Activity, ExternalLink, Camera, Loader2,
   UserPlus, CalendarDays, Mail, CheckCircle2, AlertCircle,
+  FolderPlus, FolderOpen, MoreHorizontal, Pencil, List,
 } from "lucide-react";
 import { useJsApiLoader, Autocomplete } from "@react-google-maps/api";
 
@@ -719,25 +724,219 @@ function OpenHousesSection() {
 
 function FavoritesSection() {
   const { data: savedProps = [], isLoading } = useSavedProperties();
+  const { data: lists = [], isLoading: listsLoading } = useFavoriteLists();
+  const { mutate: createList, isPending: isCreating } = useCreateFavoriteList();
+  const { mutate: renameList } = useRenameFavoriteList();
+  const { mutate: deleteList } = useDeleteFavoriteList();
+  const { mutate: moveProperty } = useMovePropertyToList();
+
+  const [activeListId, setActiveListId] = useState<number | null>(null);
+  const [showNewListInput, setShowNewListInput] = useState(false);
+  const [newListName, setNewListName] = useState("");
+  const [editingListId, setEditingListId] = useState<number | null>(null);
+  const [editingName, setEditingName] = useState("");
+  const [moveMenuPropertyId, setMoveMenuPropertyId] = useState<number | null>(null);
+
+  const handleCreateList = () => {
+    if (newListName.trim()) {
+      createList(newListName.trim());
+      setNewListName("");
+      setShowNewListInput(false);
+    }
+  };
+
+  const handleRename = (id: number) => {
+    if (editingName.trim()) {
+      renameList({ id, name: editingName.trim() });
+      setEditingListId(null);
+      setEditingName("");
+    }
+  };
+
+  const filteredProps = activeListId === null
+    ? savedProps
+    : savedProps.filter(sp => sp.listId === activeListId);
+
+  const listCounts = lists.reduce<Record<number, number>>((acc, list) => {
+    acc[list.id] = savedProps.filter(sp => sp.listId === list.id).length;
+    return acc;
+  }, {});
+  const unlistedCount = savedProps.filter(sp => !sp.listId).length;
 
   return (
     <div className="space-y-6">
       <SectionHeader title="Favorites" subtitle="Homes you've saved while browsing" />
 
-      {isLoading ? (
+      <div className="flex items-center gap-2 flex-wrap" data-testid="favorite-list-tabs">
+        <button
+          onClick={() => setActiveListId(null)}
+          className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors flex items-center gap-1.5 ${
+            activeListId === null
+              ? "bg-foreground text-background"
+              : "bg-muted text-muted-foreground hover:bg-muted/80"
+          }`}
+          data-testid="tab-all-favorites"
+        >
+          <Heart className="w-3.5 h-3.5" />
+          All ({savedProps.length})
+        </button>
+
+        {lists.map(list => (
+          <div key={list.id} className="relative group">
+            {editingListId === list.id ? (
+              <div className="flex items-center gap-1.5 bg-card border border-border rounded-full px-2 py-1">
+                <input
+                  className="text-sm bg-transparent outline-none w-24 px-1"
+                  value={editingName}
+                  onChange={e => setEditingName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") handleRename(list.id);
+                    if (e.key === "Escape") setEditingListId(null);
+                  }}
+                  autoFocus
+                  data-testid={`input-rename-list-${list.id}`}
+                />
+                <button onClick={() => handleRename(list.id)} className="p-0.5 text-green-600 hover:text-green-700">
+                  <Check className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => setEditingListId(null)} className="p-0.5 text-muted-foreground hover:text-foreground">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setActiveListId(list.id)}
+                className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors flex items-center gap-1.5 ${
+                  activeListId === list.id
+                    ? "bg-foreground text-background"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+                data-testid={`tab-list-${list.id}`}
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+                {list.name} ({listCounts[list.id] || 0})
+              </button>
+            )}
+
+            {activeListId === list.id && editingListId !== list.id && (
+              <div className="absolute -top-1 -right-1 flex gap-0.5 z-10">
+                <button
+                  onClick={e => { e.stopPropagation(); setEditingListId(list.id); setEditingName(list.name); }}
+                  className="w-5 h-5 bg-card border border-border rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground shadow-sm"
+                  title="Rename"
+                  data-testid={`button-rename-list-${list.id}`}
+                >
+                  <Pencil className="w-2.5 h-2.5" />
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); deleteList(list.id); setActiveListId(null); }}
+                  className="w-5 h-5 bg-card border border-border rounded-full flex items-center justify-center text-muted-foreground hover:text-destructive shadow-sm"
+                  title="Delete list"
+                  data-testid={`button-delete-list-${list.id}`}
+                >
+                  <Trash2 className="w-2.5 h-2.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {showNewListInput ? (
+          <div className="flex items-center gap-1.5 bg-card border border-border rounded-full px-3 py-1.5">
+            <input
+              className="text-sm bg-transparent outline-none w-28 placeholder-muted-foreground"
+              placeholder="List name..."
+              value={newListName}
+              onChange={e => setNewListName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") handleCreateList();
+                if (e.key === "Escape") { setShowNewListInput(false); setNewListName(""); }
+              }}
+              autoFocus
+              data-testid="input-new-list-name"
+            />
+            <button
+              onClick={handleCreateList}
+              disabled={!newListName.trim() || isCreating}
+              className="p-0.5 text-green-600 hover:text-green-700 disabled:opacity-40"
+              data-testid="button-confirm-new-list"
+            >
+              <Check className="w-4 h-4" />
+            </button>
+            <button onClick={() => { setShowNewListInput(false); setNewListName(""); }} className="p-0.5 text-muted-foreground hover:text-foreground">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowNewListInput(true)}
+            className="px-3 py-2 rounded-full text-sm font-semibold text-primary bg-primary/10 hover:bg-primary/20 transition-colors flex items-center gap-1.5"
+            data-testid="button-create-list"
+          >
+            <FolderPlus className="w-3.5 h-3.5" />
+            New List
+          </button>
+        )}
+      </div>
+
+      {(isLoading || listsLoading) ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           {[1, 2, 3, 4].map(i => <div key={i} className="h-80 bg-muted animate-pulse rounded-2xl" />)}
         </div>
-      ) : savedProps.length === 0 ? (
-        <EmptyState icon={Heart} title="No favorites yet" description="Click the heart icon on any property card while browsing to save it here.">
+      ) : filteredProps.length === 0 ? (
+        <EmptyState
+          icon={activeListId ? FolderOpen : Heart}
+          title={activeListId ? "This list is empty" : "No favorites yet"}
+          description={activeListId ? "Move properties here from your All Favorites view." : "Click the heart icon on any property card while browsing to save it here."}
+        >
           <Link href="/search" className="bg-foreground text-background px-6 py-2.5 rounded-full font-bold hover:bg-primary hover:text-white transition-colors">
             Start Browsing
           </Link>
         </EmptyState>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {savedProps.map(({ property }) => (
-            <PropertyCard key={property.id} property={property} />
+          {filteredProps.map(({ property, ...saved }) => (
+            <div key={property.id} className="relative group/card">
+              <PropertyCard property={property} />
+              {lists.length > 0 && (
+                <div className="absolute top-3 left-3 z-20">
+                  <button
+                    onClick={e => { e.preventDefault(); e.stopPropagation(); setMoveMenuPropertyId(moveMenuPropertyId === property.id ? null : property.id); }}
+                    className="w-8 h-8 bg-black/40 backdrop-blur-sm border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-black/60 transition-colors opacity-0 group-hover/card:opacity-100"
+                    title="Move to list"
+                    data-testid={`button-move-property-${property.id}`}
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+
+                  {moveMenuPropertyId === property.id && (
+                    <div className="absolute top-10 left-0 bg-card border border-border rounded-xl shadow-xl py-1.5 min-w-[160px] z-30" data-testid={`menu-move-property-${property.id}`}>
+                      <button
+                        onClick={() => { moveProperty({ propertyId: property.id, listId: null }); setMoveMenuPropertyId(null); }}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2 ${!saved.listId ? "text-primary font-semibold" : "text-foreground"}`}
+                        data-testid="menu-item-all-favorites"
+                      >
+                        <Heart className="w-3.5 h-3.5" />
+                        All Favorites
+                        {!saved.listId && <Check className="w-3.5 h-3.5 ml-auto" />}
+                      </button>
+                      {lists.map(list => (
+                        <button
+                          key={list.id}
+                          onClick={() => { moveProperty({ propertyId: property.id, listId: list.id }); setMoveMenuPropertyId(null); }}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2 ${saved.listId === list.id ? "text-primary font-semibold" : "text-foreground"}`}
+                          data-testid={`menu-item-list-${list.id}`}
+                        >
+                          <FolderOpen className="w-3.5 h-3.5" />
+                          {list.name}
+                          {saved.listId === list.id && <Check className="w-3.5 h-3.5 ml-auto" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           ))}
         </div>
       )}

@@ -10,6 +10,7 @@ import {
   buyerProfiles,
   buyerMatches,
   sellerPitches,
+  favoriteLists,
   type Property,
   type InsertProperty,
   type SavedProperty,
@@ -27,6 +28,7 @@ import {
   type InsertBuyerMatch,
   type SellerPitch,
   type InsertSellerPitch,
+  type FavoriteList,
   users,
 } from "@shared/schema";
 import { eq, and, desc, sql, gte } from "drizzle-orm";
@@ -39,10 +41,17 @@ export interface IStorage {
   updateProperty(id: number, updates: Partial<InsertProperty>): Promise<Property>;
   deleteProperty(id: number): Promise<void>;
 
+  // Favorite Lists
+  getFavoriteLists(userId: string): Promise<FavoriteList[]>;
+  createFavoriteList(userId: string, name: string): Promise<FavoriteList>;
+  renameFavoriteList(id: number, userId: string, name: string): Promise<FavoriteList>;
+  deleteFavoriteList(id: number, userId: string): Promise<void>;
+
   // Saved Properties
   getSavedProperties(userId: string): Promise<(SavedProperty & { property: Property })[]>;
-  saveProperty(userId: string, propertyId: number): Promise<SavedProperty>;
+  saveProperty(userId: string, propertyId: number, listId?: number | null): Promise<SavedProperty>;
   removeSavedProperty(userId: string, propertyId: number): Promise<void>;
+  movePropertyToList(userId: string, propertyId: number, listId: number | null): Promise<void>;
 
   // Saved Searches
   getSavedSearches(userId: string): Promise<SavedSearch[]>;
@@ -168,6 +177,25 @@ export class DatabaseStorage implements IStorage {
     await db.delete(properties).where(eq(properties.id, id));
   }
 
+  async getFavoriteLists(userId: string): Promise<FavoriteList[]> {
+    return await db.select().from(favoriteLists).where(eq(favoriteLists.userId, userId)).orderBy(desc(favoriteLists.createdAt));
+  }
+
+  async createFavoriteList(userId: string, name: string): Promise<FavoriteList> {
+    const [list] = await db.insert(favoriteLists).values({ userId, name }).returning();
+    return list;
+  }
+
+  async renameFavoriteList(id: number, userId: string, name: string): Promise<FavoriteList> {
+    const [list] = await db.update(favoriteLists).set({ name }).where(and(eq(favoriteLists.id, id), eq(favoriteLists.userId, userId))).returning();
+    return list;
+  }
+
+  async deleteFavoriteList(id: number, userId: string): Promise<void> {
+    await db.update(savedProperties).set({ listId: null }).where(and(eq(savedProperties.userId, userId), eq(savedProperties.listId, id)));
+    await db.delete(favoriteLists).where(and(eq(favoriteLists.id, id), eq(favoriteLists.userId, userId)));
+  }
+
   async getSavedProperties(userId: string): Promise<(SavedProperty & { property: Property })[]> {
     const results = await db
       .select({ savedProperty: savedProperties, property: properties })
@@ -178,13 +206,17 @@ export class DatabaseStorage implements IStorage {
     return results.map(r => ({ ...r.savedProperty, property: r.property }));
   }
 
-  async saveProperty(userId: string, propertyId: number): Promise<SavedProperty> {
-    const [saved] = await db.insert(savedProperties).values({ userId, propertyId }).returning();
+  async saveProperty(userId: string, propertyId: number, listId?: number | null): Promise<SavedProperty> {
+    const [saved] = await db.insert(savedProperties).values({ userId, propertyId, listId: listId ?? null }).returning();
     return saved;
   }
 
   async removeSavedProperty(userId: string, propertyId: number): Promise<void> {
     await db.delete(savedProperties).where(and(eq(savedProperties.userId, userId), eq(savedProperties.propertyId, propertyId)));
+  }
+
+  async movePropertyToList(userId: string, propertyId: number, listId: number | null): Promise<void> {
+    await db.update(savedProperties).set({ listId }).where(and(eq(savedProperties.userId, userId), eq(savedProperties.propertyId, propertyId)));
   }
 
   async getSavedSearches(userId: string): Promise<SavedSearch[]> {

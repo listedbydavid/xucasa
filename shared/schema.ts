@@ -54,10 +54,18 @@ export const idxSyncLog = pgTable("idx_sync_log", {
   error: text("error"),
 });
 
+export const favoriteLists = pgTable("favorite_lists", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const savedProperties = pgTable("saved_properties", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id").references(() => users.id).notNull(),
   propertyId: integer("property_id").references(() => properties.id).notNull(),
+  listId: integer("list_id").references(() => favoriteLists.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -259,6 +267,7 @@ export const insertSellLeadSchema = createInsertSchema(sellLeads).omit({ id: tru
 export const insertBuyerProfileSchema = createInsertSchema(buyerProfiles).omit({ id: true, createdAt: true });
 export const insertBuyerMatchSchema = createInsertSchema(buyerMatches).omit({ id: true, createdAt: true });
 export const insertSellerPitchSchema = createInsertSchema(sellerPitches).omit({ id: true, createdAt: true });
+export const insertFavoriteListSchema = createInsertSchema(favoriteLists).omit({ id: true, createdAt: true });
 export const insertSavedPropertySchema = createInsertSchema(savedProperties).omit({ id: true, createdAt: true });
 export const insertSavedSearchSchema = createInsertSchema(savedSearches).omit({ id: true, createdAt: true });
 export const insertSearchHistorySchema = createInsertSchema(searchHistory).omit({ id: true, createdAt: true });
@@ -268,6 +277,8 @@ export const insertClientAgentLinkSchema = createInsertSchema(clientAgentLinks).
 // Types
 export type Property = typeof properties.$inferSelect;
 export type InsertProperty = z.infer<typeof insertPropertySchema>;
+export type FavoriteList = typeof favoriteLists.$inferSelect;
+export type InsertFavoriteList = z.infer<typeof insertFavoriteListSchema>;
 export type SavedProperty = typeof savedProperties.$inferSelect;
 export type InsertSavedProperty = z.infer<typeof insertSavedPropertySchema>;
 export type SavedSearch = typeof savedSearches.$inferSelect;

@@ -8,7 +8,7 @@ Key features:
 - Property search with filters (location, price, beds, baths, sqft, HOA fee, off-market)
 - Interactive Google Maps view with property markers (real geocoordinates) and Street View
 - Property detail pages with neighborhood stats, flood zone info, and nearby places (public APIs)
-- **Client Dashboard** — profile editor, My Home tracker with property intelligence, favorites, saved searches, search history
+- **Client Dashboard** — profile editor, My Home tracker with property intelligence, favorites with custom lists (create, rename, delete lists; move properties between lists), saved searches, search history
 - **Sell Wizard** (`/sell`) — 6-step homeowner sell flow: address (Google Autocomplete + Street View preview), home details, instant valuation from comparable sales (beds/sqft matching), selling goals (timeline/motivation), contact + listing type (MLS public vs. Buy it Now private), confirmation. Saves leads to `sell_leads` DB table. Valuation via `/api/valuation`.
 - **Buyer Marketplace** (`/buyers`) — Reverse buyer marketplace where pre-approved buyers create profiles listing their home needs (budget, beds, baths, sqft, lot size, home types, preferred cities, must-haves, nice-to-haves, deal-breakers, move-in timeline, bio). Homeowners browse buyer cards and pitch their properties directly to matching buyers via a message + optional property selection. Filter buyers by city, min/max budget. Inline CTA form, mock buyer examples, 100K+ stats for social proof.
 - **Seller Pitch** — On the Sell wizard Step 2, homeowners can pitch their home to buyers by uploading photos, entering asking price, description. Pitches go to the site admin (not directly to buyers) for review and matching. Stored in `seller_pitches` DB table.

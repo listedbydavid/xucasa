@@ -230,7 +230,7 @@ export async function registerRoutes(
     try {
       const user = req.user.claims;
       const input = api.savedProperties.create.input.parse(req.body);
-      const saved = await storage.saveProperty(user.sub, input.propertyId);
+      const saved = await storage.saveProperty(user.sub, input.propertyId, input.listId);
       res.status(201).json(saved);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -248,6 +248,72 @@ export async function registerRoutes(
       if (isNaN(propertyId)) return res.status(400).json({ message: "Invalid ID" });
       
       await storage.removeSavedProperty(user.sub, propertyId);
+      res.status(204).end();
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.patch("/api/saved-properties/:propertyId/list", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user.claims;
+      const propertyId = parseInt(req.params.propertyId);
+      if (isNaN(propertyId)) return res.status(400).json({ message: "Invalid ID" });
+      const { listId } = req.body;
+      await storage.movePropertyToList(user.sub, propertyId, listId ?? null);
+      res.status(200).json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  // Favorite Lists API
+  app.get("/api/favorite-lists", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user.claims;
+      const lists = await storage.getFavoriteLists(user.sub);
+      res.status(200).json(lists);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.post("/api/favorite-lists", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user.claims;
+      const { name } = req.body;
+      if (!name || typeof name !== "string" || name.trim().length === 0) {
+        return res.status(400).json({ message: "List name is required" });
+      }
+      const list = await storage.createFavoriteList(user.sub, name.trim());
+      res.status(201).json(list);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.patch("/api/favorite-lists/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user.claims;
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      const { name } = req.body;
+      if (!name || typeof name !== "string" || name.trim().length === 0) {
+        return res.status(400).json({ message: "List name is required" });
+      }
+      const list = await storage.renameFavoriteList(id, user.sub, name.trim());
+      res.status(200).json(list);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.delete("/api/favorite-lists/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user.claims;
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      await storage.deleteFavoriteList(id, user.sub);
       res.status(204).end();
     } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
