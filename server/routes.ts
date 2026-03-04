@@ -3,8 +3,8 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { db } from "./db";
-import { buyerMatches, buyerProfiles, sellLeads, users } from "@shared/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks } from "@shared/schema";
+import { eq, desc, sql, or } from "drizzle-orm";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { registerAuthRoutes } from "./replit_integrations/auth";
@@ -797,6 +797,101 @@ export async function registerRoutes(
         )
         .orderBy(desc(sellLeads.createdAt));
       res.json(leads.map((l: any) => ({ ...l, type: "seller" })));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Admin User Management ─────────────────────────────────────────────────
+
+  app.get("/api/admin/users", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const allUsers = await authStorage.getAllUsers();
+      const usersWithActivity = await Promise.all(
+        allUsers.map(async (u) => {
+          const activity = await authStorage.getUserActivity(u.id);
+          return { ...u, activity };
+        })
+      );
+      res.json(usersWithActivity);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/users/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const user = await authStorage.getUser(req.params.id);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const activity = await authStorage.getUserActivity(req.params.id);
+      res.json({ ...user, activity });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.patch("/api/admin/users/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const patchSchema = z.object({
+        role: z.enum(["user", "agent", "admin"]).optional(),
+        status: z.enum(["active", "suspended", "banned"]).optional(),
+        adminNotes: z.string().optional(),
+      });
+      const parsed = patchSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
+      }
+      const existing = await authStorage.getUser(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      const updates: any = {};
+      if (parsed.data.role !== undefined) updates.role = parsed.data.role;
+      if (parsed.data.status !== undefined) updates.status = parsed.data.status;
+      if (parsed.data.adminNotes !== undefined) updates.adminNotes = parsed.data.adminNotes;
+      const updated = await authStorage.adminUpdateUser(req.params.id, updates);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/admin/users/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const targetId = req.params.id;
+      const adminSub = (req as any).user?.claims?.sub;
+      if (targetId === adminSub) {
+        return res.status(400).json({ message: "Cannot delete your own account" });
+      }
+      const existing = await authStorage.getUser(targetId);
+      if (!existing) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      await db.transaction(async (tx) => {
+        await tx.delete(savedProperties).where(eq(savedProperties.userId, targetId));
+        await tx.delete(savedSearches).where(eq(savedSearches.userId, targetId));
+        await tx.delete(searchHistory).where(eq(searchHistory.userId, targetId));
+        await tx.delete(userHomes).where(eq(userHomes.userId, targetId));
+        await tx.delete(favoriteLists).where(eq(favoriteLists.userId, targetId));
+        const userProfiles = await tx.select({ id: buyerProfiles.id }).from(buyerProfiles).where(eq(buyerProfiles.userId, targetId));
+        for (const bp of userProfiles) {
+          await tx.delete(buyerMatches).where(eq(buyerMatches.buyerProfileId, bp.id));
+        }
+        await tx.delete(buyerMatches).where(eq(buyerMatches.senderId, targetId));
+        await tx.delete(buyerProfiles).where(eq(buyerProfiles.userId, targetId));
+        await tx.delete(sellerPitches).where(eq(sellerPitches.userId, targetId));
+        await tx.delete(clientAgentLinks).where(
+          or(eq(clientAgentLinks.clientId, targetId), eq(clientAgentLinks.agentId, targetId))
+        );
+        const userProperties = await tx.select({ id: properties.id }).from(properties).where(eq(properties.agentId, targetId));
+        for (const prop of userProperties) {
+          await tx.delete(buyerMatches).where(eq(buyerMatches.propertyId, prop.id));
+          await tx.delete(savedProperties).where(eq(savedProperties.propertyId, prop.id));
+        }
+        await tx.delete(properties).where(eq(properties.agentId, targetId));
+        await tx.delete(users).where(eq(users.id, targetId));
+      });
+      res.json({ message: "User deleted" });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

@@ -9,7 +9,8 @@ import {
   Clock, BedDouble, Bath, Maximize2, DollarSign, Eye,
   ChevronDown, ChevronUp, CheckCircle2, X, AlertCircle,
   MessageSquare, Image, FileText, Search, Layers, Briefcase,
-  User, ExternalLink,
+  User, ExternalLink, UserCog, Ban, Trash2, Edit3, Save,
+  Activity, Crown, ShieldCheck, UserX, MoreVertical,
 } from "lucide-react";
 
 
@@ -211,10 +212,406 @@ function PitchCard({ pitch, onUpdateStatus }: { pitch: SellerPitch; onUpdateStat
   );
 }
 
+function RoleBadge({ role }: { role: string }) {
+  const config: Record<string, { icon: any; color: string; label: string }> = {
+    admin: { icon: Crown, color: "bg-red-100 text-red-800 border-red-200", label: "Admin" },
+    agent: { icon: Briefcase, color: "bg-blue-100 text-blue-800 border-blue-200", label: "Agent" },
+    user: { icon: User, color: "bg-gray-100 text-gray-700 border-gray-200", label: "User" },
+  };
+  const { icon: Icon, color, label } = config[role] || config.user;
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${color}`}>
+      <Icon className="w-3 h-3" /> {label}
+    </span>
+  );
+}
+
+function UserStatusBadge({ status }: { status: string }) {
+  const colors: Record<string, string> = {
+    active: "bg-green-100 text-green-800 border-green-200",
+    suspended: "bg-amber-100 text-amber-800 border-amber-200",
+    banned: "bg-red-100 text-red-800 border-red-200",
+  };
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${colors[status] || colors.active}`}>
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  );
+}
+
+function ActivityPill({ label, count, color }: { label: string; count: number; color: string }) {
+  if (count === 0) return null;
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${color}`}>
+      {count} {label}
+    </span>
+  );
+}
+
+function UserCard({ u, isCurrentUser, onUpdate, onDelete, isUpdating, isDeleting }: {
+  u: any;
+  isCurrentUser: boolean;
+  onUpdate: (updates: { role?: string; status?: string; adminNotes?: string }) => void;
+  onDelete: () => void;
+  isUpdating: boolean;
+  isDeleting: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [notes, setNotes] = useState(u.adminNotes || "");
+
+  const act = u.activity || {};
+  const hasActivity = Object.values(act).some((v: any) => v > 0);
+
+  return (
+    <div className="bg-white rounded-xl border border-border/60 shadow-sm overflow-hidden" data-testid={`card-admin-user-${u.id}`}>
+      <div className="p-5">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            {u.profileImageUrl ? (
+              <img src={u.profileImageUrl} alt="" className="w-11 h-11 rounded-full border border-border" />
+            ) : (
+              <div className="w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold text-sm">
+                {(u.firstName?.charAt(0) || u.email?.charAt(0) || "?").toUpperCase()}
+              </div>
+            )}
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="font-semibold text-foreground" data-testid={`text-user-name-${u.id}`}>
+                  {u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : u.firstName || u.email || "Unknown"}
+                </h4>
+                <RoleBadge role={u.role || "user"} />
+                <UserStatusBadge status={u.status || "active"} />
+                {isCurrentUser && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20">You</span>
+                )}
+              </div>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                {u.email && (
+                  <a href={`mailto:${u.email}`} className="flex items-center gap-1 hover:text-primary transition-colors">
+                    <Mail className="w-3 h-3" /> {u.email}
+                  </a>
+                )}
+                <span className="text-muted-foreground/50">ID: {u.id.length > 12 ? u.id.slice(0, 12) + "..." : u.id}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {hasActivity && (
+          <div className="flex flex-wrap gap-1.5 mt-3">
+            <ActivityPill label="listings" count={act.listings_count} color="bg-blue-50 text-blue-700 border-blue-200" />
+            <ActivityPill label="saved" count={act.saved_count} color="bg-pink-50 text-pink-700 border-pink-200" />
+            <ActivityPill label="searches" count={act.searches_count} color="bg-cyan-50 text-cyan-700 border-cyan-200" />
+            <ActivityPill label="buyer profiles" count={act.buyer_profiles_count} color="bg-purple-50 text-purple-700 border-purple-200" />
+            <ActivityPill label="pitches sent" count={act.matches_sent_count} color="bg-amber-50 text-amber-700 border-amber-200" />
+            <ActivityPill label="seller pitches" count={act.pitches_count} color="bg-emerald-50 text-emerald-700 border-emerald-200" />
+            <ActivityPill label="sell leads" count={act.sell_leads_count} color="bg-orange-50 text-orange-700 border-orange-200" />
+            <ActivityPill label="homes tracked" count={act.homes_count} color="bg-indigo-50 text-indigo-700 border-indigo-200" />
+            <ActivityPill label="fav lists" count={act.fav_lists_count} color="bg-rose-50 text-rose-700 border-rose-200" />
+            <ActivityPill label="history" count={act.history_count} color="bg-gray-50 text-gray-600 border-gray-200" />
+          </div>
+        )}
+
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/40">
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span>Joined {u.createdAt ? new Date(u.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}</span>
+            <span>Last login {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "Never"}</span>
+          </div>
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="flex items-center gap-1 text-xs text-primary hover:underline"
+            data-testid={`button-expand-user-${u.id}`}
+          >
+            <UserCog className="w-3.5 h-3.5" />
+            {expanded ? "Hide" : "Manage"}
+          </button>
+        </div>
+
+        {expanded && (
+          <div className="mt-3 pt-3 border-t space-y-4 animate-in slide-in-from-top-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Role</label>
+                <div className="flex gap-1.5">
+                  {["user", "agent", "admin"].map(r => (
+                    <button
+                      key={r}
+                      onClick={() => onUpdate({ role: r })}
+                      disabled={isUpdating}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                        (u.role || "user") === r
+                          ? "bg-primary text-white border-primary"
+                          : "bg-white hover:bg-muted border-border disabled:opacity-50"
+                      }`}
+                      data-testid={`button-role-${r}-${u.id}`}
+                    >
+                      {r.charAt(0).toUpperCase() + r.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Account Status</label>
+                <div className="flex gap-1.5">
+                  {["active", "suspended", "banned"].map(s => (
+                    <button
+                      key={s}
+                      onClick={() => {
+                        if (isCurrentUser && s !== "active") {
+                          alert("You can't suspend or ban your own account.");
+                          return;
+                        }
+                        onUpdate({ status: s });
+                      }}
+                      disabled={isUpdating}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                        (u.status || "active") === s
+                          ? s === "active" ? "bg-green-600 text-white border-green-600"
+                            : s === "suspended" ? "bg-amber-500 text-white border-amber-500"
+                            : "bg-red-600 text-white border-red-600"
+                          : "bg-white hover:bg-muted border-border"
+                      }`}
+                      data-testid={`button-status-${s}-${u.id}`}
+                    >
+                      {s === "active" ? "Active" : s === "suspended" ? "Suspended" : "Banned"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Admin Notes</label>
+              <div className="flex gap-2">
+                <textarea
+                  className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 min-h-[60px] resize-none"
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  placeholder="Internal notes about this user..."
+                  data-testid={`input-user-notes-${u.id}`}
+                />
+                <button
+                  onClick={() => onUpdate({ adminNotes: notes })}
+                  disabled={isUpdating || notes === (u.adminNotes || "")}
+                  className="self-end px-3 py-2 rounded-lg text-xs font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                  data-testid={`button-save-notes-${u.id}`}
+                >
+                  <Save className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {u.adminNotes && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <div className="text-xs font-semibold text-amber-800 mb-1">Current Notes</div>
+                <p className="text-sm text-amber-900">{u.adminNotes}</p>
+              </div>
+            )}
+
+            {!isCurrentUser && (
+              <div className="pt-2 border-t border-border/40">
+                <button
+                  onClick={onDelete}
+                  disabled={isDeleting}
+                  className="flex items-center gap-1.5 text-xs text-red-600 hover:text-red-700 hover:underline disabled:opacity-50"
+                  data-testid={`button-delete-user-${u.id}`}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete user and all data
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function UsersTab({ users, isLoading, currentUserId, onUpdateUser, onDeleteUser, isUpdating, isDeleting }: {
+  users: any[];
+  isLoading: boolean;
+  currentUserId: string;
+  onUpdateUser: (id: string, updates: { role?: string; status?: string; adminNotes?: string }) => void;
+  onDeleteUser: (id: string) => void;
+  isUpdating: boolean;
+  isDeleting: boolean;
+}) {
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("newest");
+
+  let filtered = [...users];
+
+  if (search) {
+    const q = search.toLowerCase();
+    filtered = filtered.filter(u =>
+      (u.firstName || "").toLowerCase().includes(q) ||
+      (u.lastName || "").toLowerCase().includes(q) ||
+      (u.email || "").toLowerCase().includes(q) ||
+      (u.id || "").toLowerCase().includes(q)
+    );
+  }
+
+  if (roleFilter !== "all") {
+    filtered = filtered.filter(u => (u.role || "user") === roleFilter);
+  }
+  if (statusFilter !== "all") {
+    filtered = filtered.filter(u => (u.status || "active") === statusFilter);
+  }
+
+  if (sortBy === "newest") {
+    filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  } else if (sortBy === "oldest") {
+    filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  } else if (sortBy === "last-login") {
+    filtered.sort((a, b) => {
+      if (!a.lastLoginAt) return 1;
+      if (!b.lastLoginAt) return -1;
+      return new Date(b.lastLoginAt).getTime() - new Date(a.lastLoginAt).getTime();
+    });
+  } else if (sortBy === "most-active") {
+    filtered.sort((a, b) => {
+      const aSum = Object.values(a.activity || {}).reduce((s: number, v: any) => s + (v || 0), 0);
+      const bSum = Object.values(b.activity || {}).reduce((s: number, v: any) => s + (v || 0), 0);
+      return (bSum as number) - (aSum as number);
+    });
+  } else if (sortBy === "name") {
+    filtered.sort((a, b) => ((a.firstName || a.email || "") as string).localeCompare((b.firstName || b.email || "") as string));
+  }
+
+  const roleCounts = {
+    all: users.length,
+    user: users.filter(u => (u.role || "user") === "user").length,
+    agent: users.filter(u => u.role === "agent").length,
+    admin: users.filter(u => u.role === "admin").length,
+  };
+
+  const statusCounts = {
+    all: users.length,
+    active: users.filter(u => (u.status || "active") === "active").length,
+    suspended: users.filter(u => u.status === "suspended").length,
+    banned: users.filter(u => u.status === "banned").length,
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="bg-white rounded-xl border p-5 animate-pulse">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-full bg-muted" />
+              <div className="flex-1">
+                <div className="h-4 bg-muted rounded w-1/3 mb-2" />
+                <div className="h-3 bg-muted rounded w-1/2" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl border p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search by name, email, or ID..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              data-testid="input-user-search"
+            />
+          </div>
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value)}
+            className="px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+            data-testid="select-user-sort"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="last-login">Last login</option>
+            <option value="most-active">Most active</option>
+            <option value="name">Name A-Z</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground mr-1">Role:</span>
+            {(["all", "user", "agent", "admin"] as const).map(r => (
+              <button
+                key={r}
+                onClick={() => setRoleFilter(r)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  roleFilter === r ? "bg-primary text-white" : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                }`}
+                data-testid={`button-filter-role-${r}`}
+              >
+                {r === "all" ? `All (${roleCounts.all})` : `${r.charAt(0).toUpperCase() + r.slice(1)} (${roleCounts[r]})`}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground mr-1">Status:</span>
+            {(["all", "active", "suspended", "banned"] as const).map(s => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  statusFilter === s ? "bg-primary text-white" : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                }`}
+                data-testid={`button-filter-status-${s}`}
+              >
+                {s === "all" ? `All` : `${s.charAt(0).toUpperCase() + s.slice(1)} (${statusCounts[s]})`}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="text-xs text-muted-foreground">
+        Showing {filtered.length} of {users.length} users
+      </div>
+
+      {filtered.length > 0 ? (
+        <div className="space-y-3">
+          {filtered.map(u => (
+            <UserCard
+              key={u.id}
+              u={u}
+              isCurrentUser={u.id === currentUserId}
+              onUpdate={(updates) => onUpdateUser(u.id, updates)}
+              onDelete={() => onDeleteUser(u.id)}
+              isUpdating={isUpdating}
+              isDeleting={isDeleting}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border p-12 text-center">
+          <UserX className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+          <h3 className="font-semibold mb-1">No users found</h3>
+          <p className="text-sm text-muted-foreground">
+            {search ? "Try a different search term." : "No users match the current filters."}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Admin() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals" | "buyers">("overview");
+  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals" | "buyers" | "users">("overview");
 
   const isAdminUser = isAuthenticated && (user as any)?.isAdmin;
 
@@ -248,6 +645,11 @@ export default function Admin() {
     enabled: isAdminUser,
   });
 
+  const { data: allUsers, isLoading: usersLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/users"],
+    enabled: isAdminUser,
+  });
+
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status, adminNotes }: { id: number; status: string; adminNotes?: string }) => {
       await apiRequest("PATCH", `/api/admin/seller-pitches/${id}`, { status, adminNotes });
@@ -256,6 +658,34 @@ export default function Admin() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/seller-pitches"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       toast({ title: "Status updated" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ id, role, status, adminNotes }: { id: string; role?: string; status?: string; adminNotes?: string }) => {
+      await apiRequest("PATCH", `/api/admin/users/${id}`, { role, status, adminNotes });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      toast({ title: "User updated" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/users/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      toast({ title: "User deleted" });
     },
     onError: (err: any) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -304,7 +734,11 @@ export default function Admin() {
         </div>
 
         {stats && (
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6" data-testid="section-admin-stats">
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 mb-6" data-testid="section-admin-stats">
+            <div className="bg-white rounded-xl border p-4 text-center">
+              <div className="text-2xl font-bold text-indigo-600">{allUsers?.length || 0}</div>
+              <div className="text-xs text-muted-foreground">Total Users</div>
+            </div>
             <div className="bg-white rounded-xl border p-4 text-center">
               <div className="text-2xl font-bold text-blue-600">{stats.newPitches}</div>
               <div className="text-xs text-muted-foreground">New Pitches</div>
@@ -355,17 +789,18 @@ export default function Admin() {
           </div>
         </div>
 
-        <div className="flex gap-1 mb-6 bg-muted/30 rounded-xl p-1" data-testid="section-admin-tabs">
-          {(["overview", "pitches", "leads", "buyers", "referrals"] as const).map(tab => (
+        <div className="flex gap-1 mb-6 bg-muted/30 rounded-xl p-1 overflow-x-auto" data-testid="section-admin-tabs">
+          {(["overview", "users", "pitches", "leads", "buyers", "referrals"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                 activeTab === tab ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
               data-testid={`button-tab-${tab}`}
             >
               {tab === "overview" ? "Overview"
+                : tab === "users" ? `Users (${allUsers?.length || 0})`
                 : tab === "pitches" ? `Pitches (${pitches?.length || 0})`
                 : tab === "leads" ? `Leads (${sellLeads?.length || 0})`
                 : tab === "buyers" ? `Buyers (${allBuyerProfiles?.length || 0})`
@@ -684,6 +1119,22 @@ export default function Admin() {
               </div>
             )}
           </div>
+        )}
+
+        {activeTab === "users" && (
+          <UsersTab
+            users={allUsers || []}
+            isLoading={usersLoading}
+            currentUserId={user?.id || ""}
+            onUpdateUser={(id, updates) => updateUserMutation.mutate({ id, ...updates })}
+            onDeleteUser={(id) => {
+              if (confirm("Are you sure? This will permanently delete the user and ALL their data (listings, saved properties, buyer profiles, etc.). This cannot be undone.")) {
+                deleteUserMutation.mutate(id);
+              }
+            }}
+            isUpdating={updateUserMutation.isPending}
+            isDeleting={deleteUserMutation.isPending}
+          />
         )}
 
         {activeTab === "referrals" && (
