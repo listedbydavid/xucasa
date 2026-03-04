@@ -839,7 +839,7 @@ function QuickCriteriaForm({ onOpenFullForm }: { onOpenFullForm: () => void }) {
   };
 
   return (
-    <div className="bg-gradient-to-br from-[#006AFF] to-[#0050c8] rounded-2xl p-6 sm:p-8 mb-8 text-white relative overflow-hidden" data-testid="section-cta-form">
+    <div className="bg-gradient-to-br from-[#A02020] to-[#7B1818] rounded-2xl p-6 sm:p-8 mb-8 text-white relative overflow-hidden" data-testid="section-cta-form">
       <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
       <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
 
@@ -849,15 +849,15 @@ function QuickCriteriaForm({ onOpenFullForm }: { onOpenFullForm: () => void }) {
           <span className="text-yellow-400 text-sm font-semibold uppercase tracking-wide">Reverse Home Search</span>
         </div>
         <h2 className="text-2xl sm:text-3xl font-bold mb-2">Tell sellers what you want</h2>
-        <p className="text-blue-100 text-sm sm:text-base mb-6 max-w-xl">
+        <p className="text-red-100 text-sm sm:text-base mb-6 max-w-xl">
           Post your home criteria and let homeowners come to you. Skip the endless scrolling — get matched with properties that fit your exact needs.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
           <div>
-            <label className="text-xs text-blue-200 font-medium mb-1 block">Your Budget</label>
+            <label className="text-xs text-red-200 font-medium mb-1 block">Your Budget</label>
             <div className="relative">
-              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-300" />
+              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-red-300" />
               <input
                 className="w-full pl-8 pr-3 py-2.5 bg-white/10 border border-white/20 rounded-xl text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50"
                 type="number"
@@ -869,9 +869,9 @@ function QuickCriteriaForm({ onOpenFullForm }: { onOpenFullForm: () => void }) {
             </div>
           </div>
           <div>
-            <label className="text-xs text-blue-200 font-medium mb-1 block">Bedrooms</label>
+            <label className="text-xs text-red-200 font-medium mb-1 block">Bedrooms</label>
             <div className="relative">
-              <Bed className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-300" />
+              <Bed className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-red-300" />
               <select
                 className="w-full pl-9 pr-3 py-2.5 bg-white/10 border border-white/20 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary/50 appearance-none"
                 value={quickForm.beds}
@@ -888,9 +888,9 @@ function QuickCriteriaForm({ onOpenFullForm }: { onOpenFullForm: () => void }) {
             </div>
           </div>
           <div>
-            <label className="text-xs text-blue-200 font-medium mb-1 block">City</label>
+            <label className="text-xs text-red-200 font-medium mb-1 block">City</label>
             <div className="relative">
-              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-300" />
+              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-red-300" />
               <input
                 className="w-full pl-9 pr-3 py-2.5 bg-white/10 border border-white/20 rounded-xl text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50"
                 value={quickForm.city}
@@ -901,9 +901,9 @@ function QuickCriteriaForm({ onOpenFullForm }: { onOpenFullForm: () => void }) {
             </div>
           </div>
           <div>
-            <label className="text-xs text-blue-200 font-medium mb-1 block">Home Type</label>
+            <label className="text-xs text-red-200 font-medium mb-1 block">Home Type</label>
             <div className="relative">
-              <HomeIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-300" />
+              <HomeIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-red-300" />
               <select
                 className="w-full pl-9 pr-3 py-2.5 bg-white/10 border border-white/20 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary/50 appearance-none"
                 value={quickForm.homeType}
@@ -923,13 +923,13 @@ function QuickCriteriaForm({ onOpenFullForm }: { onOpenFullForm: () => void }) {
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
           <button
             onClick={handleGetStarted}
-            className="px-6 py-3 bg-white hover:bg-blue-50 text-[#006AFF] rounded-xl font-semibold text-sm transition-all active:scale-[0.98] flex items-center gap-2 shadow-lg"
+            className="px-6 py-3 bg-white hover:bg-red-50 text-[#A02020] rounded-xl font-semibold text-sm transition-all active:scale-[0.98] flex items-center gap-2 shadow-lg"
             data-testid="button-post-criteria"
           >
             <Plus className="w-4 h-4" />
             Post My Criteria — It's Free
           </button>
-          <div className="flex items-center gap-3 text-sm text-blue-200">
+          <div className="flex items-center gap-3 text-sm text-red-200">
             <div className="flex -space-x-2">
               {["S", "J", "D", "M", "C"].map((letter, i) => (
                 <div key={i} className="w-7 h-7 rounded-full bg-white/20 border-2 border-white/30 flex items-center justify-center text-xs font-semibold text-white">
