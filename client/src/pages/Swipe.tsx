@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { PropertyCard } from "@/components/PropertyCard";
+import { SdmlsDisclaimer } from "@/components/SdmlsDisclaimer";
 
 const SWIPE_THRESHOLD = 90;
 const FALLBACK = "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&h=1200&fit=crop";
@@ -429,6 +430,8 @@ export default function Swipe() {
               Browse all listings <ChevronRight className="w-4 h-4" />
             </Link>
           </div>
+
+          <SdmlsDisclaimer />
         </div>
       </div>
     </div>

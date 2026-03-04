@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Search, Map } from "lucide-react";
 import { useProperties } from "@/hooks/use-properties";
 import { PropertyCard } from "@/components/PropertyCard";
+import { SdmlsDisclaimer } from "@/components/SdmlsDisclaimer";
 
 export default function Home() {
   const [, setLocation] = useLocation();
@@ -122,6 +123,8 @@ export default function Home() {
             ))}
           </div>
         )}
+
+        <SdmlsDisclaimer />
       </div>
     </div>
   );

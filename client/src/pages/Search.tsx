@@ -10,6 +10,7 @@ import { MapView } from "@/components/MapView";
 import { useGoogleMaps } from "@/hooks/use-google-maps";
 import queryString from "query-string";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
+import { SdmlsDisclaimer } from "@/components/SdmlsDisclaimer";
 
 export default function Search() {
   const [location] = useLocation();
@@ -298,6 +299,8 @@ export default function Search() {
                 ))}
               </div>
             )}
+
+            <SdmlsDisclaimer />
           </div>
         </div>
 

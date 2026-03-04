@@ -8,6 +8,7 @@ import { MapView } from "@/components/MapView";
 import { PublicRecordsPanel } from "@/components/PublicRecordsPanel";
 import { ZoningPanel } from "@/components/ZoningPanel";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
+import { SdmlsDisclaimer } from "@/components/SdmlsDisclaimer";
 
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -190,6 +191,8 @@ export default function PropertyDetail() {
 
           {/* Public Records & Neighborhood Data */}
           <PublicRecordsPanel propertyId={property.id} />
+
+          <SdmlsDisclaimer />
         </div>
       </div>
     </div>

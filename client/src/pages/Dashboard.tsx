@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { PropertyCard } from "@/components/PropertyCard";
+import { SdmlsDisclaimer } from "@/components/SdmlsDisclaimer";
 import {
   useSavedProperties, useSavedSearches, useDeleteSavedSearch, useRenameSavedSearch,
   useFavoriteLists, useCreateFavoriteList, useRenameFavoriteList,
@@ -940,6 +941,8 @@ function FavoritesSection() {
           ))}
         </div>
       )}
+
+      {filteredProps.length > 0 && <SdmlsDisclaimer />}
     </div>
   );
 }
