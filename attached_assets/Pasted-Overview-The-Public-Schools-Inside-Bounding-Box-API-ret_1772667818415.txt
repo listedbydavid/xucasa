@@ -1,0 +1,138 @@
+Overview
+The Public Schools Inside Bounding Box API retrieves information about public schools within a specified geographical bounding box. This API lets developers obtain details about multiple public schools in a region.
+
+Base URL
+The base URL for the API is https://api.realtyfeed.com.
+
+Endpoint
+Public Schools Inside the Bounding Box
+Endpoint
+POST /geo/school/publicsch/boundingbox
+
+Request Body
+bounding_box (object): The bounding box that defines the geographical area. It should include the top_left and bottom_right coordinates.
+
+Example:
+
+
+
+{
+  "top_left": {
+    "lat": 40,
+    "lon": -100
+  },
+  "bottom_right": {
+    "lat": 37,
+    "lon": -98
+  }
+}
+Response
+200 OK: Returns a JSON response containing information about Public Schools within the specified bounding box.
+
+Example:
+
+
+
+{
+  "data": [
+    {
+      "NCESSCH": "010000500870",
+      "LEAID": "0100005",
+      "NAME": "Albertville Middle School",
+      "OPSTFIPS": "01",
+      "STREET": "600 E Alabama Ave",
+      "CITY": "Albertville",
+      "STATE": "AL",
+      "ZIP": "35950",
+      "STFIP": "01",
+      "CNTY": "01095",
+      "NMCNTY": "Marshall County",
+      "LOCALE": "32",
+      "LAT": 34.2602,
+      "LON": -86.2062,
+      "CBSA": "10700",
+      "NMCBSA": "Albertville, AL",
+      "CBSATYPE": "2",
+      "CSA": "N",
+      "NMCSA": "N",
+      "NECTA": "N",
+      "NMNECTA": "N",
+      "CD": "0104",
+      "SLDL": "01026",
+      "SLDU": "01009",
+      "SCHOOLYEAR": "2022-2023",
+      "geometry": [
+        -86.2062,
+        34.2602
+      ]
+    }
+  ],
+  "total": 102268
+}
+400 Bad Request: If an invalid bounding box is provided.
+
+404 Not Found: If no Public School is found within the specified bounding box.
+
+Example
+Request:
+
+
+
+POST /geo/school/publicsch/boundingbox
+{
+  "top_left": {
+    "lat": 40,
+    "lon": -100
+  },
+  "bottom_right": {
+    "lat": 37,
+    "lon": -98
+  }
+}
+Response:
+
+
+
+{
+  "data": [
+    {
+      "NCESSCH": "010000500870",
+      "LEAID": "0100005",
+      "NAME": "Albertville Middle School",
+      "OPSTFIPS": "01",
+      "STREET": "600 E Alabama Ave",
+      "CITY": "Albertville",
+      "STATE": "AL",
+      "ZIP": "35950",
+      "STFIP": "01",
+      "CNTY": "01095",
+      "NMCNTY": "Marshall County",
+      "LOCALE": "32",
+      "LAT": 34.2602,
+      "LON": -86.2062,
+      "CBSA": "10700",
+      "NMCBSA": "Albertville, AL",
+      "CBSATYPE": "2",
+      "CSA": "N",
+      "NMCSA": "N",
+      "NECTA": "N",
+      "NMNECTA": "N",
+      "CD": "0104",
+      "SLDL": "01026",
+      "SLDU": "01009",
+      "SCHOOLYEAR": "2022-2023",
+      "geometry": [
+        -86.2062,
+        34.2602
+      ]
+    }
+  ],
+  "total": 102268
+}
+Usage
+To use the Public Schools Inside Bounding Box API, perform a POST request to the specified endpoint with the bounding box coordinates provided in the request body. The API will respond with information about Public Schools within the specified bounding box.
+
+Error Handling
+400 Bad Request: If an invalid bounding box is provided, the API will respond with a 400 status code and an error message in the response body.
+
+404 Not Found: If no Public School is found within the specified bounding box, the API will respond with a 404 status code and an error message in the response body.
