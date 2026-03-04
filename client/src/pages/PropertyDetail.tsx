@@ -130,6 +130,25 @@ export default function PropertyDetail() {
             </div>
           </div>
 
+          {(() => {
+            const agentName = property.listingAgentName || (property.agent ? `${property.agent.firstName || ""} ${property.agent.lastName || ""}`.trim() : "");
+            const brokerage = property.listingBrokerage || "";
+            const contact = property.listingAgentEmail || property.listingAgentPhone || property.agent?.email || "";
+            if (agentName || brokerage) {
+              return (
+                <div className="flex items-center gap-2 mb-8 px-1" data-testid="detail-listing-attribution">
+                  <Briefcase className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <p className="text-sm text-muted-foreground">
+                    Listed by <span className="font-medium text-foreground">{agentName || "Agent"}</span>
+                    {brokerage && <> — <span className="font-medium text-foreground">{brokerage}</span></>}
+                    {contact && <> · <a href={contact.includes("@") ? `mailto:${contact}` : `tel:${contact}`} className="text-primary hover:underline">{contact}</a></>}
+                  </p>
+                </div>
+              );
+            }
+            return null;
+          })()}
+
           <div className="grid md:grid-cols-3 gap-12">
             <div className="md:col-span-2">
               <h2 className="text-2xl font-display font-bold mb-4">About this home</h2>

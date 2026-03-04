@@ -38,6 +38,11 @@ export const properties = pgTable("properties", {
   mlsNumber: text("mls_number"),                        // MLS # displayed to users
   listDate: timestamp("list_date"),                     // When listed on MLS
   idxUpdatedAt: timestamp("idx_updated_at"),            // Last sync from IDX
+  // SDMLS 12.16(e) listing attribution
+  listingBrokerage: text("listing_brokerage"),
+  listingAgentName: text("listing_agent_name"),
+  listingAgentEmail: text("listing_agent_email"),
+  listingAgentPhone: text("listing_agent_phone"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

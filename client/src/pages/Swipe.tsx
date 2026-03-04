@@ -344,6 +344,19 @@ export default function Swipe() {
                     <span className="flex items-center gap-1"><Bath className="w-3.5 h-3.5 lg:w-4 lg:h-4" />{prop.baths} ba</span>
                     <span className="flex items-center gap-1"><Maximize className="w-3.5 h-3.5 lg:w-4 lg:h-4" />{prop.sqft.toLocaleString()} sqft</span>
                   </div>
+                  {(() => {
+                    const agentName = prop.listingAgentName || (prop.agent ? `${prop.agent.firstName || ""} ${prop.agent.lastName || ""}`.trim() : "");
+                    const brokerage = prop.listingBrokerage || "";
+                    const contact = prop.listingAgentEmail || prop.listingAgentPhone || prop.agent?.email || "";
+                    if (agentName || brokerage) {
+                      return (
+                        <p className="text-xs lg:text-sm text-white/70 mt-1.5 truncate">
+                          Listed by {agentName}{brokerage ? ` — ${brokerage}` : ""}{contact ? ` · ${contact}` : ""}
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               </div>
             );

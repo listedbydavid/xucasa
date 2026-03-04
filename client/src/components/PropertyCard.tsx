@@ -246,6 +246,20 @@ export function PropertyCard({ property }: PropertyCardProps) {
           <p className="text-muted-foreground text-sm font-medium truncate">
             {property.location}
           </p>
+
+          {(() => {
+            const agentName = property.listingAgentName || (property.agent ? `${property.agent.firstName || ""} ${property.agent.lastName || ""}`.trim() : "");
+            const brokerage = property.listingBrokerage || "";
+            const contact = property.listingAgentEmail || property.listingAgentPhone || property.agent?.email || "";
+            if (agentName || brokerage) {
+              return (
+                <p className="text-xs text-muted-foreground mt-2 truncate" data-testid={`text-listing-attribution-${property.id}`}>
+                  Listed by {agentName}{brokerage ? ` — ${brokerage}` : ""}{contact ? ` · ${contact}` : ""}
+                </p>
+              );
+            }
+            return null;
+          })()}
         </div>
       </div>
     </>
