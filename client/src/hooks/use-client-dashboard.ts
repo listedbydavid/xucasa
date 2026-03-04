@@ -124,3 +124,25 @@ export function useUpdateProfile() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] }),
   });
 }
+
+// ── Agent Verification ──────────────────────────────────────────────────────
+
+export function useVerifyAgent() {
+  return useMutation({
+    mutationFn: async (data: { licenseNumber: string; licenseState: string; association: string; brokerageName: string }) => {
+      const res = await apiRequest("POST", "/api/agent/verify", data);
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] }),
+  });
+}
+
+export function useSubmitAgentInfo() {
+  return useMutation({
+    mutationFn: async (data: { licenseNumber: string; licenseState: string; association: string; brokerageName: string }) => {
+      const res = await apiRequest("POST", "/api/agent/submit-info", data);
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] }),
+  });
+}

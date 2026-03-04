@@ -119,6 +119,113 @@ function buildHeaders(token: string): Record<string, string> {
   return headers;
 }
 
+// ── Agent verification via RealtyFeed Member API ─────────────────────────────
+
+export interface AgentVerifyResult {
+  verified: boolean;
+  memberKey?: string;
+  memberName?: string;
+  officeName?: string;
+  memberEmail?: string;
+  memberPhone?: string;
+  error?: string;
+}
+
+function sanitizeODataString(input: string): string {
+  return input.replace(/'/g, "''").replace(/[\\%\x00-\x1f]/g, "");
+}
+
+function isValidLicenseNumber(license: string): boolean {
+  return /^[A-Za-z0-9\-. ]{2,30}$/.test(license);
+}
+
+function isValidState(state: string): boolean {
+  const validStates = new Set([
+    "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
+    "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
+    "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC",
+  ]);
+  return validStates.has(state.toUpperCase());
+}
+
+export async function verifyAgentLicense(licenseNumber: string, state?: string): Promise<AgentVerifyResult> {
+  if (!realtyFeedConfigured()) {
+    return { verified: false, error: "MLS API not configured" };
+  }
+
+  if (!isValidLicenseNumber(licenseNumber)) {
+    return { verified: false, error: "Invalid license number format" };
+  }
+
+  if (state && !isValidState(state)) {
+    return { verified: false, error: "Invalid state code" };
+  }
+
+  try {
+    const token = await getRealtyFeedToken();
+    const headers = buildHeaders(token);
+
+    const safeLicense = sanitizeODataString(licenseNumber);
+    let filter = `MemberStateLicense eq '${safeLicense}'`;
+    if (state) {
+      const safeState = sanitizeODataString(state.toUpperCase());
+      filter += ` and MemberStateOrProvince eq '${safeState}'`;
+    }
+
+    const url = `${REALTYFEED_API_BASE}/Member?$filter=${encodeURIComponent(filter)}&$top=5&$select=MemberKey,MemberFullName,MemberFirstName,MemberLastName,MemberEmail,MemberDirectPhone,MemberStateLicense,MemberStateOrProvince,OfficeName,OfficeKey`;
+
+    console.log(`[Agent Verify] Looking up license ${licenseNumber}${state ? ` in ${state}` : ""}...`);
+
+    let res = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
+
+    if (res.status === 401 || res.status === 403) {
+      const newToken = await forceRefreshToken();
+      const retryHeaders = buildHeaders(newToken);
+      res = await fetch(url, { headers: retryHeaders, signal: AbortSignal.timeout(15000) });
+    }
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      console.log(`[Agent Verify] API error: HTTP ${res.status} — ${errText.slice(0, 200)}`);
+      return { verified: false, error: `MLS API returned HTTP ${res.status}` };
+    }
+
+    const body = await res.json();
+    const members = body.value || [];
+
+    if (members.length === 0) {
+      console.log(`[Agent Verify] No member found for license ${licenseNumber}`);
+      return { verified: false, error: "No agent found with that license number" };
+    }
+
+    const member = members.find((m: any) =>
+      m.MemberStateLicense && m.MemberStateLicense.trim().toLowerCase() === licenseNumber.trim().toLowerCase()
+    ) || members[0];
+
+    if (member.MemberStateLicense?.trim().toLowerCase() !== licenseNumber.trim().toLowerCase()) {
+      console.log(`[Agent Verify] License mismatch: searched "${licenseNumber}", got "${member.MemberStateLicense}"`);
+      return { verified: false, error: "License number did not match any MLS records exactly" };
+    }
+
+    const memberName = member.MemberFullName ||
+      `${member.MemberFirstName || ""} ${member.MemberLastName || ""}`.trim();
+
+    console.log(`[Agent Verify] Found agent: ${memberName} (Key: ${member.MemberKey}, License: ${member.MemberStateLicense})`);
+
+    return {
+      verified: true,
+      memberKey: member.MemberKey || undefined,
+      memberName: memberName || undefined,
+      officeName: member.OfficeName || undefined,
+      memberEmail: member.MemberEmail || undefined,
+      memberPhone: member.MemberDirectPhone || undefined,
+    };
+  } catch (err: any) {
+    console.error(`[Agent Verify] Error:`, err.message);
+    return { verified: false, error: err.message };
+  }
+}
+
 // ── Status helpers ────────────────────────────────────────────────────────────
 
 export async function getLastSyncLog() {

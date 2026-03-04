@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { boolean, index, jsonb, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
 export const sessions = pgTable(
   "sessions",
@@ -20,6 +20,13 @@ export const users = pgTable("users", {
   role: varchar("role").default("user"),
   status: varchar("status").default("active"),
   adminNotes: text("admin_notes"),
+  licenseNumber: varchar("license_number"),
+  licenseState: varchar("license_state"),
+  association: varchar("association"),
+  brokerageName: varchar("brokerage_name"),
+  agentVerified: boolean("agent_verified").default(false),
+  agentVerifiedAt: timestamp("agent_verified_at"),
+  agentMlsId: varchar("agent_mls_id"),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

@@ -13,6 +13,7 @@ import {
   useUpdateProfile,
   useAgentInvite, useInviteAgent, useRemoveAgentInvite,
   useOpenHouses,
+  useVerifyAgent,
 } from "@/hooks/use-client-dashboard";
 import { Link } from "wouter";
 import {
@@ -22,6 +23,7 @@ import {
   Flame, Activity, ExternalLink, Camera, Loader2,
   UserPlus, CalendarDays, Mail, CheckCircle2, AlertCircle,
   FolderPlus, FolderOpen, MoreHorizontal, Pencil, List,
+  Briefcase, ShieldCheck, BadgeCheck,
 } from "lucide-react";
 import { Autocomplete } from "@react-google-maps/api";
 import { useGoogleMaps } from "@/hooks/use-google-maps";
@@ -219,6 +221,8 @@ function ProfileSection({ user }: { user: any }) {
         <StatCard label="My Homes" value={<MyHomeCount />} icon={Home} color="text-green-500" />
       </div>
 
+      <AgentVerificationSection user={user} />
+
       <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
         <h3 className="font-bold text-foreground mb-4">Account Actions</h3>
         <div className="space-y-2">
@@ -227,6 +231,291 @@ function ProfileSection({ user }: { user: any }) {
             Sign Out
           </a>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AgentVerificationSection({ user }: { user: any }) {
+  const [showForm, setShowForm] = useState(false);
+  const [licenseNumber, setLicenseNumber] = useState(user?.licenseNumber || "");
+  const [licenseState, setLicenseState] = useState(user?.licenseState || "CA");
+  const [association, setAssociation] = useState(user?.association || "");
+  const [brokerageName, setBrokerageName] = useState(user?.brokerageName || "");
+  const [verifyResult, setVerifyResult] = useState<any>(null);
+
+  const { mutate: verifyAgent, isPending } = useVerifyAgent();
+
+  const handleVerify = () => {
+    setVerifyResult(null);
+    verifyAgent(
+      { licenseNumber: licenseNumber.trim(), licenseState, association, brokerageName },
+      {
+        onSuccess: (data) => setVerifyResult(data),
+        onError: () => setVerifyResult({ verified: false, error: "Verification request failed" }),
+      }
+    );
+  };
+
+  if (user?.agentVerified && user?.role === "agent") {
+    return (
+      <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 bg-green-500/10 rounded-full flex items-center justify-center">
+            <ShieldCheck className="w-5 h-5 text-green-600" />
+          </div>
+          <div>
+            <h3 className="font-bold text-foreground flex items-center gap-2">
+              Verified Agent
+              <BadgeCheck className="w-4 h-4 text-green-600" />
+            </h3>
+            <p className="text-xs text-muted-foreground">Your license has been verified via MLS</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <span className="text-muted-foreground block text-xs font-bold mb-0.5">License #</span>
+            <span className="text-foreground" data-testid="text-license-number">{user.licenseNumber}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground block text-xs font-bold mb-0.5">State</span>
+            <span className="text-foreground" data-testid="text-license-state">{user.licenseState || "—"}</span>
+          </div>
+          {user.brokerageName && (
+            <div className="col-span-2">
+              <span className="text-muted-foreground block text-xs font-bold mb-0.5">Brokerage</span>
+              <span className="text-foreground" data-testid="text-brokerage">{user.brokerageName}</span>
+            </div>
+          )}
+          {user.association && (
+            <div className="col-span-2">
+              <span className="text-muted-foreground block text-xs font-bold mb-0.5">Association</span>
+              <span className="text-foreground" data-testid="text-association">{user.association}</span>
+            </div>
+          )}
+        </div>
+        <div className="mt-4 pt-3 border-t border-border">
+          <Link href="/agent" className="flex items-center gap-2 text-sm font-bold text-primary hover:text-primary/80 transition-colors" data-testid="link-agent-dashboard">
+            <Briefcase className="w-4 h-4" />
+            Go to Agent Dashboard
+            <ChevronRight className="w-3 h-3" />
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (user?.licenseNumber && !user?.agentVerified) {
+    return (
+      <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 bg-amber-500/10 rounded-full flex items-center justify-center">
+            <AlertCircle className="w-5 h-5 text-amber-600" />
+          </div>
+          <div>
+            <h3 className="font-bold text-foreground">Agent Verification Pending</h3>
+            <p className="text-xs text-muted-foreground">Your license could not be automatically verified</p>
+          </div>
+        </div>
+        <div className="text-sm text-muted-foreground mb-4">
+          <p>License #{user.licenseNumber} was submitted but could not be matched in the MLS database. You can try again or contact support.</p>
+        </div>
+        <button
+          onClick={() => setShowForm(true)}
+          className="text-sm font-bold text-primary hover:text-primary/80 transition-colors"
+          data-testid="button-retry-verification"
+        >
+          Try Again
+        </button>
+        {showForm && (
+          <AgentForm
+            licenseNumber={licenseNumber}
+            setLicenseNumber={setLicenseNumber}
+            licenseState={licenseState}
+            setLicenseState={setLicenseState}
+            association={association}
+            setAssociation={setAssociation}
+            brokerageName={brokerageName}
+            setBrokerageName={setBrokerageName}
+            onVerify={handleVerify}
+            isPending={isPending}
+            verifyResult={verifyResult}
+            onCancel={() => setShowForm(false)}
+          />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+      <div className="flex items-center gap-3 mb-2">
+        <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+          <Briefcase className="w-5 h-5 text-primary" />
+        </div>
+        <div>
+          <h3 className="font-bold text-foreground">Are you a real estate agent?</h3>
+          <p className="text-xs text-muted-foreground">Verify your license to unlock the Agent Dashboard</p>
+        </div>
+      </div>
+
+      {!showForm ? (
+        <div className="mt-4">
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-primary/90 transition-colors"
+            data-testid="button-become-agent"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            Verify My License
+          </button>
+        </div>
+      ) : (
+        <AgentForm
+          licenseNumber={licenseNumber}
+          setLicenseNumber={setLicenseNumber}
+          licenseState={licenseState}
+          setLicenseState={setLicenseState}
+          association={association}
+          setAssociation={setAssociation}
+          brokerageName={brokerageName}
+          setBrokerageName={setBrokerageName}
+          onVerify={handleVerify}
+          isPending={isPending}
+          verifyResult={verifyResult}
+          onCancel={() => setShowForm(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function AgentForm({
+  licenseNumber, setLicenseNumber,
+  licenseState, setLicenseState,
+  association, setAssociation,
+  brokerageName, setBrokerageName,
+  onVerify, isPending, verifyResult, onCancel,
+}: {
+  licenseNumber: string; setLicenseNumber: (v: string) => void;
+  licenseState: string; setLicenseState: (v: string) => void;
+  association: string; setAssociation: (v: string) => void;
+  brokerageName: string; setBrokerageName: (v: string) => void;
+  onVerify: () => void; isPending: boolean; verifyResult: any; onCancel: () => void;
+}) {
+  const states = [
+    "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
+    "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
+    "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC",
+  ];
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="agent-license" className="block text-xs font-bold text-muted-foreground mb-1">
+            License Number *
+          </label>
+          <input
+            id="agent-license"
+            value={licenseNumber}
+            onChange={e => setLicenseNumber(e.target.value)}
+            placeholder="e.g. 01234567"
+            className="w-full bg-background border-2 border-border rounded-lg px-3 py-2 text-sm focus:border-primary outline-none"
+            data-testid="input-license-number"
+          />
+        </div>
+        <div>
+          <label htmlFor="agent-state" className="block text-xs font-bold text-muted-foreground mb-1">
+            License State *
+          </label>
+          <select
+            id="agent-state"
+            value={licenseState}
+            onChange={e => setLicenseState(e.target.value)}
+            className="w-full bg-background border-2 border-border rounded-lg px-3 py-2 text-sm focus:border-primary outline-none"
+            data-testid="select-license-state"
+          >
+            {states.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="agent-association" className="block text-xs font-bold text-muted-foreground mb-1">
+            Association / Board
+          </label>
+          <input
+            id="agent-association"
+            value={association}
+            onChange={e => setAssociation(e.target.value)}
+            placeholder="e.g. San Diego Association of Realtors"
+            className="w-full bg-background border-2 border-border rounded-lg px-3 py-2 text-sm focus:border-primary outline-none"
+            data-testid="input-association"
+          />
+        </div>
+        <div>
+          <label htmlFor="agent-brokerage" className="block text-xs font-bold text-muted-foreground mb-1">
+            Brokerage Name
+          </label>
+          <input
+            id="agent-brokerage"
+            value={brokerageName}
+            onChange={e => setBrokerageName(e.target.value)}
+            placeholder="e.g. Compass, Keller Williams"
+            className="w-full bg-background border-2 border-border rounded-lg px-3 py-2 text-sm focus:border-primary outline-none"
+            data-testid="input-brokerage-name"
+          />
+        </div>
+      </div>
+
+      {verifyResult && (
+        <div className={`rounded-lg p-3 text-sm ${verifyResult.verified ? "bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800" : "bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800"}`}>
+          {verifyResult.verified ? (
+            <div className="flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-bold text-green-700 dark:text-green-400">License Verified!</p>
+                {verifyResult.mlsInfo?.memberName && (
+                  <p className="text-green-600 dark:text-green-500 text-xs mt-1">
+                    Matched: {verifyResult.mlsInfo.memberName}
+                    {verifyResult.mlsInfo.officeName && ` — ${verifyResult.mlsInfo.officeName}`}
+                  </p>
+                )}
+                <p className="text-green-600 dark:text-green-500 text-xs mt-1">
+                  Your role has been upgraded to Agent. You can now access the Agent Dashboard.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-bold text-amber-700 dark:text-amber-400">Could not verify</p>
+                <p className="text-amber-600 dark:text-amber-500 text-xs mt-1">
+                  {verifyResult.error || "Your license was not found in the MLS database. Your information has been saved and our team will review it."}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <button
+          onClick={onVerify}
+          disabled={isPending || !licenseNumber.trim()}
+          className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
+          data-testid="button-verify-license"
+        >
+          {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+          {isPending ? "Verifying..." : "Verify with MLS"}
+        </button>
+        <button
+          onClick={onCancel}
+          className="px-4 py-2.5 rounded-lg text-sm font-bold text-muted-foreground hover:bg-muted transition-colors"
+          data-testid="button-cancel-agent"
+        >
+          Cancel
+        </button>
       </div>
     </div>
   );

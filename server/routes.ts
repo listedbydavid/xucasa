@@ -11,7 +11,7 @@ import { registerAuthRoutes } from "./replit_integrations/auth";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { getPublicRecords } from "./publicRecords";
 import { getZoningData } from "./zoningData";
-import { runIdxSync, isSyncInProgress, idxConfigured, getLastSyncLog, getSyncLogs, startIdxAutoSync } from "./idxSync";
+import { runIdxSync, isSyncInProgress, idxConfigured, getLastSyncLog, getSyncLogs, startIdxAutoSync, verifyAgentLicense } from "./idxSync";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -386,6 +386,83 @@ export async function registerRoutes(
       res.status(200).json(updated);
     } catch (err) {
       res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
+  // Agent verification
+  app.post("/api/agent/verify", isAuthenticated, async (req: any, res) => {
+    try {
+      const { authStorage } = await import("./replit_integrations/auth/storage");
+      const userId = req.user.claims.sub;
+      const { licenseNumber, licenseState, association, brokerageName } = req.body;
+
+      if (!licenseNumber || typeof licenseNumber !== "string" || licenseNumber.trim().length < 2) {
+        return res.status(400).json({ message: "License number is required" });
+      }
+      if (!/^[A-Za-z0-9\-. ]{2,30}$/.test(licenseNumber.trim())) {
+        return res.status(400).json({ message: "License number contains invalid characters" });
+      }
+
+      const result = await verifyAgentLicense(licenseNumber.trim(), licenseState || undefined);
+
+      if (result.verified) {
+        const updated = await authStorage.updateAgentInfo(userId, {
+          licenseNumber: licenseNumber.trim(),
+          licenseState: licenseState || null,
+          association: association || null,
+          brokerageName: result.officeName || brokerageName || null,
+          agentVerified: true,
+          agentVerifiedAt: new Date(),
+          agentMlsId: result.memberKey || null,
+          role: "agent",
+        });
+        return res.json({
+          verified: true,
+          user: updated,
+          mlsInfo: {
+            memberName: result.memberName,
+            officeName: result.officeName,
+            memberEmail: result.memberEmail,
+          },
+        });
+      } else {
+        await authStorage.updateAgentInfo(userId, {
+          licenseNumber: licenseNumber.trim(),
+          licenseState: licenseState || null,
+          association: association || null,
+          brokerageName: brokerageName || null,
+          agentVerified: false,
+        });
+        return res.json({
+          verified: false,
+          error: result.error || "Could not verify agent license",
+        });
+      }
+    } catch (err: any) {
+      console.error("Agent verify error:", err);
+      res.status(500).json({ message: "Failed to verify agent license" });
+    }
+  });
+
+  app.post("/api/agent/submit-info", isAuthenticated, async (req: any, res) => {
+    try {
+      const { authStorage } = await import("./replit_integrations/auth/storage");
+      const userId = req.user.claims.sub;
+      const { licenseNumber, licenseState, association, brokerageName } = req.body;
+
+      if (!licenseNumber || typeof licenseNumber !== "string" || licenseNumber.trim().length < 2) {
+        return res.status(400).json({ message: "License number is required" });
+      }
+
+      const updated = await authStorage.updateAgentInfo(userId, {
+        licenseNumber: licenseNumber.trim(),
+        licenseState: licenseState || null,
+        association: association || null,
+        brokerageName: brokerageName || null,
+      });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to save agent information" });
     }
   });
 
