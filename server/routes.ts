@@ -2,7 +2,7 @@ import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { buyerMatches, buyerProfiles, users } from "@shared/schema";
+import { buyerMatches, buyerProfiles, sellLeads, users } from "@shared/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import { api } from "@shared/routes";
 import { z } from "zod";
@@ -551,8 +551,23 @@ export async function registerRoutes(
       if (!lead.name || !lead.email) {
         return res.status(400).json({ message: "Name and email are required" });
       }
+
+      lead.needsLenderReferral = lead.needsToBuyNext === true;
+      lead.needsAgentReferral = lead.hasAgent === false;
+
+      let agentLinked = false;
+      if (lead.hasAgent && lead.sellerAgentEmail) {
+        const agentUser = await db.select().from(users)
+          .where(eq(users.email, lead.sellerAgentEmail.trim().toLowerCase()))
+          .limit(1);
+        if (agentUser.length > 0) {
+          lead.agentId = agentUser[0].id;
+          agentLinked = true;
+        }
+      }
+
       const newLead = await storage.createSellLead(lead);
-      res.status(201).json(newLead);
+      res.status(201).json({ ...newLead, agentLinked });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -680,7 +695,22 @@ export async function registerRoutes(
           sql`${buyerProfiles.needsLenderReferral} = true OR ${buyerProfiles.needsAgentReferral} = true`
         )
         .orderBy(desc(buyerProfiles.createdAt));
-      res.json(referrals.map(r => ({ ...r.profile, user: r.user })));
+      res.json(referrals.map(r => ({ ...r.profile, user: r.user, type: "buyer" })));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/seller-referrals", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const leads = await db
+        .select()
+        .from(sellLeads)
+        .where(
+          sql`${sellLeads.needsLenderReferral} = true OR ${sellLeads.needsAgentReferral} = true`
+        )
+        .orderBy(desc(sellLeads.createdAt));
+      res.json(leads.map((l: any) => ({ ...l, type: "seller" })));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

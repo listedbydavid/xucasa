@@ -139,6 +139,11 @@ interface FormData {
   email: string;
   phone: string;
   listingType: string;
+  needsToBuyNext: string;
+  hasAgent: string;
+  sellerAgentName: string;
+  sellerAgentPhone: string;
+  sellerAgentEmail: string;
 }
 
 interface ValuationResult {
@@ -254,6 +259,11 @@ export default function Sell() {
     email: "",
     phone: "",
     listingType: "standard",
+    needsToBuyNext: "",
+    hasAgent: "",
+    sellerAgentName: "",
+    sellerAgentPhone: "",
+    sellerAgentEmail: "",
   });
 
   const { isLoaded } = useJsApiLoader({
@@ -338,12 +348,29 @@ export default function Sell() {
       toast({ title: "Missing info", description: "Please enter your name and email.", variant: "destructive" });
       return;
     }
+    if (!form.needsToBuyNext) {
+      toast({ title: "Required", description: "Please answer whether you need to buy after selling.", variant: "destructive" });
+      return;
+    }
+    if (!form.hasAgent) {
+      toast({ title: "Required", description: "Please answer whether you have a real estate agent.", variant: "destructive" });
+      return;
+    }
+    if (form.hasAgent === "yes" && (!form.sellerAgentName || !form.sellerAgentEmail)) {
+      toast({ title: "Missing agent info", description: "Please enter your agent's name and email.", variant: "destructive" });
+      return;
+    }
     submitMutation.mutate({
       ...form,
       baths: String(form.baths),
       estimatedValue: valuation?.estimatedMid ?? null,
       lat: form.lat ? String(form.lat) : null,
       lng: form.lng ? String(form.lng) : null,
+      needsToBuyNext: form.needsToBuyNext === "yes",
+      hasAgent: form.hasAgent === "yes",
+      sellerAgentName: form.hasAgent === "yes" ? form.sellerAgentName || null : null,
+      sellerAgentPhone: form.hasAgent === "yes" ? form.sellerAgentPhone || null : null,
+      sellerAgentEmail: form.hasAgent === "yes" ? form.sellerAgentEmail || null : null,
     });
   };
 
@@ -1143,6 +1170,108 @@ export default function Sell() {
               </CardContent>
             </Card>
 
+            <Card className="shadow-sm border-blue-200 bg-blue-50/30">
+              <CardContent className="pt-6 space-y-4">
+                <h3 className="font-semibold text-base">Will you need to buy your next home?</h3>
+                <p className="text-sm text-muted-foreground">This helps us connect you with the right resources for a smooth transition.</p>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    data-testid="button-needs-buy-yes"
+                    onClick={() => set("needsToBuyNext", "yes" as any)}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${
+                      form.needsToBuyNext === "yes" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-border bg-white text-muted-foreground hover:border-muted-foreground/40"
+                    }`}
+                  >
+                    Yes, I need to buy
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="button-needs-buy-no"
+                    onClick={() => set("needsToBuyNext", "no" as any)}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${
+                      form.needsToBuyNext === "no" ? "border-green-500 bg-green-50 text-green-700" : "border-border bg-white text-muted-foreground hover:border-muted-foreground/40"
+                    }`}
+                  >
+                    No, just selling
+                  </button>
+                </div>
+                {form.needsToBuyNext === "yes" && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 animate-in slide-in-from-top-2">
+                    <p className="text-xs text-blue-800">
+                      <span className="font-semibold">We've got you covered.</span> A xucasa representative will connect you with a trusted lender to get you pre-approved for your next purchase, so you can sell and buy with confidence.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm border-purple-200 bg-purple-50/30">
+              <CardContent className="pt-6 space-y-4">
+                <h3 className="font-semibold text-base">Do you have a real estate agent?</h3>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    data-testid="button-seller-has-agent-yes"
+                    onClick={() => set("hasAgent", "yes" as any)}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${
+                      form.hasAgent === "yes" ? "border-green-500 bg-green-50 text-green-700" : "border-border bg-white text-muted-foreground hover:border-muted-foreground/40"
+                    }`}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="button-seller-has-agent-no"
+                    onClick={() => set("hasAgent", "no" as any)}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${
+                      form.hasAgent === "no" ? "border-amber-500 bg-amber-50 text-amber-700" : "border-border bg-white text-muted-foreground hover:border-muted-foreground/40"
+                    }`}
+                  >
+                    No
+                  </button>
+                </div>
+
+                {form.hasAgent === "yes" && (
+                  <div className="space-y-3 pt-1 animate-in slide-in-from-top-2">
+                    <p className="text-xs text-muted-foreground">Your agent's info is private. If they have an account on xucasa, we'll link you automatically. Otherwise, we'll send them an invite.</p>
+                    <div className="space-y-2">
+                      <Input
+                        data-testid="input-seller-agent-name"
+                        placeholder="Agent's full name *"
+                        value={form.sellerAgentName}
+                        onChange={e => set("sellerAgentName", e.target.value)}
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input
+                          data-testid="input-seller-agent-phone"
+                          type="tel"
+                          placeholder="Agent's phone"
+                          value={form.sellerAgentPhone}
+                          onChange={e => set("sellerAgentPhone", e.target.value)}
+                        />
+                        <Input
+                          data-testid="input-seller-agent-email"
+                          type="email"
+                          placeholder="Agent's email *"
+                          value={form.sellerAgentEmail}
+                          onChange={e => set("sellerAgentEmail", e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {form.hasAgent === "no" && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 animate-in slide-in-from-top-2">
+                    <p className="text-xs text-purple-800">
+                      <span className="font-semibold">We can help!</span> A xucasa representative will reach out to discuss how we can represent you and get your home sold for top dollar.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Listing type choice */}
             <Card className="shadow-sm">
               <CardContent className="pt-5 pb-5 space-y-3">
@@ -1306,6 +1435,26 @@ export default function Sell() {
                 </div>
               </CardContent>
             </Card>
+
+            {(form.needsToBuyNext === "yes" || form.hasAgent === "no") && (
+              <Card className="shadow-sm border-blue-200 bg-blue-50/30">
+                <CardContent className="pt-5 pb-5 space-y-3">
+                  <h3 className="text-sm font-semibold">What's next for you</h3>
+                  {form.needsToBuyNext === "yes" && (
+                    <div className="flex items-start gap-2 text-sm">
+                      <DollarSign className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                      <p className="text-muted-foreground">We'll connect you with a trusted lender to get you pre-approved for your next home purchase.</p>
+                    </div>
+                  )}
+                  {form.hasAgent === "no" && (
+                    <div className="flex items-start gap-2 text-sm">
+                      <Users className="w-4 h-4 text-purple-600 mt-0.5 shrink-0" />
+                      <p className="text-muted-foreground">A xucasa representative will reach out to discuss professional representation for your sale.</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             <BuyerDemandSection onNavigateToBuyers={() => navigate("/buyers")} />
 

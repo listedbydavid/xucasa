@@ -237,6 +237,11 @@ export default function Admin() {
     enabled: isAdminUser,
   });
 
+  const { data: sellerReferrals, isLoading: sellerReferralsLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/seller-referrals"],
+    enabled: isAdminUser,
+  });
+
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status, adminNotes }: { id: number; status: string; adminNotes?: string }) => {
       await apiRequest("PATCH", `/api/admin/seller-pitches/${id}`, { status, adminNotes });
@@ -327,7 +332,7 @@ export default function Admin() {
               }`}
               data-testid={`button-tab-${tab}`}
             >
-              {tab === "overview" ? "Overview" : tab === "pitches" ? `Pitches (${pitches?.length || 0})` : tab === "leads" ? `Leads (${sellLeads?.length || 0})` : `Referrals (${referrals?.length || 0})`}
+              {tab === "overview" ? "Overview" : tab === "pitches" ? `Pitches (${pitches?.length || 0})` : tab === "leads" ? `Leads (${sellLeads?.length || 0})` : `Referrals (${(referrals?.length || 0) + (sellerReferrals?.length || 0)})`}
             </button>
           ))}
         </div>
@@ -504,62 +509,137 @@ export default function Admin() {
         )}
 
         {activeTab === "referrals" && (
-          <div className="space-y-3">
-            {referralsLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="bg-white rounded-xl border p-5 animate-pulse">
-                    <div className="h-4 bg-muted rounded w-1/3 mb-2" />
-                    <div className="h-3 bg-muted rounded w-1/2" />
-                  </div>
-                ))}
-              </div>
-            ) : referrals && referrals.length > 0 ? (
-              referrals.map((r: any) => (
-                <div key={r.id} className="bg-white rounded-xl border p-5" data-testid={`card-referral-${r.id}`}>
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <h4 className="font-semibold">{r.displayName}</h4>
-                      {r.user && (
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {r.user.email}</span>
+          <div className="space-y-6">
+            <div>
+              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <Users className="w-4 h-4 text-blue-600" />
+                Buyer Referrals ({referrals?.length || 0})
+              </h3>
+              {referralsLoading ? (
+                <div className="space-y-3">
+                  {[1, 2].map(i => (
+                    <div key={i} className="bg-white rounded-xl border p-5 animate-pulse">
+                      <div className="h-4 bg-muted rounded w-1/3 mb-2" />
+                      <div className="h-3 bg-muted rounded w-1/2" />
+                    </div>
+                  ))}
+                </div>
+              ) : referrals && referrals.length > 0 ? (
+                <div className="space-y-3">
+                  {referrals.map((r: any) => (
+                    <div key={`buyer-${r.id}`} className="bg-white rounded-xl border p-5" data-testid={`card-referral-buyer-${r.id}`}>
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-semibold">{r.displayName}</h4>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700 border border-blue-200">Buyer</span>
+                          </div>
+                          {r.user && (
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                              <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {r.user.email}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold text-primary">{fmt(r.preApprovalAmount || 0)}</div>
+                          <span className="text-xs text-muted-foreground">{r.isPreApproved ? "pre-approved" : "estimated"}</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {r.needsLenderReferral && (
+                          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200" data-testid={`badge-needs-lender-buyer-${r.id}`}>
+                            Needs Lender
+                          </span>
+                        )}
+                        {r.needsAgentReferral && (
+                          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200" data-testid={`badge-needs-agent-buyer-${r.id}`}>
+                            Needs Agent
+                          </span>
+                        )}
+                      </div>
+                      {r.preferredCities && r.preferredCities.length > 0 && (
+                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-2">
+                          <MapPin className="w-4 h-4" /> {r.preferredCities.join(", ")}
                         </div>
                       )}
+                      <div className="text-xs text-muted-foreground mt-2">
+                        {new Date(r.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-lg font-bold text-primary">{fmt(r.preApprovalAmount || 0)}</div>
-                      <span className="text-xs text-muted-foreground">{r.isPreApproved ? "pre-approved" : "estimated"}</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {r.needsLenderReferral && (
-                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200" data-testid={`badge-needs-lender-${r.id}`}>
-                        Needs Lender
-                      </span>
-                    )}
-                    {r.needsAgentReferral && (
-                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200" data-testid={`badge-needs-agent-${r.id}`}>
-                        Needs Agent
-                      </span>
-                    )}
-                  </div>
-                  {r.preferredCities && r.preferredCities.length > 0 && (
-                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-2">
-                      <MapPin className="w-4 h-4" /> {r.preferredCities.join(", ")}
-                    </div>
-                  )}
-                  <div className="text-xs text-muted-foreground mt-2">
-                    {new Date(r.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
-                  </div>
+                  ))}
                 </div>
-              ))
-            ) : (
-              <div className="bg-white rounded-xl border p-12 text-center">
-                <Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                <h3 className="font-semibold mb-1">No buyer referrals yet</h3>
-                <p className="text-sm text-muted-foreground">Buyers who need a lender or agent will appear here.</p>
-              </div>
-            )}
+              ) : (
+                <div className="bg-white rounded-xl border p-8 text-center">
+                  <p className="text-sm text-muted-foreground">No buyer referrals yet.</p>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <Home className="w-4 h-4 text-emerald-600" />
+                Seller Referrals ({sellerReferrals?.length || 0})
+              </h3>
+              {sellerReferralsLoading ? (
+                <div className="space-y-3">
+                  {[1, 2].map(i => (
+                    <div key={i} className="bg-white rounded-xl border p-5 animate-pulse">
+                      <div className="h-4 bg-muted rounded w-1/3 mb-2" />
+                      <div className="h-3 bg-muted rounded w-1/2" />
+                    </div>
+                  ))}
+                </div>
+              ) : sellerReferrals && sellerReferrals.length > 0 ? (
+                <div className="space-y-3">
+                  {sellerReferrals.map((s: any) => (
+                    <div key={`seller-${s.id}`} className="bg-white rounded-xl border p-5" data-testid={`card-referral-seller-${s.id}`}>
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-semibold">{s.name}</h4>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">Seller</span>
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                            <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {s.email}</span>
+                            {s.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {s.phone}</span>}
+                          </div>
+                        </div>
+                        {s.estimatedValue && (
+                          <div className="text-right">
+                            <div className="text-lg font-bold text-primary">{fmt(s.estimatedValue)}</div>
+                            <span className="text-xs text-muted-foreground">estimated</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {s.needsLenderReferral && (
+                          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200" data-testid={`badge-needs-lender-seller-${s.id}`}>
+                            Needs Lender (Buy Next)
+                          </span>
+                        )}
+                        {s.needsAgentReferral && (
+                          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200" data-testid={`badge-needs-agent-seller-${s.id}`}>
+                            Needs Agent
+                          </span>
+                        )}
+                      </div>
+                      {s.fullAddress && (
+                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-2">
+                          <MapPin className="w-4 h-4" /> {s.fullAddress}
+                        </div>
+                      )}
+                      <div className="text-xs text-muted-foreground mt-2">
+                        {new Date(s.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-white rounded-xl border p-8 text-center">
+                  <p className="text-sm text-muted-foreground">No seller referrals yet.</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

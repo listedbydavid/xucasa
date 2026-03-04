@@ -156,6 +156,14 @@ export const sellLeads = pgTable("sell_leads", {
   lat: decimal("lat"),
   lng: decimal("lng"),
   agentNote: text("agent_note"),
+  needsToBuyNext: boolean("needs_to_buy_next").default(false),
+  hasAgent: boolean("has_agent").default(false),
+  sellerAgentName: text("seller_agent_name"),
+  sellerAgentPhone: text("seller_agent_phone"),
+  sellerAgentEmail: text("seller_agent_email"),
+  agentId: varchar("agent_id").references(() => users.id),
+  needsLenderReferral: boolean("needs_lender_referral").default(false),
+  needsAgentReferral: boolean("needs_agent_referral").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
