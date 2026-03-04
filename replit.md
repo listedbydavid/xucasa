@@ -15,11 +15,11 @@ Key features:
 - **Agent Buyer Clients** — Agents can add buyer clients from the Agent Dashboard Clients tab. Client contact info (name, email, phone) is private and never shown publicly. When a seller pitches to an agent-represented buyer, the seller's info goes to the admin first, who then routes it to the agent. Buyer profiles created by agents have `agentId` set, and display "Represented buyer" on the Buy page.
 - **Pre-Approval & Agent Questions** — During buyer profile creation, users answer: (1) Are you pre-approved? If yes, they can upload a letter and provide lender info. If no, they're flagged for admin lender referral. (2) Do you have an agent? If yes, they provide agent contact info; if the agent has an account, profiles are auto-linked. If no, they're flagged for admin agent referral. Referral needs visible in Admin → Referrals tab.
 - **Seller Pre-Buy & Agent Questions** — During the Sell wizard (Step 5), homeowners answer: (1) "Will you need to buy your next home?" If yes, they're flagged for admin lender referral. (2) "Do you have a real estate agent?" If yes, they provide agent contact info; if the agent has an account, they're auto-detected. If no, they're flagged for admin agent referral. Referral needs visible in Admin → Referrals tab under "Seller Referrals."
-- **Admin Dashboard** (`/admin`) — Master admin panel (restricted to user ID `55534280`) with overview stats, seller pitch management (view/update status/add notes), sell leads list, buyer and seller referral management. Tabs: Overview, Seller Pitches, Sell Leads, Referrals. Status workflow: new → reviewing → contacted → matched → rejected.
+- **Admin Dashboard** (`/admin`) — Master admin panel (restricted to admin email via `ADMIN_EMAIL` env var) with overview stats, seller pitch management (view/update status/add notes), sell leads list, buyer and seller referral management. Tabs: Overview, Seller Pitches, Sell Leads, Referrals. Status workflow: new → reviewing → contacted → matched → rejected.
 - Agent dashboard for creating, editing, and deleting listings with Street View auto-photo
 - **PWA (Progressive Web App)** — installable on iOS/Android home screens, offline-capable service worker, app manifest with icons
 - **ADA / WCAG 2.1 AA Compliance** — skip-to-content link, global focus-visible outlines, semantic landmarks (header/nav/main/footer with ARIA roles), form label associations (htmlFor/id), accessible modals (role="dialog", aria-modal, focus trapping, Escape key), aria-labels on all icon-only buttons, aria-hidden on decorative icons, aria-pressed on toggle buttons, role="status" on loading spinners with sr-only text, descriptive image alt text, viewport allows user zoom
-- Authentication via Replit Auth (OpenID Connect)
+- Authentication via Google OAuth SSO (Sign in with Google)
 
 ## User Preferences
 
@@ -73,11 +73,13 @@ Preferred communication style: Simple, everyday language.
 
 ### Authentication
 
-- **Provider**: Replit Auth via OpenID Connect (OIDC), implemented in `server/replit_integrations/auth/`
-- **Strategy**: `openid-client` + `passport` with a custom strategy; OIDC config is memoized for 1 hour
+- **Provider**: Google OAuth 2.0 SSO via `passport-google-oauth20`, implemented in `server/replit_integrations/auth/`
+- **Strategy**: `passport-google-oauth20` with Google profile data (name, email, photo) stored in the `users` table; Google profile ID used as user ID
 - **Sessions**: `express-session` backed by PostgreSQL (`connect-pg-simple`) using the `sessions` table; 1-week TTL; secure/httpOnly cookies
-- **Required env vars**: `DATABASE_URL`, `SESSION_SECRET`, `REPL_ID`, `ISSUER_URL` (defaults to `https://replit.com/oidc`)
-- **Client side**: `useAuth` hook fetches `/api/auth/user`; unauthenticated users are redirected to `/api/login`; protected routes show a login prompt
+- **Admin detection**: Email-based via `ADMIN_EMAIL` env var (currently `david@listedbydavid.com`); `/api/auth/user` returns `isAdmin` flag; server-side admin middleware checks email match
+- **Required env vars**: `DATABASE_URL`, `SESSION_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ADMIN_EMAIL`
+- **Client side**: `useAuth` hook fetches `/api/auth/user`; login buttons redirect to `/api/auth/google`; AuthPromptModal shows "Continue with Google" button
+- **Routes**: `/api/auth/google` (initiate), `/api/auth/google/callback` (OAuth callback), `/api/logout` (session destroy)
 
 ### API Structure
 
@@ -98,7 +100,8 @@ All API routes are defined in `shared/routes.ts` with typed paths and Zod schema
 | DELETE | `/api/saved-searches/:id` | Required | Delete a saved search |
 | GET | `/api/public-records/:id` | Public | Fetch public records for a property |
 | GET | `/api/auth/user` | Required | Get current user |
-| GET | `/api/login` | — | Initiate Replit Auth |
+| GET | `/api/auth/google` | — | Initiate Google OAuth |
+| GET | `/api/auth/google/callback` | — | Google OAuth callback |
 | GET | `/api/logout` | — | Log out |
 
 ## External Dependencies
@@ -110,7 +113,7 @@ All API routes are defined in `shared/routes.ts` with typed paths and Zod schema
 - **US Census ACS5** (`api.census.gov/data/2023/acs/acs5`) — Neighborhood statistics: median income, home value, population, owner-occupancy rate by census tract. No API key needed.
 - **FEMA NFHL** (`hazards.fema.gov`) — Flood zone data (Special Flood Hazard Area classification). No API key needed.
 - **OpenStreetMap Overpass API** (`overpass-api.de`) — Nearby places: schools, parks, hospitals, transit, grocery stores within a radius. No API key needed.
-- **Replit Auth / OIDC** (`replit.com/oidc`) — User authentication. Requires `REPL_ID` env var.
+- **Google OAuth 2.0** — User authentication via Google accounts. Requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` env vars.
 
 ### Key npm Packages
 
@@ -119,7 +122,7 @@ All API routes are defined in `shared/routes.ts` with typed paths and Zod schema
 | `drizzle-orm` + `pg` | PostgreSQL ORM and driver |
 | `drizzle-kit` | DB schema push/migrations |
 | `express` + `express-session` | HTTP server and session management |
-| `passport` + `openid-client` | OIDC authentication |
+| `passport` + `passport-google-oauth20` | Google OAuth authentication |
 | `connect-pg-simple` | PostgreSQL session store |
 | `@tanstack/react-query` | Server state management |
 | `wouter` | Client-side routing |
@@ -157,8 +160,9 @@ All API routes are defined in `shared/routes.ts` with typed paths and Zod schema
 ```
 DATABASE_URL          # PostgreSQL connection string
 SESSION_SECRET        # Secret for signing session cookies
-REPL_ID               # Replit app ID (for OIDC client)
-ISSUER_URL            # OIDC issuer (defaults to https://replit.com/oidc)
+GOOGLE_CLIENT_ID      # Google OAuth 2.0 client ID
+GOOGLE_CLIENT_SECRET  # Google OAuth 2.0 client secret
+ADMIN_EMAIL           # Admin user email for admin panel access
 VITE_GOOGLE_MAPS_API_KEY  # Google Maps JS API key (client-side)
 IDX_BROKER_API_KEY    # (optional) IDX Broker API key — activates MLS sync
 IDX_RESO_URL          # (optional) RESO Web API base URL — alternative to IDX Broker
