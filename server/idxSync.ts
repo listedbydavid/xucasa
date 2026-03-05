@@ -30,7 +30,7 @@ const RESO_CLIENT_SECRET = process.env.IDX_RESO_CLIENT_SECRET || "";
 const RESO_API_KEY = process.env.IDX_REALTYFEED_API_KEY || "";
 
 const REALTYFEED_TOKEN_URL = "https://api.realtyfeed.com/v1/auth/token";
-const REALTYFEED_API_BASE = "https://api.realtyfeed.com/reso/odata";
+export const REALTYFEED_API_BASE = "https://api.realtyfeed.com/reso/odata";
 
 const SD_CENTER_LAT = 32.7157;
 const SD_CENTER_LNG = -117.1611;
@@ -81,7 +81,7 @@ async function fetchRealtyFeedToken(forceNew = false): Promise<{ token: string; 
   };
 }
 
-async function getRealtyFeedToken(): Promise<string> {
+export async function getRealtyFeedToken(): Promise<string> {
   const SKEW = 60;
   if (cachedToken && Date.now() / 1000 < cachedToken.expiresAt - SKEW) {
     return cachedToken.token;
@@ -362,7 +362,7 @@ const RESO_SELECT_FIELDS = [
   "ListOfficeName",
 ].join(",");
 
-async function realtyFeedODataFetch(url: string, token: string): Promise<Response> {
+export async function realtyFeedODataFetch(url: string, token: string): Promise<Response> {
   const headers = buildHeaders(token);
   const res = await fetch(url, { headers, signal: AbortSignal.timeout(30000) });
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useParams, useLocation } from "wouter";
+import { useParams, useLocation, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useProperty, useProperties } from "@/hooks/use-properties";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
@@ -252,6 +252,166 @@ function InlinePhotoGallery({ photos, title }: { photos: string[]; title: string
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function SimilarPropertyCard({ property }: { property: any }) {
+  const photo = property.photos?.[0] || property.imageUrl || FALLBACK;
+  return (
+    <Link href={`/property/${property.id}`} data-testid={`card-similar-${property.id}`}>
+      <div className="group cursor-pointer rounded-xl overflow-hidden border border-border bg-card hover:shadow-lg transition-shadow">
+        <div className="relative aspect-[4/3] overflow-hidden">
+          <img src={photo} alt={property.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+          <div className="absolute top-2 left-2 bg-green-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">Active</div>
+        </div>
+        <div className="p-3">
+          <p className="text-base font-bold text-foreground">${property.price?.toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground mt-0.5 truncate">{property.title}</p>
+          <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
+            <span>{property.beds} bd</span>
+            <span>|</span>
+            <span>{property.baths} ba</span>
+            <span>|</span>
+            <span>{property.sqft?.toLocaleString()} sqft</span>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function SoldPropertyCard({ listing }: { listing: any }) {
+  const closeDateStr = listing.closeDate
+    ? new Date(listing.closeDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : null;
+  return (
+    <div className="rounded-xl overflow-hidden border border-border bg-card" data-testid={`card-sold-${listing.mlsNumber}`}>
+      <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+        {listing.imageUrl ? (
+          <img src={listing.imageUrl} alt={listing.address} className="w-full h-full object-cover" loading="lazy" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+            <Home className="w-8 h-8" />
+          </div>
+        )}
+        <div className="absolute top-2 left-2 bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">Sold</div>
+      </div>
+      <div className="p-3">
+        <p className="text-base font-bold text-foreground">${listing.closePrice?.toLocaleString() || listing.listPrice?.toLocaleString()}</p>
+        <p className="text-xs text-muted-foreground mt-0.5 truncate">{listing.address}</p>
+        <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
+          <span>{listing.beds} bd</span>
+          <span>|</span>
+          <span>{listing.baths} ba</span>
+          <span>|</span>
+          <span>{listing.sqft?.toLocaleString()} sqft</span>
+        </div>
+        {closeDateStr && (
+          <p className="text-xs text-muted-foreground mt-1">Sold {closeDateStr}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SimilarHomesSection({ propertyId }: { propertyId: number }) {
+  const { data: similar, isLoading } = useQuery<any[]>({
+    queryKey: [`/api/properties/${propertyId}/similar`],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="mt-10 pt-8 border-t border-border" data-testid="section-similar-homes">
+        <h2 className="text-xl font-display font-bold mb-5 flex items-center gap-2">
+          <Home className="w-5 h-5 text-primary" />
+          Similar Homes for Sale
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="rounded-xl border border-border bg-muted/30 animate-pulse aspect-[3/4]" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!similar || similar.length === 0) return null;
+
+  return (
+    <div className="mt-10 pt-8 border-t border-border" data-testid="section-similar-homes">
+      <h2 className="text-xl font-display font-bold mb-5 flex items-center gap-2">
+        <Home className="w-5 h-5 text-primary" />
+        Similar Homes for Sale
+      </h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {similar.slice(0, 8).map((p: any) => (
+          <SimilarPropertyCard key={p.id} property={p} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SoldNearbySection({ propertyId }: { propertyId: number }) {
+  const { data: sold, isLoading } = useQuery<any[]>({
+    queryKey: [`/api/properties/${propertyId}/sold-nearby`],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="mt-10 pt-8 border-t border-border" data-testid="section-sold-nearby">
+        <h2 className="text-xl font-display font-bold mb-5 flex items-center gap-2">
+          <TrendingUp className="w-5 h-5 text-primary" />
+          Recently Sold Nearby
+        </h2>
+        <p className="text-sm text-muted-foreground mb-4">Within 0.5 miles · Last 6 months</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="rounded-xl border border-border bg-muted/30 animate-pulse aspect-[3/4]" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!sold || sold.length === 0) return null;
+
+  const avgClosePrice = sold.reduce((sum: number, s: any) => sum + (s.closePrice || 0), 0) / sold.length;
+  const avgPricePerSqft = sold.filter((s: any) => s.sqft > 0).length > 0
+    ? Math.round(sold.filter((s: any) => s.sqft > 0).reduce((sum: number, s: any) => sum + (s.closePrice || 0) / s.sqft, 0) / sold.filter((s: any) => s.sqft > 0).length)
+    : null;
+
+  return (
+    <div className="mt-10 pt-8 border-t border-border" data-testid="section-sold-nearby">
+      <h2 className="text-xl font-display font-bold mb-5 flex items-center gap-2">
+        <TrendingUp className="w-5 h-5 text-primary" />
+        Recently Sold Nearby
+      </h2>
+      <p className="text-sm text-muted-foreground mb-4">Within 0.5 miles · Last 6 months</p>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+        <div className="bg-muted/50 rounded-xl border border-border p-4">
+          <p className="text-xs font-medium text-muted-foreground mb-1">Homes Sold</p>
+          <p className="text-2xl font-bold text-foreground" data-testid="text-sold-count">{sold.length}</p>
+        </div>
+        <div className="bg-muted/50 rounded-xl border border-border p-4">
+          <p className="text-xs font-medium text-muted-foreground mb-1">Avg. Sale Price</p>
+          <p className="text-xl font-bold text-foreground" data-testid="text-avg-sold-price">${Math.round(avgClosePrice).toLocaleString()}</p>
+        </div>
+        {avgPricePerSqft && (
+          <div className="bg-muted/50 rounded-xl border border-border p-4">
+            <p className="text-xs font-medium text-muted-foreground mb-1">Avg. $/Sq Ft</p>
+            <p className="text-xl font-bold text-foreground" data-testid="text-avg-price-sqft">${avgPricePerSqft}</p>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {sold.slice(0, 8).map((s: any, i: number) => (
+          <SoldPropertyCard key={s.mlsNumber || i} listing={s} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -685,6 +845,9 @@ export default function PropertyDetail() {
 
           <PriceHistorySection property={property} daysOnMarket={daysOnMarket} />
           <ListingActivitySection property={property} daysOnMarket={daysOnMarket} />
+
+          <SimilarHomesSection propertyId={property.id} />
+          <SoldNearbySection propertyId={property.id} />
 
           <ZoningPanel propertyId={property.id} />
           <PublicRecordsPanel propertyId={property.id} />

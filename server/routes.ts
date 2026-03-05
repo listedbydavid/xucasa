@@ -11,7 +11,7 @@ import { registerAuthRoutes } from "./replit_integrations/auth";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { getPublicRecords } from "./publicRecords";
 import { getZoningData } from "./zoningData";
-import { runIdxSync, isSyncInProgress, idxConfigured, getLastSyncLog, getSyncLogs, startIdxAutoSync, verifyAgentLicense } from "./idxSync";
+import { runIdxSync, isSyncInProgress, idxConfigured, getLastSyncLog, getSyncLogs, startIdxAutoSync, verifyAgentLicense, getRealtyFeedToken, realtyFeedODataFetch, REALTYFEED_API_BASE } from "./idxSync";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -168,6 +168,130 @@ export async function registerRoutes(
       res.status(204).end();
     } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.get("/api/properties/:id/similar", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+
+      const prop = await storage.getProperty(id);
+      if (!prop) return res.status(404).json({ message: "Property not found" });
+
+      if (!prop.lat || !prop.lng || !prop.price) return res.json([]);
+
+      const lat = parseFloat(prop.lat as string);
+      const lng = parseFloat(prop.lng as string);
+      const priceLow = Math.round(prop.price * 0.7);
+      const priceHigh = Math.round(prop.price * 1.3);
+
+      const similar = await db
+        .select({ property: properties, agent: users })
+        .from(properties)
+        .leftJoin(users, eq(properties.agentId, users.id))
+        .where(
+          sql`${properties.id} != ${id}
+            AND ${properties.status} = 'active'
+            AND ${properties.lat} IS NOT NULL
+            AND ${properties.lng} IS NOT NULL
+            AND ${properties.price} BETWEEN ${priceLow} AND ${priceHigh}
+            AND (
+              3959 * acos(
+                cos(radians(${lat})) * cos(radians(CAST(${properties.lat} AS double precision)))
+                * cos(radians(CAST(${properties.lng} AS double precision)) - radians(${lng}))
+                + sin(radians(${lat})) * sin(radians(CAST(${properties.lat} AS double precision)))
+              )
+            ) < 5`
+        )
+        .orderBy(sql`3959 * acos(
+          cos(radians(${lat})) * cos(radians(CAST(${properties.lat} AS double precision)))
+          * cos(radians(CAST(${properties.lng} AS double precision)) - radians(${lng}))
+          + sin(radians(${lat})) * sin(radians(CAST(${properties.lat} AS double precision)))
+        )`)
+        .limit(8);
+
+      const result = similar.map(r => ({ ...r.property, agent: r.agent }));
+      res.json(result);
+    } catch (err) {
+      console.error("Similar properties error:", err);
+      res.status(500).json({ message: "Failed to fetch similar properties" });
+    }
+  });
+
+  const soldCache = new Map<string, { data: any[]; ts: number }>();
+  const SOLD_CACHE_TTL = 30 * 60 * 1000;
+
+  app.get("/api/properties/:id/sold-nearby", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+
+      const prop = await storage.getProperty(id);
+      if (!prop) return res.status(404).json({ message: "Property not found" });
+
+      if (!prop.lat || !prop.lng) return res.json([]);
+
+      const lat = parseFloat(prop.lat as string);
+      const lng = parseFloat(prop.lng as string);
+      const cacheKey = `${lat.toFixed(3)}_${lng.toFixed(3)}`;
+
+      const cached = soldCache.get(cacheKey);
+      if (cached && Date.now() - cached.ts < SOLD_CACHE_TTL) {
+        return res.json(cached.data);
+      }
+
+      if (!idxConfigured()) return res.json([]);
+
+      const radiusKm = 0.8045;
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      const dateStr = sixMonthsAgo.toISOString().split("T")[0];
+
+      const filter = `StandardStatus eq 'Closed' and CloseDate ge ${dateStr} and geo.distance(Coordinates, POINT(${lng} ${lat})) lt ${radiusKm}km`;
+      const selectFields = "ListingKey,ListingId,ListPrice,ClosePrice,CloseDate,ListDate,BedroomsTotal,BathroomsTotalInteger,BathroomsFull,BathroomsHalf,LivingArea,LotSizeSquareFeet,StreetNumber,StreetName,UnitNumber,City,StateOrProvince,PostalCode,Latitude,Longitude,PropertyType,PropertySubType";
+
+      const token = await getRealtyFeedToken();
+      const url = `${REALTYFEED_API_BASE}/Property?$filter=${encodeURIComponent(filter)}&$top=20&$select=${selectFields}&$orderby=CloseDate desc&$expand=Media`;
+      const apiRes = await realtyFeedODataFetch(url, token);
+
+      if (!apiRes.ok) {
+        const errBody = await apiRes.text().catch(() => "");
+        console.error(`Sold nearby API error: ${apiRes.status} — ${errBody.slice(0, 500)}`);
+        return res.json([]);
+      }
+
+      const body = await apiRes.json();
+      const listings = (body.value || []).map((raw: any) => {
+        const bathsFull = parseInt(raw.BathroomsFull || raw.BathroomsTotalInteger || "0") || 0;
+        const bathsHalf = parseInt(raw.BathroomsHalf || "0") || 0;
+        const photo = raw.Media?.[0]?.MediaURL || null;
+        return {
+          mlsNumber: raw.ListingId || raw.ListingKey,
+          address: `${raw.StreetNumber || ""} ${raw.StreetName || ""}${raw.UnitNumber ? ` #${raw.UnitNumber}` : ""}, ${raw.City || ""}`.trim(),
+          city: raw.City || "",
+          state: raw.StateOrProvince || "",
+          zip: raw.PostalCode || "",
+          listPrice: parseInt(raw.ListPrice || "0") || 0,
+          closePrice: parseInt(raw.ClosePrice || "0") || 0,
+          closeDate: raw.CloseDate || null,
+          listDate: raw.ListDate || null,
+          beds: parseInt(raw.BedroomsTotal || "0") || 0,
+          baths: String(bathsFull + bathsHalf * 0.5),
+          sqft: parseInt(raw.LivingArea || "0") || 0,
+          lotSize: parseInt(raw.LotSizeSquareFeet || "0") || null,
+          propertyType: raw.PropertySubType || raw.PropertyType || null,
+          lat: raw.Latitude ? String(raw.Latitude) : null,
+          lng: raw.Longitude ? String(raw.Longitude) : null,
+          imageUrl: photo,
+        };
+      });
+
+      soldCache.set(cacheKey, { data: listings, ts: Date.now() });
+      res.json(listings);
+    } catch (err) {
+      console.error("Sold nearby error:", err);
+      res.json([]);
     }
   });
 
