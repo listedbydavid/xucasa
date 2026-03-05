@@ -118,7 +118,7 @@ function InlinePhotoGallery({ photos, title }: { photos: string[]; title: string
     if (photos.length <= 1) return;
     autoRef.current = setInterval(() => {
       setActiveIndex(prev => (prev + 1) % photos.length);
-    }, 1900);
+    }, 2500);
   }, [photos.length]);
 
   useEffect(() => {
