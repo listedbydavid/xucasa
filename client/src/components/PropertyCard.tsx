@@ -64,7 +64,7 @@ export function PropertyCard({ property }: PropertyCardProps) {
           const next = prev + 1;
           return next >= maxPhotos ? 0 : next;
         });
-      }, 2500);
+      }, 2800);
     }
     return () => {
       if (autoAdvanceRef.current) {
