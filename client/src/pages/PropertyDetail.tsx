@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { useProperty } from "@/hooks/use-properties";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
-import { BedDouble, Bath, Maximize, MapPin, Heart, Sparkles, Building, Briefcase, ChevronLeft, ChevronRight, X, Camera, Grid3X3 } from "lucide-react";
+import { BedDouble, Bath, Maximize, MapPin, Heart, Sparkles, Building, Briefcase, ChevronLeft, ChevronRight, X, Camera, Phone, Mail, MessageSquare } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { MapView } from "@/components/MapView";
 import { PublicRecordsPanel } from "@/components/PublicRecordsPanel";
@@ -11,6 +12,101 @@ import { AuthPromptModal } from "@/components/AuthPromptModal";
 import { SdmlsDisclaimer } from "@/components/SdmlsDisclaimer";
 
 const FALLBACK = "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1600&h=900&fit=crop";
+
+const ADMIN_CONTACT = {
+  name: "David Hussain",
+  phone: "6198886283",
+  email: "david@listedbydavid.com",
+  brokerage: "Listed by David",
+  title: "Realtor | DRE# 02008317",
+};
+
+function formatPhone(phone: string) {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  if (digits.length === 11 && digits[0] === "1") {
+    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  return phone;
+}
+
+function ContactCard({
+  contactName,
+  contactPhone,
+  contactEmail,
+  contactTitle,
+  contactBrokerage,
+  contactImage,
+  propertyAddress,
+}: {
+  contactName: string;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  contactTitle?: string;
+  contactBrokerage?: string;
+  contactImage?: string | null;
+  propertyAddress: string;
+}) {
+  const subject = encodeURIComponent(`Inquiry about ${propertyAddress}`);
+  const body = encodeURIComponent(`Hi ${contactName.split(" ")[0]},\n\nI'm interested in learning more about the property at ${propertyAddress}.\n\nPlease get back to me at your earliest convenience.\n\nThank you!`);
+
+  return (
+    <div className="bg-muted p-6 rounded-3xl border border-border sticky top-24" data-testid="contact-card">
+      <h3 className="font-display font-bold text-lg mb-4">Contact for this listing</h3>
+      <div className="flex items-center gap-3 mb-5">
+        <div className="w-12 h-12 bg-background rounded-full flex items-center justify-center border-2 border-primary overflow-hidden shadow-sm flex-shrink-0">
+          {contactImage ? (
+            <img src={contactImage} alt={contactName} className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-lg font-bold text-primary">
+              {(contactName[0] || "A").toUpperCase()}
+            </span>
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="font-bold text-foreground truncate">{contactName}</p>
+          {contactTitle && <p className="text-xs text-muted-foreground truncate">{contactTitle}</p>}
+          {contactBrokerage && <p className="text-xs text-muted-foreground truncate">{contactBrokerage}</p>}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {contactPhone && (
+          <>
+            <a
+              href={`tel:${contactPhone.replace(/\D/g, "")}`}
+              className="flex items-center gap-3 w-full bg-foreground text-background py-3 px-4 rounded-xl font-semibold hover:bg-primary transition-colors shadow-md active:scale-[0.98]"
+              data-testid="button-call-agent"
+            >
+              <Phone className="w-4 h-4" />
+              Call {formatPhone(contactPhone)}
+            </a>
+            <a
+              href={`sms:${contactPhone.replace(/\D/g, "")}?body=${encodeURIComponent(`Hi ${contactName.split(" ")[0]}, I'm interested in ${propertyAddress}`)}`}
+              className="flex items-center gap-3 w-full bg-muted-foreground/10 text-foreground py-3 px-4 rounded-xl font-semibold hover:bg-muted-foreground/20 transition-colors border border-border active:scale-[0.98]"
+              data-testid="button-text-agent"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Text
+            </a>
+          </>
+        )}
+        {contactEmail && (
+          <a
+            href={`mailto:${contactEmail}?subject=${subject}&body=${body}`}
+            className="flex items-center gap-3 w-full bg-muted-foreground/10 text-foreground py-3 px-4 rounded-xl font-semibold hover:bg-muted-foreground/20 transition-colors border border-border active:scale-[0.98]"
+            data-testid="button-email-agent"
+          >
+            <Mail className="w-4 h-4" />
+            Email
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function PhotoGallery({ photos, title }: { photos: string[]; title: string }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -206,8 +302,13 @@ export default function PropertyDetail() {
   const { data: property, isLoading } = useProperty(Number(id));
   const { data: savedProps = [] } = useSavedProperties();
   const { mutate: toggleSave, isPending: isSaving } = useToggleSavedProperty();
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
+
+  const { data: agentLink } = useQuery<{ agentId: string; agentEmail: string; status: string } | null>({
+    queryKey: ["/api/agent-invite"],
+    enabled: isAuthenticated,
+  });
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center" role="status" aria-label="Loading property details"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" aria-hidden="true"></div><span className="sr-only">Loading property details</span></div>;
@@ -236,6 +337,25 @@ export default function PropertyDetail() {
     property.photos && (property.photos as string[]).length > 0
       ? (property.photos as string[])
       : [property.imageUrl || FALLBACK];
+
+  const listingAgentName = property.listingAgentName || (property.agent ? `${property.agent.firstName || ""} ${property.agent.lastName || ""}`.trim() : "");
+  const listingBrokerage = property.listingBrokerage || property.agent?.brokerageName || "";
+  const listingAgentEmail = property.listingAgentEmail || property.agent?.email || "";
+  const listingAgentPhone = property.listingAgentPhone || "";
+  const listingAgentImage = property.agent?.profileImageUrl || null;
+
+  const userHasAgent = !!agentLink && agentLink.status === "active";
+  const listingAgentHasContact = !!(listingAgentPhone || listingAgentEmail);
+  const showListingAgent = userHasAgent && listingAgentHasContact;
+
+  const contactName = showListingAgent ? listingAgentName || "Listing Agent" : ADMIN_CONTACT.name;
+  const contactPhone = showListingAgent ? (listingAgentPhone || null) : ADMIN_CONTACT.phone;
+  const contactEmail = showListingAgent ? (listingAgentEmail || null) : ADMIN_CONTACT.email;
+  const contactTitle = showListingAgent ? "Listing Agent" : ADMIN_CONTACT.title;
+  const contactBrokerage = showListingAgent ? listingBrokerage : ADMIN_CONTACT.brokerage;
+  const contactImage = showListingAgent ? listingAgentImage : null;
+
+  const propertyAddress = `${property.title}, ${property.location}`;
 
   return (
     <>
@@ -326,66 +446,55 @@ export default function PropertyDetail() {
             </div>
           </div>
 
-          {(() => {
-            const agentName = property.listingAgentName || (property.agent ? `${property.agent.firstName || ""} ${property.agent.lastName || ""}`.trim() : "");
-            const brokerage = property.listingBrokerage || "";
-            const contact = property.listingAgentEmail || property.listingAgentPhone || property.agent?.email || "";
-            if (agentName || brokerage) {
-              return (
-                <div className="flex items-center gap-2 mb-8 px-1" data-testid="detail-listing-attribution">
-                  <Briefcase className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  <p className="text-sm text-muted-foreground">
-                    Listed by <span className="font-medium text-foreground">{agentName || "Agent"}</span>
-                    {brokerage && <> — <span className="font-medium text-foreground">{brokerage}</span></>}
-                    {contact && <> · <a href={contact.includes("@") ? `mailto:${contact}` : `tel:${contact}`} className="text-primary hover:underline">{contact}</a></>}
-                  </p>
-                </div>
-              );
-            }
-            return null;
-          })()}
-
           <div className="grid md:grid-cols-3 gap-12">
             <div className="md:col-span-2">
               <h2 className="text-2xl font-display font-bold mb-4">About this home</h2>
-              <div className="prose prose-lg text-muted-foreground max-w-none">
+              <div className="prose prose-lg text-muted-foreground max-w-none mb-8">
                 {property.description.split('\n').map((paragraph, i) => (
                   <p key={i} className="mb-4 leading-relaxed">{paragraph}</p>
                 ))}
               </div>
+
+              {(listingAgentName || listingBrokerage) && (
+                <div className="flex items-center gap-3 pt-6 border-t border-border" data-testid="detail-listing-attribution">
+                  <div className="w-9 h-9 bg-muted rounded-full flex items-center justify-center border border-border overflow-hidden flex-shrink-0">
+                    {listingAgentImage ? (
+                      <img src={listingAgentImage} alt={listingAgentName} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-xs font-semibold text-muted-foreground">
+                        {(listingAgentName[0] || "A").toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Listed by <span className="font-medium text-foreground/80">{listingAgentName || "Agent"}</span>
+                      {listingBrokerage && <> · {listingBrokerage}</>}
+                    </p>
+                    {(listingAgentEmail || listingAgentPhone) && (
+                      <p className="text-xs text-muted-foreground">
+                        {listingAgentPhone && <span>{formatPhone(listingAgentPhone)}</span>}
+                        {listingAgentPhone && listingAgentEmail && <span> · </span>}
+                        {listingAgentEmail && (
+                          <a href={`mailto:${listingAgentEmail}`} className="text-primary/70 hover:text-primary hover:underline">{listingAgentEmail}</a>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>
-              <div className="bg-muted p-6 rounded-3xl border border-border sticky top-24">
-                <h3 className="font-display font-bold text-xl mb-4 flex items-center gap-2">
-                  <Briefcase className="w-5 h-5 text-primary" />
-                  Listing Agent
-                </h3>
-                {property.agent ? (
-                  <div className="flex items-center gap-4 mb-6">
-                    <div className="w-14 h-14 bg-background rounded-full flex items-center justify-center border-2 border-primary overflow-hidden shadow-sm">
-                      {property.agent.profileImageUrl ? (
-                        <img src={property.agent.profileImageUrl} alt="Agent" className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-xl font-bold text-primary">
-                          {(property.agent.firstName?.[0] || 'A').toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                    <div>
-                      <p className="font-bold text-foreground text-lg">
-                        {property.agent.firstName} {property.agent.lastName}
-                      </p>
-                      <p className="text-sm font-medium text-muted-foreground">Realtor</p>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground mb-6 font-medium">Agent details unavailable.</p>
-                )}
-                <button className="w-full bg-foreground text-background py-3.5 rounded-xl font-bold hover:bg-primary transition-colors shadow-md hover:shadow-xl active:scale-95" data-testid="button-contact-agent">
-                  Contact Agent
-                </button>
-              </div>
+              <ContactCard
+                contactName={contactName}
+                contactPhone={contactPhone}
+                contactEmail={contactEmail}
+                contactTitle={contactTitle}
+                contactBrokerage={contactBrokerage}
+                contactImage={contactImage}
+                propertyAddress={propertyAddress}
+              />
 
               <div className="mt-8 bg-muted rounded-3xl border border-border overflow-hidden h-64">
                 <MapView
