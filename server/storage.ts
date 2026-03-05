@@ -124,6 +124,7 @@ export class DatabaseStorage implements IStorage {
     if (filters) {
       if (filters.location) {
         const q = `%${filters.location}%`;
+        const fullAddr = sql`CONCAT(${properties.addressStreetNumber}, ' ', ${properties.addressStreetName}, ', ', ${properties.addressCity}, ', ', ${properties.addressState}, ' ', ${properties.addressZip})`;
         conditions.push(sql`(
           ${properties.location} ILIKE ${q}
           OR ${properties.addressCity} ILIKE ${q}
@@ -131,6 +132,8 @@ export class DatabaseStorage implements IStorage {
           OR ${properties.addressZip} ILIKE ${q}
           OR CONCAT(${properties.addressStreetNumber}, ' ', ${properties.addressStreetName}) ILIKE ${q}
           OR CONCAT(${properties.addressStreetNumber}, ' ', ${properties.addressStreetName}, ', ', ${properties.addressCity}) ILIKE ${q}
+          OR ${fullAddr} ILIKE ${q}
+          OR ${q} ILIKE CONCAT('%', ${properties.addressStreetNumber}, ' ', ${properties.addressStreetName}, '%')
         )`);
       }
       if (filters.minPrice) conditions.push(sql`${properties.price} >= ${filters.minPrice}`);
