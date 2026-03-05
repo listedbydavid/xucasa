@@ -31,11 +31,14 @@ import {
   type FavoriteList,
   users,
 } from "@shared/schema";
-import { eq, and, desc, sql, gte } from "drizzle-orm";
+import { eq, and, desc, sql, gte, count } from "drizzle-orm";
 
 export interface IStorage {
   // Properties
   getProperties(filters?: any): Promise<(Property & { agent: any })[]>;
+  getPropertiesCount(filters?: any): Promise<number>;
+  getPropertiesByAgent(agentId: string): Promise<(Property & { agent: any })[]>;
+  getPropertiesNeedingGeocode(limit: number): Promise<Property[]>;
   getProperty(id: number): Promise<(Property & { agent: any }) | undefined>;
   createProperty(property: InsertProperty): Promise<Property>;
   updateProperty(id: number, updates: Partial<InsertProperty>): Promise<Property>;
@@ -116,9 +119,8 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  async getProperties(filters?: any): Promise<(Property & { agent: any })[]> {
-    let conditions = [];
-
+  private buildPropertyFilters(filters?: any) {
+    let conditions: any[] = [];
     if (filters) {
       if (filters.location) {
         const q = `%${filters.location}%`;
@@ -140,16 +142,54 @@ export class DatabaseStorage implements IStorage {
       if (filters.isOffMarket !== undefined) {
         conditions.push(eq(properties.isOffMarket, filters.isOffMarket === 'true'));
       }
+      if (filters.source) {
+        conditions.push(eq(properties.source, filters.source));
+      }
     }
+    return conditions.length > 0 ? and(...conditions) : undefined;
+  }
 
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+  async getProperties(filters?: any): Promise<(Property & { agent: any })[]> {
+    const whereClause = this.buildPropertyFilters(filters);
+    const limit = filters?.limit ? Math.min(Number(filters.limit), 200) : 50;
+    const offset = filters?.offset ? Number(filters.offset) : 0;
 
     const results = await db
       .select({ property: properties, agent: users })
       .from(properties)
       .leftJoin(users, eq(properties.agentId, users.id))
-      .where(whereClause);
+      .where(whereClause)
+      .orderBy(desc(properties.createdAt))
+      .limit(limit)
+      .offset(offset);
 
+    return results.map(r => ({ ...r.property, agent: r.agent }));
+  }
+
+  async getPropertiesCount(filters?: any): Promise<number> {
+    const whereClause = this.buildPropertyFilters(filters);
+    const result = await db
+      .select({ total: count() })
+      .from(properties)
+      .where(whereClause);
+    return result[0]?.total ?? 0;
+  }
+
+  async getPropertiesNeedingGeocode(limit: number): Promise<Property[]> {
+    const results = await db
+      .select()
+      .from(properties)
+      .where(sql`(${properties.lat} IS NULL OR ${properties.lng} IS NULL)`)
+      .limit(limit);
+    return results;
+  }
+
+  async getPropertiesByAgent(agentId: string): Promise<(Property & { agent: any })[]> {
+    const results = await db
+      .select({ property: properties, agent: users })
+      .from(properties)
+      .leftJoin(users, eq(properties.agentId, users.id))
+      .where(eq(properties.agentId, agentId));
     return results.map(r => ({ ...r.property, agent: r.agent }));
   }
 

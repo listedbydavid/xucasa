@@ -4,14 +4,20 @@ import queryString from "query-string";
 import type { SearchCriteria, PropertyResponse, CreatePropertyRequest, UpdatePropertyRequest } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
+export interface PaginatedProperties {
+  properties: PropertyResponse[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 // GET /api/properties
-export function useProperties(filters?: SearchCriteria & { isOffMarket?: 'true' | 'false' }) {
-  return useQuery<PropertyResponse[]>({
+export function useProperties(filters?: SearchCriteria & { isOffMarket?: 'true' | 'false'; limit?: number; offset?: number }) {
+  return useQuery<PaginatedProperties>({
     queryKey: [api.properties.list.path, filters],
     queryFn: async () => {
-      const url = filters && Object.keys(filters).length > 0 
-        ? `${api.properties.list.path}?${queryString.stringify(filters)}` 
-        : api.properties.list.path;
+      const params = { ...filters, limit: filters?.limit || 50, offset: filters?.offset || 0 };
+      const url = `${api.properties.list.path}?${queryString.stringify(params)}`;
         
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch properties");

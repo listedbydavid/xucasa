@@ -21,7 +21,8 @@ function buildStreetViewUrl(lat: number, lng: number, size = "800x500"): string 
 
 export default function AgentDashboard() {
   const { user, isAuthenticated } = useAuth();
-  const { data: properties = [], isLoading } = useProperties();
+  const { data: propertiesData, isLoading } = useProperties({ limit: 200 });
+  const properties = propertiesData?.properties || [];
   const { mutate: createProperty, isPending: isCreating } = useCreateProperty();
   const { mutate: updateProperty, isPending: isUpdating } = useUpdateProperty();
   const { mutate: deleteProperty } = useDeleteProperty();

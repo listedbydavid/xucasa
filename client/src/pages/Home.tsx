@@ -8,7 +8,7 @@ import { SdmlsDisclaimer } from "@/components/SdmlsDisclaimer";
 export default function Home() {
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
-  const { data: properties, isLoading } = useProperties();
+  const { data: propertiesData, isLoading } = useProperties({ limit: 20 });
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +32,7 @@ export default function Home() {
     }
   };
 
-  const featuredProperties = properties?.filter(p => p.status === 'active').slice(0, 4) || [];
+  const featuredProperties = propertiesData?.properties?.filter(p => p.status === 'active').slice(0, 4) || [];
 
   return (
     <div className="min-h-screen pb-20">
@@ -110,7 +110,7 @@ export default function Home() {
               <div key={i} className="bg-card border border-border rounded-2xl h-[350px] animate-pulse"></div>
             ))}
           </div>
-        ) : properties?.length === 0 ? (
+        ) : featuredProperties.length === 0 ? (
           <div className="text-center py-20 bg-muted/50 rounded-3xl border border-border border-dashed">
             <p className="text-muted-foreground">No properties available yet.</p>
           </div>

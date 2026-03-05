@@ -31,9 +31,16 @@ export const api = {
         minSqft: z.coerce.number().optional(),
         maxHoaFee: z.coerce.number().optional(),
         isOffMarket: z.enum(['true', 'false']).optional(),
+        limit: z.coerce.number().optional(),
+        offset: z.coerce.number().optional(),
       }).optional(),
       responses: {
-        200: z.array(z.any()), // PropertyResponse
+        200: z.object({
+          properties: z.array(z.any()),
+          total: z.number(),
+          limit: z.number(),
+          offset: z.number(),
+        }),
       },
     },
     get: {

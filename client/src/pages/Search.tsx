@@ -86,7 +86,12 @@ export default function Search() {
     }
   }, [locationInput, filters]);
 
-  const { data: properties, isLoading } = useProperties(activeQuery);
+  const [page, setPage] = useState(0);
+  const activeQueryKey = JSON.stringify(activeQuery);
+  useEffect(() => { setPage(0); }, [activeQueryKey]);
+  const { data: propertiesData, isLoading } = useProperties({ ...activeQuery, limit: 50, offset: page * 50 });
+  const properties = propertiesData?.properties || [];
+  const totalProperties = propertiesData?.total || 0;
   const { mutate: saveSearch, isPending: isSavingSearch } = useCreateSavedSearch();
   const { isAuthenticated } = useAuth();
   const { mutate: addHistory } = useAddSearchHistory();
@@ -267,7 +272,7 @@ export default function Search() {
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <h2 className="font-display font-bold text-xl text-foreground">
-                  {isLoading ? "Searching..." : `${properties?.length || 0} Homes`}
+                  {isLoading ? "Searching..." : `${totalProperties.toLocaleString()} Homes`}
                 </h2>
                 {!isMapVisible && (
                   <button
@@ -297,6 +302,30 @@ export default function Search() {
                 {properties?.map(property => (
                   <PropertyCard key={property.id} property={property} />
                 ))}
+              </div>
+            )}
+
+            {totalProperties > 50 && (
+              <div className="flex items-center justify-center gap-4 mt-8 pb-4" data-testid="pagination-controls">
+                <button
+                  onClick={() => { setPage(p => Math.max(0, p - 1)); window.scrollTo(0, 0); }}
+                  disabled={page === 0}
+                  className="px-4 py-2 rounded-lg bg-primary/10 text-primary font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary hover:text-white transition-colors"
+                  data-testid="button-prev-page"
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-muted-foreground font-medium" data-testid="text-page-info">
+                  Page {page + 1} of {Math.ceil(totalProperties / 50)}
+                </span>
+                <button
+                  onClick={() => { setPage(p => p + 1); window.scrollTo(0, 0); }}
+                  disabled={(page + 1) * 50 >= totalProperties}
+                  className="px-4 py-2 rounded-lg bg-primary/10 text-primary font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary hover:text-white transition-colors"
+                  data-testid="button-next-page"
+                >
+                  Next
+                </button>
               </div>
             )}
 

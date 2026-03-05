@@ -54,6 +54,14 @@ Preferred communication style: Simple, everyday language.
 - **Google OAuth 2.0**: For user authentication.
 - **RealtyFeed / MLS Sync**: Integrates with RealtyFeed (RESO OData) for MLS listing synchronization, including geographic filtering, batch upserts, and status updates. Falls back to IDX Broker REST API if configured.
 
+### Properties API Pagination
+
+- `GET /api/properties` returns `{ properties: PropertyResponse[], total: number, limit: number, offset: number }` (not a plain array).
+- Default limit: 50, max limit: 200. Limit and offset are normalized/clamped in the route handler before being passed to storage.
+- All frontend consumers (Home, Search, Swipe, AgentDashboard, use-properties hook) use `.properties` accessor on the response.
+- Search page resets to page 0 when filters/query change.
+- `getPropertiesCount(filters?)` method provides total count without fetching rows.
+
 ### Environment Variables Required
 
 - `DATABASE_URL`

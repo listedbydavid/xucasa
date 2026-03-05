@@ -15,7 +15,8 @@ const SWIPE_THRESHOLD = 90;
 const FALLBACK = "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&h=1200&fit=crop";
 
 export default function Swipe() {
-  const { data: properties = [], isLoading } = useProperties({});
+  const { data: propertiesData, isLoading } = useProperties({ limit: 100 });
+  const properties = propertiesData?.properties || [];
   const { data: savedProps = [] } = useSavedProperties();
   const { mutate: toggleSave } = useToggleSavedProperty();
   const { isAuthenticated } = useAuth();

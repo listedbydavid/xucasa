@@ -20,12 +20,11 @@ export async function registerRoutes(
   // Register auth routes first
   registerAuthRoutes(app);
 
-  // Backfill missing lat/lng for all existing properties (runs once on startup)
+  // Backfill missing lat/lng for properties without coordinates (runs once on startup)
   (async () => {
     try {
       const { geocodeAddress } = await import("./publicRecords");
-      const allProps = await storage.getProperties();
-      const needsGeo = allProps.filter(p => !p.lat || !p.lng);
+      const needsGeo = await storage.getPropertiesNeedingGeocode(100);
       for (const prop of needsGeo) {
         const city = prop.addressCity || prop.location?.split(",")[0]?.trim() || "";
         const state = (prop.addressState || prop.location?.split(",")[1]?.trim() || "").trim();
@@ -43,8 +42,14 @@ export async function registerRoutes(
   app.get(api.properties.list.path, async (req, res) => {
     try {
       const filters = api.properties.list.input?.parse(req.query);
-      const props = await storage.getProperties(filters);
-      res.status(200).json(props);
+      const effectiveLimit = Math.min(Math.max(filters?.limit || 50, 1), 200);
+      const effectiveOffset = Math.max(filters?.offset || 0, 0);
+      const normalizedFilters = { ...filters, limit: effectiveLimit, offset: effectiveOffset };
+      const [props, total] = await Promise.all([
+        storage.getProperties(normalizedFilters),
+        storage.getPropertiesCount(normalizedFilters),
+      ]);
+      res.status(200).json({ properties: props, total, limit: effectiveLimit, offset: effectiveOffset });
     } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
     }
@@ -52,8 +57,7 @@ export async function registerRoutes(
 
   app.get("/api/properties/mine", isAuthenticated, async (req, res) => {
     try {
-      const allProps = await storage.getProperties();
-      const mine = allProps.filter(p => p.agentId === req.user!.claims.sub);
+      const mine = await storage.getPropertiesByAgent(req.user!.claims.sub);
       res.json(mine);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -806,18 +810,18 @@ export async function registerRoutes(
 
   app.get("/api/admin/stats", isAuthenticated, isAdmin, async (_req, res) => {
     try {
-      const [pitches, leads, profiles, props] = await Promise.all([
+      const [pitches, leads, profiles, totalProperties] = await Promise.all([
         storage.getSellerPitches(),
         storage.getSellLeads(),
         storage.getBuyerProfiles(),
-        storage.getProperties(),
+        storage.getPropertiesCount(),
       ]);
       res.json({
         totalPitches: pitches.length,
         newPitches: pitches.filter(p => p.status === "new").length,
         totalSellLeads: leads.length,
         totalBuyerProfiles: profiles.length,
-        totalProperties: props.length,
+        totalProperties,
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -1246,7 +1250,7 @@ export async function registerRoutes(
       const inProgress = isSyncInProgress();
       const last = await getLastSyncLog();
       const logs = await getSyncLogs(5);
-      const idxCount = await storage.getProperties().then(p => p.filter(x => x.source === "idx").length);
+      const idxCount = await storage.getPropertiesCount({ source: "idx" });
       res.json({ configured, inProgress, last, logs, idxCount });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -1278,7 +1282,7 @@ export async function registerRoutes(
 }
 
 async function seedDatabase() {
-  const existing = await storage.getProperties();
+  const existingCount = await storage.getPropertiesCount();
 
   // Backfill address fields for seed properties that have null addresses
   const addressMap: Record<number, { addressStreetNumber: string; addressStreetName: string; addressCity: string; addressState: string; addressZip: string }> = {
@@ -1287,13 +1291,14 @@ async function seedDatabase() {
     3: { addressStreetNumber: "789", addressStreetName: "Mission St", addressCity: "San Francisco", addressState: "CA", addressZip: "94103" },
     4: { addressStreetNumber: "101", addressStreetName: "University Ave", addressCity: "Palo Alto", addressState: "CA", addressZip: "94301" },
   };
-  for (const prop of existing) {
-    if (!prop.addressCity && addressMap[prop.id]) {
-      await storage.updateProperty(prop.id, addressMap[prop.id]);
+  for (const [idStr, addr] of Object.entries(addressMap)) {
+    const prop = await storage.getProperty(Number(idStr));
+    if (prop && !prop.addressCity) {
+      await storage.updateProperty(prop.id, addr);
     }
   }
 
-  if (existing.length === 0) {
+  if (existingCount === 0) {
     await storage.createProperty({
       title: "Beautiful Modern Home",
       description: "A stunning modern home in the heart of the city with open concept living.",
