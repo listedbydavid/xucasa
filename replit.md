@@ -34,6 +34,7 @@ Preferred communication style: Simple, everyday language.
 - **Database**: PostgreSQL.
 - **ORM**: Drizzle ORM (`drizzle-orm/node-postgres`) with `drizzle-kit` for migrations.
 - **Schema**: Includes tables for `users`, `sessions`, `properties`, `savedProperties`, `savedSearches`, `searchHistory`, `userHomes`, `buyerProfiles`, `buyerMatches`, and `sellerPitches`.
+- **Properties table** includes `property_type` column for abbreviated type (SFH, Condo, Townhome, Land, 2-4 Unit, etc.), synced from MLS PropertyType/PropertySubType.
 
 ### Authentication
 

@@ -36,6 +36,7 @@ export const properties = pgTable("properties", {
   source: text("source").default("manual").notNull(),   // 'manual' | 'idx'
   idxId: text("idx_id").unique(),                       // IDX Broker listingID
   mlsNumber: text("mls_number"),                        // MLS # displayed to users
+  propertyType: text("property_type"),                   // SFH, Condo, Townhome, Land, Multi-Family, etc.
   listDate: timestamp("list_date"),                     // When listed on MLS
   idxUpdatedAt: timestamp("idx_updated_at"),            // Last sync from IDX
   // SDMLS 12.16(e) listing attribution

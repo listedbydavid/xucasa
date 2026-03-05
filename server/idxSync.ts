@@ -458,6 +458,7 @@ function normaliseIdxBroker(raw: any) {
     source: "idx" as const,
     isOffMarket: false,
     listDate: raw.listDate ? new Date(raw.listDate) : null,
+    propertyType: raw.propertyType || raw.propertySubType || null,
   };
 }
 
@@ -512,7 +513,23 @@ function normaliseReso(raw: any) {
     listingAgentEmail: raw.ListAgentEmail || null,
     listingAgentPhone: raw.ListAgentDirectPhone || raw.ListAgentOfficePhone || null,
     listingBrokerage: raw.ListOfficeName || null,
+    propertyType: normalisePropertyType(raw.PropertyType, raw.PropertySubType),
   };
+}
+
+function normalisePropertyType(type?: string, subType?: string): string | null {
+  const t = (subType || type || "").toLowerCase().trim();
+  if (!t) return null;
+  if (t.includes("single") || t.includes("detached") || t === "residential") return "SFH";
+  if (t.includes("condo")) return "Condo";
+  if (t.includes("townho") || t.includes("town ho")) return "Townhome";
+  if (t.includes("land") || t.includes("lot")) return "Land";
+  if (t.includes("multi") || t.includes("duplex") || t.includes("triplex") || t.includes("fourplex") || t.includes("quadruplex")) return "2-4 Unit";
+  if (t.includes("apart") || t.includes("5+")) return "Multi-Family";
+  if (t.includes("mobile") || t.includes("manufactured")) return "Mobile";
+  if (t.includes("commercial")) return "Commercial";
+  if (t.includes("farm") || t.includes("ranch")) return "Farm/Ranch";
+  return type || subType || null;
 }
 
 // ── Batch upsert helpers ──────────────────────────────────────────────────────

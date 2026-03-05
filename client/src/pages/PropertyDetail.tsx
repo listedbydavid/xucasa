@@ -3,7 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useProperty, useProperties } from "@/hooks/use-properties";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
-import { BedDouble, Bath, Maximize, MapPin, Heart, Sparkles, Building, Briefcase, ChevronLeft, ChevronRight, Phone, Mail, MessageSquare, Camera } from "lucide-react";
+import { BedDouble, Bath, Maximize, MapPin, Heart, Sparkles, Building, Briefcase, ChevronLeft, ChevronRight, Phone, Mail, MessageSquare, Camera, Home, LandPlot, Clock, TrendingUp, CalendarDays, Activity } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { MapView } from "@/components/MapView";
 import { PublicRecordsPanel } from "@/components/PublicRecordsPanel";
@@ -256,6 +256,134 @@ function InlinePhotoGallery({ photos, title }: { photos: string[]; title: string
   );
 }
 
+function PriceHistorySection({ property, daysOnMarket }: { property: any; daysOnMarket: number | null }) {
+  const listDateStr = property.listDate
+    ? new Date(property.listDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : null;
+
+  const pricePerSqft = property.sqft > 0 ? Math.round(property.price / property.sqft) : null;
+
+  return (
+    <div className="mt-10 pt-8 border-t border-border" data-testid="section-price-history">
+      <h2 className="text-xl font-display font-bold mb-5 flex items-center gap-2">
+        <TrendingUp className="w-5 h-5 text-primary" />
+        Price History
+      </h2>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left">
+              <th className="py-3 pr-4 font-semibold text-muted-foreground">Date</th>
+              <th className="py-3 pr-4 font-semibold text-muted-foreground">Event</th>
+              <th className="py-3 pr-4 font-semibold text-muted-foreground text-right">Price</th>
+              <th className="py-3 font-semibold text-muted-foreground text-right">$/Sq Ft</th>
+            </tr>
+          </thead>
+          <tbody>
+            {listDateStr && (
+              <tr className="border-b border-border/50" data-testid="row-price-history-listed">
+                <td className="py-3 pr-4 text-foreground">{listDateStr}</td>
+                <td className="py-3 pr-4">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                    Listed
+                  </span>
+                </td>
+                <td className="py-3 pr-4 text-right font-semibold text-foreground">${property.price.toLocaleString()}</td>
+                <td className="py-3 text-right text-muted-foreground">{pricePerSqft ? `$${pricePerSqft.toLocaleString()}` : '—'}</td>
+              </tr>
+            )}
+            {!listDateStr && (
+              <tr>
+                <td colSpan={4} className="py-4 text-center text-muted-foreground text-sm">No price history available for this listing.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-muted-foreground mt-3">
+        Price history is based on MLS data. Some events may not be reflected.
+      </p>
+    </div>
+  );
+}
+
+function ListingActivitySection({ property, daysOnMarket }: { property: any; daysOnMarket: number | null }) {
+  const listDateStr = property.listDate
+    ? new Date(property.listDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : null;
+
+  const events: { date: string; icon: any; label: string; detail?: string }[] = [];
+
+  if (listDateStr) {
+    events.push({
+      date: listDateStr,
+      icon: CalendarDays,
+      label: "Listed for sale",
+      detail: `Listed at $${property.price.toLocaleString()}`,
+    });
+  }
+
+  if (property.idxUpdatedAt) {
+    events.push({
+      date: new Date(property.idxUpdatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      icon: Activity,
+      label: "Listing updated",
+      detail: "MLS data refreshed",
+    });
+  }
+
+  return (
+    <div className="mt-10 pt-8 border-t border-border" data-testid="section-listing-activity">
+      <h2 className="text-xl font-display font-bold mb-5 flex items-center gap-2">
+        <Activity className="w-5 h-5 text-primary" />
+        Listing Activity
+      </h2>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-muted/50 rounded-xl border border-border p-4">
+          <p className="text-xs font-medium text-muted-foreground mb-1">Days on Market</p>
+          <p className="text-2xl font-bold text-foreground" data-testid="text-dom-value">{daysOnMarket ?? '—'}</p>
+        </div>
+        <div className="bg-muted/50 rounded-xl border border-border p-4">
+          <p className="text-xs font-medium text-muted-foreground mb-1">Status</p>
+          <p className="text-lg font-bold text-foreground capitalize" data-testid="text-listing-status">{property.status}</p>
+        </div>
+        <div className="bg-muted/50 rounded-xl border border-border p-4">
+          <p className="text-xs font-medium text-muted-foreground mb-1">Property Type</p>
+          <p className="text-lg font-bold text-foreground" data-testid="text-property-type">{property.propertyType || '—'}</p>
+        </div>
+        <div className="bg-muted/50 rounded-xl border border-border p-4">
+          <p className="text-xs font-medium text-muted-foreground mb-1">MLS #</p>
+          <p className="text-lg font-bold text-foreground" data-testid="text-mls-number">{property.mlsNumber || '—'}</p>
+        </div>
+      </div>
+
+      {events.length > 0 ? (
+        <div className="relative pl-6 space-y-0">
+          <div className="absolute left-[11px] top-2 bottom-2 w-0.5 bg-border" />
+          {events.map((evt, i) => {
+            const Icon = evt.icon;
+            return (
+              <div key={i} className="relative flex items-start gap-4 py-3" data-testid={`activity-event-${i}`}>
+                <div className="absolute left-[-13px] top-4 w-5 h-5 bg-primary/10 border-2 border-primary rounded-full flex items-center justify-center">
+                  <Icon className="w-2.5 h-2.5 text-primary" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-semibold text-foreground">{evt.label}</p>
+                  {evt.detail && <p className="text-xs text-muted-foreground mt-0.5">{evt.detail}</p>}
+                  <p className="text-xs text-muted-foreground mt-0.5">{evt.date}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">No listing activity available.</p>
+      )}
+    </div>
+  );
+}
+
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
@@ -320,6 +448,10 @@ export default function PropertyDetail() {
     property.photos && (property.photos as string[]).length > 0
       ? (property.photos as string[])
       : [property.imageUrl || FALLBACK];
+
+  const daysOnMarket = property.listDate
+    ? Math.max(0, Math.floor((Date.now() - new Date(property.listDate).getTime()) / (1000 * 60 * 60 * 24)))
+    : null;
 
   const listingAgentName = property.listingAgentName || (property.agent ? `${property.agent.firstName || ""} ${property.agent.lastName || ""}`.trim() : "");
   const listingBrokerage = property.listingBrokerage || property.agent?.brokerageName || "";
@@ -407,7 +539,7 @@ export default function PropertyDetail() {
                 <MapPin className="w-5 h-5 text-primary" />
                 {property.title} · {property.location}
               </div>
-              <div className="flex items-center gap-5 mt-3 text-sm font-semibold text-foreground">
+              <div className="flex items-center gap-5 mt-3 text-sm font-semibold text-foreground flex-wrap">
                 <span>{property.beds} Beds</span>
                 <span className="text-muted-foreground">|</span>
                 <span>{property.baths} Baths</span>
@@ -419,47 +551,71 @@ export default function PropertyDetail() {
                     <span>{property.lotSize.toLocaleString()} Lot Sq Ft</span>
                   </>
                 )}
+                {property.propertyType && (
+                  <>
+                    <span className="text-muted-foreground">|</span>
+                    <span>{property.propertyType}</span>
+                  </>
+                )}
               </div>
             </div>
             
-            <button 
-              onClick={handleSave}
-              disabled={isSaving}
-              aria-pressed={isSaved}
-              data-testid="button-save-property"
-              className={`flex items-center gap-2 px-8 py-4 rounded-full font-bold text-lg transition-all shadow-lg active:scale-95 ${
-                isSaved 
-                  ? "bg-primary text-white hover:bg-primary/90 hover:shadow-primary/30" 
-                  : "bg-muted text-foreground hover:bg-muted/80 border border-border"
-              }`}
-            >
-              <Heart className={`w-5 h-5 ${isSaved ? "fill-current" : ""}`} aria-hidden="true" />
-              {isSaved ? "Saved" : "Save Home"}
-            </button>
+            <div className="flex flex-col items-end gap-2">
+              <button 
+                onClick={handleSave}
+                disabled={isSaving}
+                aria-pressed={isSaved}
+                data-testid="button-save-property"
+                className={`flex items-center gap-2 px-8 py-4 rounded-full font-bold text-lg transition-all shadow-lg active:scale-95 ${
+                  isSaved 
+                    ? "bg-primary text-white hover:bg-primary/90 hover:shadow-primary/30" 
+                    : "bg-muted text-foreground hover:bg-muted/80 border border-border"
+                }`}
+              >
+                <Heart className={`w-5 h-5 ${isSaved ? "fill-current" : ""}`} aria-hidden="true" />
+                {isSaved ? "Saved" : "Save Home"}
+              </button>
+              {daysOnMarket !== null && (
+                <span className="text-sm font-medium text-muted-foreground flex items-center gap-1.5" data-testid="text-days-on-market">
+                  <Clock className="w-3.5 h-3.5" />
+                  {daysOnMarket} {daysOnMarket === 1 ? "day" : "days"} on market
+                </span>
+              )}
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
-            <div className="flex flex-col items-center p-4 bg-muted/50 rounded-2xl border border-border">
-              <BedDouble className="w-8 h-8 text-primary mb-2" />
-              <span className="text-2xl font-bold">{property.beds}</span>
-              <span className="text-sm font-medium text-muted-foreground">Beds</span>
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-4 mb-12">
+            <div className="flex flex-col items-center p-3 bg-muted/50 rounded-2xl border border-border">
+              <BedDouble className="w-6 h-6 text-primary mb-1.5" />
+              <span className="text-xl font-bold">{property.beds}</span>
+              <span className="text-xs font-medium text-muted-foreground">Beds</span>
             </div>
-            <div className="flex flex-col items-center p-4 bg-muted/50 rounded-2xl border border-border">
-              <Bath className="w-8 h-8 text-primary mb-2" />
-              <span className="text-2xl font-bold">{property.baths}</span>
-              <span className="text-sm font-medium text-muted-foreground">Baths</span>
+            <div className="flex flex-col items-center p-3 bg-muted/50 rounded-2xl border border-border">
+              <Bath className="w-6 h-6 text-primary mb-1.5" />
+              <span className="text-xl font-bold">{property.baths}</span>
+              <span className="text-xs font-medium text-muted-foreground">Baths</span>
             </div>
-            <div className="flex flex-col items-center p-4 bg-muted/50 rounded-2xl border border-border">
-              <Maximize className="w-8 h-8 text-primary mb-2" />
-              <span className="text-2xl font-bold">{property.sqft.toLocaleString()}</span>
-              <span className="text-sm font-medium text-muted-foreground">Sq Ft</span>
+            <div className="flex flex-col items-center p-3 bg-muted/50 rounded-2xl border border-border">
+              <Maximize className="w-6 h-6 text-primary mb-1.5" />
+              <span className="text-xl font-bold">{property.sqft.toLocaleString()}</span>
+              <span className="text-xs font-medium text-muted-foreground">Sq Ft</span>
             </div>
-            <div className="flex flex-col items-center p-4 bg-muted/50 rounded-2xl border border-border">
-              <Building className="w-8 h-8 text-primary mb-2" />
-              <span className="text-xl font-bold mt-1">
+            <div className="flex flex-col items-center p-3 bg-muted/50 rounded-2xl border border-border">
+              <LandPlot className="w-6 h-6 text-primary mb-1.5" />
+              <span className="text-xl font-bold">{property.lotSize ? property.lotSize.toLocaleString() : '—'}</span>
+              <span className="text-xs font-medium text-muted-foreground">Lot Sq Ft</span>
+            </div>
+            <div className="flex flex-col items-center p-3 bg-muted/50 rounded-2xl border border-border">
+              <Home className="w-6 h-6 text-primary mb-1.5" />
+              <span className="text-lg font-bold">{property.propertyType || '—'}</span>
+              <span className="text-xs font-medium text-muted-foreground">Type</span>
+            </div>
+            <div className="flex flex-col items-center p-3 bg-muted/50 rounded-2xl border border-border">
+              <Building className="w-6 h-6 text-primary mb-1.5" />
+              <span className="text-lg font-bold">
                 {property.hoaFee ? `$${property.hoaFee}` : 'None'}
               </span>
-              <span className="text-sm font-medium text-muted-foreground">HOA/mo</span>
+              <span className="text-xs font-medium text-muted-foreground">HOA/mo</span>
             </div>
           </div>
 
@@ -526,6 +682,9 @@ export default function PropertyDetail() {
               </div>
             </div>
           </div>
+
+          <PriceHistorySection property={property} daysOnMarket={daysOnMarket} />
+          <ListingActivitySection property={property} daysOnMarket={daysOnMarket} />
 
           <ZoningPanel propertyId={property.id} />
           <PublicRecordsPanel propertyId={property.id} />
