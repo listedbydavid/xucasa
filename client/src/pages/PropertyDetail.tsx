@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
-import { useParams } from "wouter";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { useProperty } from "@/hooks/use-properties";
+import { useProperty, useProperties } from "@/hooks/use-properties";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
-import { BedDouble, Bath, Maximize, MapPin, Heart, Sparkles, Building, Briefcase, ChevronLeft, ChevronRight, X, Camera, Phone, Mail, MessageSquare } from "lucide-react";
+import { BedDouble, Bath, Maximize, MapPin, Heart, Sparkles, Building, Briefcase, ChevronLeft, ChevronRight, Phone, Mail, MessageSquare, Camera } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { MapView } from "@/components/MapView";
 import { PublicRecordsPanel } from "@/components/PublicRecordsPanel";
@@ -108,178 +108,112 @@ function ContactCard({
   );
 }
 
-function PhotoGallery({ photos, title }: { photos: string[]; title: string }) {
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [lightboxIndex, setLightboxIndex] = useState(0);
+function InlinePhotoGallery({ photos, title }: { photos: string[]; title: string }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const autoRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
 
-  const openLightbox = (index: number) => {
-    setLightboxIndex(index);
-    setLightboxOpen(true);
-  };
-
-  const closeLightbox = () => setLightboxOpen(false);
-
-  const goNext = useCallback(() => {
-    setLightboxIndex(prev => (prev + 1) % photos.length);
-  }, [photos.length]);
-
-  const goPrev = useCallback(() => {
-    setLightboxIndex(prev => (prev - 1 + photos.length) % photos.length);
+  const startAutoRotate = useCallback(() => {
+    if (autoRef.current) clearInterval(autoRef.current);
+    if (photos.length <= 1) return;
+    autoRef.current = setInterval(() => {
+      setActiveIndex(prev => (prev + 1) % photos.length);
+    }, 1900);
   }, [photos.length]);
 
   useEffect(() => {
-    if (!lightboxOpen) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeLightbox();
-      if (e.key === "ArrowRight") goNext();
-      if (e.key === "ArrowLeft") goPrev();
-    };
-    document.addEventListener("keydown", handleKey);
-    document.body.style.overflow = "hidden";
+    if (!isPaused) startAutoRotate();
     return () => {
-      document.removeEventListener("keydown", handleKey);
-      document.body.style.overflow = "";
+      if (autoRef.current) clearInterval(autoRef.current);
     };
-  }, [lightboxOpen, goNext, goPrev]);
+  }, [isPaused, startAutoRotate]);
+
+  const goTo = (idx: number) => {
+    setActiveIndex(idx);
+    if (autoRef.current) clearInterval(autoRef.current);
+    if (!isPaused) startAutoRotate();
+  };
+
+  const goPrev = () => goTo((activeIndex - 1 + photos.length) % photos.length);
+  const goNext = () => goTo((activeIndex + 1) % photos.length);
 
   if (photos.length === 0) return null;
 
-  const heroPhoto = photos[0];
-  const sidePhotos = photos.slice(1, 5);
-  const hasMore = photos.length > 5;
+  const sidePhotos = photos.length > 1 ? photos.slice(1, Math.min(photos.length, 9)) : [];
+  const totalCount = photos.length;
 
   return (
-    <>
-      <div
-        className="w-full relative cursor-pointer"
-        data-testid="photo-gallery"
-      >
-        {photos.length === 1 ? (
-          <div className="w-full h-[50vh] md:h-[60vh]" onClick={() => openLightbox(0)}>
-            <img
-              src={heroPhoto}
-              alt={`${title} - Main photo`}
-              className="w-full h-full object-cover"
-            />
-          </div>
-        ) : (
-          <div className="w-full h-[40vh] md:h-[55vh] flex gap-1">
-            <div className="flex-1 min-w-0 relative" onClick={() => openLightbox(0)}>
-              <img
-                src={heroPhoto}
-                alt={`${title} - Main photo`}
-                className="w-full h-full object-cover hover:brightness-90 transition-all"
-              />
-            </div>
+    <div
+      className="w-full relative"
+      data-testid="photo-gallery"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+    >
+      <div className="w-full h-[45vh] md:h-[58vh] flex gap-1 bg-black">
+        <div className="relative flex-1 min-w-0 overflow-hidden">
+          <img
+            key={activeIndex}
+            src={photos[activeIndex]}
+            alt={`${title} - Photo ${activeIndex + 1}`}
+            className="w-full h-full object-cover animate-fade-in"
+            data-testid={`gallery-main-photo`}
+          />
 
-            <div className={`hidden md:grid gap-1 w-[35%] ${sidePhotos.length <= 2 ? 'grid-rows-2' : 'grid-rows-2 grid-cols-2'}`}>
-              {sidePhotos.map((photo, i) => (
-                <div
-                  key={i}
-                  className="relative overflow-hidden"
-                  onClick={() => openLightbox(i + 1)}
-                >
-                  <img
-                    src={photo}
-                    alt={`${title} - Photo ${i + 2}`}
-                    className="w-full h-full object-cover hover:brightness-90 transition-all"
-                    loading="lazy"
-                  />
-                  {i === sidePhotos.length - 1 && hasMore && (
-                    <div
-                      className="absolute inset-0 bg-black/40 flex items-center justify-center hover:bg-black/50 transition-colors"
-                      onClick={(e) => { e.stopPropagation(); openLightbox(5); }}
-                    >
-                      <span className="text-white font-bold text-lg">+{photos.length - 5} more</span>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-black/10 pointer-events-none" />
 
-        <button
-          data-testid="button-view-all-photos"
-          onClick={() => openLightbox(0)}
-          className="absolute bottom-4 right-4 bg-white dark:bg-zinc-900 text-foreground px-4 py-2 rounded-lg font-semibold text-sm shadow-lg hover:shadow-xl transition-all flex items-center gap-2 border border-border"
-        >
-          <Camera className="w-4 h-4" />
-          {photos.length} Photos
-        </button>
-      </div>
+          {photos.length > 1 && (
+            <>
+              <button
+                onClick={goPrev}
+                className="absolute left-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-white/90 text-foreground shadow-lg hover:bg-white transition-all active:scale-95 z-10"
+                aria-label="Previous photo"
+                data-testid="gallery-prev-photo"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <button
+                onClick={goNext}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-white/90 text-foreground shadow-lg hover:bg-white transition-all active:scale-95 z-10"
+                aria-label="Next photo"
+                data-testid="gallery-next-photo"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </>
+          )}
 
-      {lightboxOpen && (
-        <div
-          className="fixed inset-0 z-[100] bg-black flex flex-col"
-          data-testid="photo-lightbox"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`Photo gallery for ${title}`}
-        >
-          <div className="flex items-center justify-between px-4 py-3 bg-black/80 backdrop-blur-sm">
-            <span className="text-white font-medium text-sm">
-              {lightboxIndex + 1} / {photos.length}
+          <div className="absolute bottom-3 left-3 flex items-center gap-2 z-10">
+            <span className="bg-black/60 backdrop-blur-sm text-white text-sm font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5">
+              <Camera className="w-3.5 h-3.5" />
+              {activeIndex + 1} / {totalCount}
             </span>
-            <h3 className="text-white font-semibold text-sm truncate max-w-[60%] hidden sm:block">
-              {title}
-            </h3>
-            <button
-              data-testid="button-close-lightbox"
-              onClick={closeLightbox}
-              className="text-white/80 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
-              aria-label="Close photo gallery"
-              autoFocus
-            >
-              <X className="w-6 h-6" />
-            </button>
           </div>
 
-          <div
-            className="flex-1 relative flex items-center justify-center overflow-hidden"
-            onClick={(e) => { if (e.target === e.currentTarget) closeLightbox(); }}
-          >
-            <button
-              onClick={goPrev}
-              className="absolute left-2 sm:left-4 z-10 p-3 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
-              aria-label="Previous photo"
-              data-testid="lightbox-prev"
-            >
-              <ChevronLeft className="w-6 h-6" />
-            </button>
-
-            <div className="w-full h-full flex items-center justify-center px-16">
-              <img
-                src={photos[lightboxIndex]}
-                alt={`${title} - Photo ${lightboxIndex + 1}`}
-                className="max-w-full max-h-full object-contain transition-opacity duration-200"
-                data-testid={`lightbox-photo-${lightboxIndex}`}
+          {photos.length > 1 && (
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
+              <div
+                className="h-full bg-white/70 transition-all duration-300"
+                style={{ width: `${((activeIndex + 1) / photos.length) * 100}%` }}
               />
             </div>
+          )}
+        </div>
 
-            <button
-              onClick={goNext}
-              className="absolute right-2 sm:right-4 z-10 p-3 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
-              aria-label="Next photo"
-              data-testid="lightbox-next"
-            >
-              <ChevronRight className="w-6 h-6" />
-            </button>
-          </div>
-
-          <div className="bg-black/80 backdrop-blur-sm px-4 py-3 overflow-x-auto">
-            <div className="flex items-center gap-2 justify-center">
-              {photos.map((photo, i) => (
+        {sidePhotos.length > 0 && (
+          <div className="hidden md:grid gap-1 w-[30%] auto-rows-fr"
+            style={{ gridTemplateRows: `repeat(${Math.min(sidePhotos.length, 4)}, 1fr)`, gridTemplateColumns: sidePhotos.length > 4 ? '1fr 1fr' : '1fr' }}
+          >
+            {sidePhotos.slice(0, 8).map((photo, i) => {
+              const globalIdx = i + 1;
+              const isActive = globalIdx === activeIndex;
+              return (
                 <button
                   key={i}
-                  onClick={() => setLightboxIndex(i)}
-                  aria-label={`Go to photo ${i + 1}`}
-                  aria-current={i === lightboxIndex ? "true" : undefined}
-                  className={`flex-shrink-0 w-16 h-12 rounded-md overflow-hidden border-2 transition-all ${
-                    i === lightboxIndex
-                      ? "border-white opacity-100 scale-105"
-                      : "border-transparent opacity-50 hover:opacity-80"
+                  onClick={() => goTo(globalIdx)}
+                  className={`relative overflow-hidden transition-all ${
+                    isActive ? "ring-2 ring-white ring-inset brightness-100" : "brightness-75 hover:brightness-100"
                   }`}
+                  aria-label={`View photo ${globalIdx + 1}`}
                 >
                   <img
                     src={photo}
@@ -287,18 +221,44 @@ function PhotoGallery({ photos, title }: { photos: string[]; title: string }) {
                     className="w-full h-full object-cover"
                     loading="lazy"
                   />
+                  {i === sidePhotos.slice(0, 8).length - 1 && photos.length > 9 && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                      <span className="text-white font-bold text-sm">+{photos.length - 9}</span>
+                    </div>
+                  )}
                 </button>
-              ))}
-            </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {photos.length > 1 && (
+        <div className="md:hidden px-4 py-2 bg-background border-b border-border overflow-x-auto">
+          <div className="flex items-center gap-1.5">
+            {photos.slice(0, 20).map((photo, i) => (
+              <button
+                key={i}
+                onClick={() => goTo(i)}
+                className={`flex-shrink-0 w-14 h-10 rounded-md overflow-hidden border-2 transition-all ${
+                  i === activeIndex
+                    ? "border-primary opacity-100"
+                    : "border-transparent opacity-50"
+                }`}
+              >
+                <img src={photo} alt="" className="w-full h-full object-cover" loading="lazy" />
+              </button>
+            ))}
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
+  const [, navigate] = useLocation();
   const { data: property, isLoading } = useProperty(Number(id));
   const { data: savedProps = [] } = useSavedProperties();
   const { mutate: toggleSave, isPending: isSaving } = useToggleSavedProperty();
@@ -309,6 +269,29 @@ export default function PropertyDetail() {
     queryKey: ["/api/agent-invite"],
     enabled: isAuthenticated,
   });
+
+  const { data: nearbyData } = useProperties({ limit: 50, offset: 0 });
+  const nearbyListings = nearbyData?.properties?.filter(p => p.status === "active") || [];
+
+  const currentIdx = nearbyListings.findIndex(p => p.id === Number(id));
+  const prevListing = currentIdx > 0 ? nearbyListings[currentIdx - 1] : null;
+  const nextListing = currentIdx >= 0 && currentIdx < nearbyListings.length - 1 ? nearbyListings[currentIdx + 1] : null;
+
+  useEffect(() => {
+    const handleKeyNav = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "ArrowLeft" && prevListing) {
+        e.preventDefault();
+        navigate(`/property/${prevListing.id}`);
+      }
+      if (e.key === "ArrowRight" && nextListing) {
+        e.preventDefault();
+        navigate(`/property/${nextListing.id}`);
+      }
+    };
+    window.addEventListener("keydown", handleKeyNav);
+    return () => window.removeEventListener("keydown", handleKeyNav);
+  }, [prevListing, nextListing, navigate]);
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center" role="status" aria-label="Loading property details"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" aria-hidden="true"></div><span className="sr-only">Loading property details</span></div>;
@@ -362,8 +345,42 @@ export default function PropertyDetail() {
       {showAuthPrompt && (
         <AuthPromptModal feature="favorite" onClose={() => setShowAuthPrompt(false)} />
       )}
-    <div className="min-h-screen bg-background pb-20">
-      <PhotoGallery photos={photos} title={property.title} />
+    <div className="min-h-screen bg-background pb-20 relative">
+
+      {prevListing && (
+        <button
+          onClick={() => navigate(`/property/${prevListing.id}`)}
+          className="fixed left-0 top-1/2 -translate-y-1/2 z-50 group"
+          aria-label={`Previous listing: ${prevListing.title}`}
+          data-testid="button-prev-listing"
+        >
+          <div className="flex items-center bg-white dark:bg-zinc-900 shadow-xl border border-border rounded-r-2xl pl-2 pr-3 py-4 hover:pr-5 transition-all group-hover:shadow-2xl">
+            <ChevronLeft className="w-5 h-5 text-foreground" />
+            <div className="hidden group-hover:block ml-2 max-w-[180px]">
+              <p className="text-xs font-semibold text-foreground truncate">${prevListing.price.toLocaleString()}</p>
+              <p className="text-[10px] text-muted-foreground truncate">{prevListing.title}</p>
+            </div>
+          </div>
+        </button>
+      )}
+      {nextListing && (
+        <button
+          onClick={() => navigate(`/property/${nextListing.id}`)}
+          className="fixed right-0 top-1/2 -translate-y-1/2 z-50 group"
+          aria-label={`Next listing: ${nextListing.title}`}
+          data-testid="button-next-listing"
+        >
+          <div className="flex items-center bg-white dark:bg-zinc-900 shadow-xl border border-border rounded-l-2xl pr-2 pl-3 py-4 hover:pl-5 transition-all group-hover:shadow-2xl">
+            <div className="hidden group-hover:block mr-2 max-w-[180px] text-right">
+              <p className="text-xs font-semibold text-foreground truncate">${nextListing.price.toLocaleString()}</p>
+              <p className="text-[10px] text-muted-foreground truncate">{nextListing.title}</p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-foreground" />
+          </div>
+        </button>
+      )}
+
+      <InlinePhotoGallery photos={photos} title={property.title} />
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 relative z-10">
         <div className="bg-card rounded-3xl p-6 sm:p-10 shadow-2xl border border-border">
