@@ -22,6 +22,7 @@ export function getSession() {
     cookie: {
       httpOnly: true,
       secure: true,
+      sameSite: "lax" as const,
       maxAge: sessionTtl,
     },
   });
@@ -105,9 +106,12 @@ export async function setupAuth(app: Express) {
     res.redirect("/api/auth/google");
   });
 
-  app.get(
-    "/api/auth/google",
-    passport.authenticate("google", {
+  app.get("/api/auth/google", (req, _res, next) => {
+    const protocol = req.protocol;
+    const host = req.get("host");
+    console.log(`[Auth] Initiating Google OAuth — protocol: ${protocol}, host: ${host}, full: ${protocol}://${host}/api/auth/google/callback`);
+    next();
+  }, passport.authenticate("google", {
       scope: ["openid", "email", "profile"],
       prompt: "select_account",
     })
@@ -115,11 +119,25 @@ export async function setupAuth(app: Express) {
 
   app.get(
     "/api/auth/google/callback",
-    passport.authenticate("google", {
-      failureRedirect: "/?auth=failed",
-    }),
-    (_req, res) => {
-      res.redirect("/");
+    (req, res, next) => {
+      passport.authenticate("google", (err: any, user: any, info: any) => {
+        if (err) {
+          console.error("[Auth] Google OAuth error:", err.message || err);
+          return res.redirect("/?auth=failed");
+        }
+        if (!user) {
+          console.error("[Auth] Google OAuth failed — no user returned. Info:", info);
+          return res.redirect("/?auth=failed");
+        }
+        req.logIn(user, (loginErr) => {
+          if (loginErr) {
+            console.error("[Auth] Session login error:", loginErr.message || loginErr);
+            return res.redirect("/?auth=failed");
+          }
+          console.log("[Auth] Google OAuth success for:", (user as any)?.claims?.email);
+          return res.redirect("/");
+        });
+      })(req, res, next);
     }
   );
 
