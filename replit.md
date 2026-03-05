@@ -42,6 +42,7 @@ Preferred communication style: Simple, everyday language.
 - **Strategy**: Google profile data (name, email, photo) stored in the `users` table; Google profile ID as user ID.
 - **Sessions**: `express-session` backed by PostgreSQL (`connect-pg-simple`) with 1-week TTL secure/httpOnly cookies.
 - **Admin detection**: Email-based via `ADMIN_EMAIL` environment variable.
+- **Agent role**: Users with `role='agent'` get the "Agent Dashboard" nav tab and full agent capabilities. David Hussain (`david@listedbydavid.com`) is set as agent+admin.
 
 ## External Dependencies
 

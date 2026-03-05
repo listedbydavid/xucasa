@@ -8,6 +8,7 @@ export function Navbar() {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const isAdmin = isAuthenticated && (user as any)?.isAdmin;
+  const isAgent = isAuthenticated && ((user as any)?.isAgent || (user as any)?.role === "agent");
 
   const navLink = (href: string, icon: any, label: string, testId?: string) => {
     const Icon = icon;
@@ -37,6 +38,7 @@ export function Navbar() {
     { href: "/buyers", icon: Users, label: "Buy" },
     ...(isAuthenticated ? [{ href: "/swipe", icon: Layers, label: "My Feed" }] : []),
     ...(!isAuthenticated ? [{ href: "/agent", icon: Briefcase, label: "For Agents" }] : []),
+    ...(isAgent ? [{ href: "/agent", icon: Briefcase, label: "Agent Dashboard", testId: "link-agent-dashboard" }] : []),
     ...(isAuthenticated ? [{ href: "/dashboard", icon: User, label: "My Account", testId: "link-my-account" }] : []),
     ...(isAdmin ? [{ href: "/admin", icon: Shield, label: "Admin", testId: "link-admin-nav" }] : []),
   ];

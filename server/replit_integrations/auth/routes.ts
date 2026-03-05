@@ -12,7 +12,8 @@ export function registerAuthRoutes(app: Express): void {
       }
       const adminEmail = process.env.ADMIN_EMAIL;
       const isAdmin = !!(adminEmail && user.email && user.email.toLowerCase() === adminEmail.toLowerCase());
-      res.json({ ...user, isAdmin });
+      const isAgent = user.role === "agent" || user.role === "admin";
+      res.json({ ...user, isAdmin, isAgent });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
