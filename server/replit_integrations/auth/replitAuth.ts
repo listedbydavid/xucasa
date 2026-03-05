@@ -44,6 +44,12 @@ async function upsertUser(profile: {
   });
 }
 
+function getCallbackUrl(req: any): string {
+  const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+  const host = req.headers["x-forwarded-host"] || req.get("host");
+  return `${protocol}://${host}/api/auth/google/callback`;
+}
+
 export async function setupAuth(app: Express) {
   app.set("trust proxy", 1);
   app.use(getSession());
@@ -106,21 +112,22 @@ export async function setupAuth(app: Express) {
     res.redirect("/api/auth/google");
   });
 
-  app.get("/api/auth/google", (req, _res, next) => {
-    const protocol = req.protocol;
-    const host = req.get("host");
-    console.log(`[Auth] Initiating Google OAuth — protocol: ${protocol}, host: ${host}, full: ${protocol}://${host}/api/auth/google/callback`);
-    next();
-  }, passport.authenticate("google", {
+  app.get("/api/auth/google", (req, res, next) => {
+    const callbackURL = getCallbackUrl(req);
+    console.log(`[Auth] Initiating Google OAuth — callbackURL: ${callbackURL}`);
+    passport.authenticate("google", {
       scope: ["openid", "email", "profile"],
       prompt: "select_account",
-    })
-  );
+      callbackURL,
+    } as any)(req, res, next);
+  });
 
   app.get(
     "/api/auth/google/callback",
     (req, res, next) => {
-      passport.authenticate("google", (err: any, user: any, info: any) => {
+      const callbackURL = getCallbackUrl(req);
+      console.log(`[Auth] Google OAuth callback — callbackURL: ${callbackURL}`);
+      passport.authenticate("google", { callbackURL } as any, (err: any, user: any, info: any) => {
         if (err) {
           console.error("[Auth] Google OAuth error:", err.message || err);
           return res.redirect("/?auth=failed");
