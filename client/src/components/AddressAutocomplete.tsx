@@ -190,7 +190,7 @@ export function AddressAutocomplete({
           ref={dropdownRef}
           role="listbox"
           data-testid="autocomplete-dropdown"
-          className="absolute top-full left-0 right-0 z-50 mt-1 bg-popover border border-border rounded-xl shadow-xl overflow-hidden max-h-[420px] overflow-y-auto"
+          className="absolute top-full left-0 right-0 z-50 mt-1 bg-white dark:bg-zinc-900 border border-border rounded-xl shadow-2xl overflow-hidden max-h-[420px] overflow-y-auto"
         >
           {isSuggestionsLoading ? (
             <div className="px-4 py-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
