@@ -166,13 +166,9 @@ export async function verifyAgentLicense(licenseNumber: string, state?: string):
     const headers = buildHeaders(token);
 
     const safeLicense = sanitizeODataString(licenseNumber);
-    let filter = `MemberStateLicense eq '${safeLicense}'`;
-    if (state) {
-      const safeState = sanitizeODataString(state.toUpperCase());
-      filter += ` and MemberStateOrProvince eq '${safeState}'`;
-    }
+    const filter = `MemberStateLicense eq '${safeLicense}'`;
 
-    const url = `${REALTYFEED_API_BASE}/Member?$filter=${encodeURIComponent(filter)}&$top=5&$select=MemberKey,MemberFullName,MemberFirstName,MemberLastName,MemberEmail,MemberDirectPhone,MemberStateLicense,MemberStateOrProvince,OfficeName,OfficeKey`;
+    const url = `${REALTYFEED_API_BASE}/Member?$filter=${encodeURIComponent(filter)}&$top=10&$select=MemberKey,MemberFullName,MemberFirstName,MemberLastName,MemberEmail,MemberDirectPhone,MemberStateLicense,MemberStateOrProvince,OfficeName,OfficeKey`;
 
     console.log(`[Agent Verify] Looking up license ${licenseNumber}${state ? ` in ${state}` : ""}...`);
 
@@ -191,11 +187,35 @@ export async function verifyAgentLicense(licenseNumber: string, state?: string):
     }
 
     const body = await res.json();
-    const members = body.value || [];
+    let members = body.value || [];
 
     if (members.length === 0) {
       console.log(`[Agent Verify] No member found for license ${licenseNumber}`);
       return { verified: false, error: "No agent found with that license number" };
+    }
+
+    const stateNameMap: Record<string, string> = {
+      AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
+      CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",
+      HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa",
+      KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
+      MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri",
+      MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey",
+      NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio",
+      OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina",
+      SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont",
+      VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
+      DC: "District of Columbia",
+    };
+
+    if (state) {
+      const stateUpper = state.toUpperCase();
+      const stateName = stateNameMap[stateUpper] || stateUpper;
+      const filtered = members.filter((m: any) => {
+        const mState = (m.MemberStateOrProvince || "").trim().toLowerCase();
+        return mState === stateUpper.toLowerCase() || mState === stateName.toLowerCase();
+      });
+      if (filtered.length > 0) members = filtered;
     }
 
     const member = members.find((m: any) =>
