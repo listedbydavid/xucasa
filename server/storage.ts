@@ -107,6 +107,22 @@ export interface IStorage {
   getSellerPitch(id: number): Promise<(SellerPitch & { user: any }) | undefined>;
   updateSellerPitchStatus(id: number, status: string, adminNotes?: string): Promise<SellerPitch>;
 
+  // Autocomplete
+  autocompleteProperties(query: string, limit?: number): Promise<{
+    id: number;
+    title: string;
+    price: number;
+    beds: number;
+    baths: string;
+    sqft: number | null;
+    status: string;
+    isOffMarket: boolean;
+    imageUrl: string | null;
+    addressCity: string | null;
+    addressState: string | null;
+    addressZip: string | null;
+  }[]>;
+
   // Valuation
   getValuation(beds: number, sqft: number, lat?: number, lng?: number): Promise<{
     estimatedLow: number;
@@ -362,6 +378,38 @@ export class DatabaseStorage implements IStorage {
 
   async getSellLeads(): Promise<SellLead[]> {
     return await db.select().from(sellLeads).orderBy(desc(sellLeads.createdAt));
+  }
+
+  async autocompleteProperties(query: string, limit: number = 8) {
+    if (!query || query.length < 2) return [];
+    const q = `%${query}%`;
+    const fullAddr = sql`CONCAT(${properties.addressStreetNumber}, ' ', ${properties.addressStreetName}, ', ', ${properties.addressCity}, ', ', ${properties.addressState}, ' ', ${properties.addressZip})`;
+    const results = await db.select({
+      id: properties.id,
+      title: properties.title,
+      price: properties.price,
+      beds: properties.beds,
+      baths: properties.baths,
+      sqft: properties.sqft,
+      status: properties.status,
+      isOffMarket: properties.isOffMarket,
+      imageUrl: properties.imageUrl,
+      addressCity: properties.addressCity,
+      addressState: properties.addressState,
+      addressZip: properties.addressZip,
+    }).from(properties)
+      .where(sql`(
+        ${properties.title} ILIKE ${q}
+        OR ${properties.addressCity} ILIKE ${q}
+        OR ${properties.addressStreetName} ILIKE ${q}
+        OR ${properties.addressZip} ILIKE ${q}
+        OR CONCAT(${properties.addressStreetNumber}, ' ', ${properties.addressStreetName}) ILIKE ${q}
+        OR CONCAT(${properties.addressStreetNumber}, ' ', ${properties.addressStreetName}, ', ', ${properties.addressCity}) ILIKE ${q}
+        OR ${fullAddr} ILIKE ${q}
+      )`)
+      .orderBy(desc(properties.price))
+      .limit(limit);
+    return results;
   }
 
   async getValuation(beds: number, sqft: number, lat?: number, lng?: number): Promise<{

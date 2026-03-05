@@ -11,9 +11,10 @@ import { useGoogleMaps } from "@/hooks/use-google-maps";
 import queryString from "query-string";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import { SdmlsDisclaimer } from "@/components/SdmlsDisclaimer";
+import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 
 export default function Search() {
-  const [location] = useLocation();
+  const [location, setNavigate] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
 
   const [locationInput, setLocationInput] = useState(searchParams.get("location") || "");
@@ -29,43 +30,25 @@ export default function Search() {
   const [isMapVisible, setIsMapVisible] = useState(true);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   const { isLoaded } = useGoogleMaps();
 
-  // Initialize Places Autocomplete once API is ready
+  // Use Google Geocoder for map centering when location changes
   useEffect(() => {
-    if (!isLoaded || !inputRef.current || autocompleteRef.current) return;
-
-    const ac = new google.maps.places.Autocomplete(inputRef.current, {
-      types: ['geocode', 'establishment'],
-      componentRestrictions: { country: 'us' },
-      fields: ['geometry', 'address_components', 'formatted_address', 'name'],
-    });
-
-    ac.addListener('place_changed', () => {
-      const place = ac.getPlace();
-      if (!place.geometry?.location) return;
-
-      const lat = place.geometry.location.lat();
-      const lng = place.geometry.location.lng();
-      setMapCenter([lng, lat]);
-      setMapZoom(15);
-
-      // Extract city/locality for the filter
-      const components = place.address_components || [];
-      const city = components.find(c => c.types.includes('locality'))?.long_name
-        || components.find(c => c.types.includes('sublocality'))?.long_name
-        || components.find(c => c.types.includes('administrative_area_level_2'))?.long_name
-        || '';
-
-      // Use the full typed/selected text as the filter (searches across all address fields)
-      const filterValue = place.formatted_address || place.name || inputRef.current?.value || '';
-      setLocationInput(filterValue);
-    });
-
-    autocompleteRef.current = ac;
-  }, [isLoaded]);
+    if (!isLoaded || !locationInput || locationInput.length < 3) return;
+    const timer = setTimeout(() => {
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ address: locationInput, componentRestrictions: { country: 'us' } }, (results, status) => {
+        if (status === 'OK' && results && results[0]?.geometry?.location) {
+          const lat = results[0].geometry.location.lat();
+          const lng = results[0].geometry.location.lng();
+          setMapCenter([lng, lat]);
+          setMapZoom(14);
+        }
+      });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [isLoaded, locationInput]);
 
   // Sync location input → activeQuery and mapCenter
   useEffect(() => {
@@ -152,18 +135,19 @@ export default function Search() {
       {/* Search Header Bar */}
       <div className="bg-card border-b border-border p-4 z-10 shadow-sm">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center gap-4">
-          <div className="flex-1 flex items-center bg-muted rounded-xl px-4 py-2 border border-border focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-all">
-            <SearchIcon className="w-5 h-5 text-muted-foreground mr-2 flex-shrink-0" aria-hidden="true" />
-            <label htmlFor="search-location" className="sr-only">Search by address, city, or ZIP code</label>
-            <input
-              id="search-location"
-              ref={inputRef}
-              type="text"
+          <div className="flex-1">
+            <AddressAutocomplete
+              variant="inline"
               placeholder="Search by address, city, ZIP..."
-              className="w-full bg-transparent border-none outline-none font-medium text-foreground"
-              data-testid="input-search-location"
-              value={locationInput}
-              onChange={(e) => setLocationInput(e.target.value)}
+              defaultValue={locationInput}
+              inputRef={inputRef}
+              onSelect={(property) => {
+                setLocationInput(property.title);
+                setNavigate(`/property/${property.id}`);
+              }}
+              onSearch={(q) => {
+                setLocationInput(q);
+              }}
             />
           </div>
 

@@ -55,6 +55,17 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/properties/autocomplete", async (req, res) => {
+    try {
+      const query = (req.query.q as string) || "";
+      const limit = Math.min(parseInt(req.query.limit as string) || 8, 20);
+      const results = await storage.autocompleteProperties(query, limit);
+      res.json(results);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/properties/mine", isAuthenticated, async (req, res) => {
     try {
       const mine = await storage.getPropertiesByAgent(req.user!.claims.sub);

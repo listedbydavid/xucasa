@@ -62,6 +62,15 @@ Preferred communication style: Simple, everyday language.
 - Search page resets to page 0 when filters/query change.
 - `getPropertiesCount(filters?)` method provides total count without fetching rows.
 
+### Address Autocomplete
+
+- `GET /api/properties/autocomplete?q=<query>&limit=8` returns lightweight property suggestions (id, title, price, beds, baths, sqft, status, isOffMarket, imageUrl, addressCity/State/Zip).
+- `AddressAutocomplete` component (`client/src/components/AddressAutocomplete.tsx`) provides a reusable dropdown with property thumbnails, prices, bed/bath/sqft info, and status badges (Active/Off Market/Sold/Pending).
+- Integrated into Home.tsx (hero search bar) and Search.tsx (search filter bar).
+- Uses `onQueryChange` callback for parent state sync (no DOM queries). Uses default react-query fetcher with URL-based queryKey.
+- Supports keyboard navigation (ArrowUp/Down, Enter, Escape), click-outside dismiss, and loading state.
+- Google Geocoder used for map centering on Search page (replaced Google Places Autocomplete).
+
 ### Environment Variables Required
 
 - `DATABASE_URL`
