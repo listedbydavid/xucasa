@@ -98,6 +98,16 @@ Preferred communication style: Simple, everyday language.
 
 - Search, PropertyDetail, Dashboard, and Admin pages all use skeleton/shimmer loading states instead of spinners.
 
+### Agent Beacon Report
+
+- Feature for agents to generate branded PDF reports showing matched buyers for a prospective listing.
+- **Backend**: `GET /api/beacon/match-buyers` (agent-only) matches active buyer profiles against listing criteria (price, beds, baths, sqft, city, propertyType).
+- **Matching logic**: `storage.matchBuyersForListing()` checks budget >= price, bed/bath/sqft ranges, preferred cities (case-insensitive array match), and home types.
+- **Frontend**: `BeaconTab` component in `client/src/components/BeaconReport.tsx`, rendered as a tab in AgentDashboard.
+- **PDF generation**: Uses `jspdf` (client-side) to produce a branded PDF with xucasa logo, agent photo/contact/license/brokerage, property details, and matched buyer cards. Downloaded as `Beacon_Report_[Address]_[Date].pdf`.
+- **User phone field**: Added `phone` varchar to users table for agent contact display on reports.
+- Privacy: Buyer contact info (email, phone) is redacted from the report; only aggregate profile data shown.
+
 ### Environment Variables Required
 
 - `DATABASE_URL`

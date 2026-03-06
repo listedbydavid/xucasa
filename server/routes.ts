@@ -523,6 +523,7 @@ export async function registerRoutes(
       const profileSchema = z.object({
         firstName: z.string().min(1).max(100).optional(),
         lastName: z.string().min(1).max(100).optional(),
+        phone: z.string().max(20).optional(),
       });
       const parsed = profileSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
@@ -1151,6 +1152,55 @@ export async function registerRoutes(
     } = profile;
     return safe;
   }
+
+  app.get("/api/beacon/match-buyers", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user?.claims;
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+      const { authStorage } = await import("./replit_integrations/auth/storage");
+      const dbUser = await authStorage.getUser(user.sub);
+      if (!dbUser || (dbUser.role !== "agent" && dbUser.agentVerified !== true)) {
+        return res.status(403).json({ message: "Agent access required" });
+      }
+
+      const schema = z.object({
+        price: z.coerce.number().positive(),
+        beds: z.coerce.number().min(0),
+        baths: z.coerce.number().min(0),
+        sqft: z.coerce.number().min(0),
+        city: z.string().min(1),
+        propertyType: z.string().optional().default(""),
+      });
+      const parsed = schema.safeParse(req.query);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid parameters", errors: parsed.error.flatten() });
+
+      const matches = await storage.matchBuyersForListing(parsed.data);
+
+      const safeMatches = matches.map(profile => ({
+        id: profile.id,
+        displayName: profile.displayName,
+        preApprovalAmount: profile.preApprovalAmount,
+        isPreApproved: profile.isPreApproved,
+        minBeds: profile.minBeds,
+        maxBeds: profile.maxBeds,
+        minBaths: profile.minBaths,
+        minSqft: profile.minSqft,
+        maxSqft: profile.maxSqft,
+        preferredCities: profile.preferredCities,
+        homeTypes: profile.homeTypes,
+        mustHaves: profile.mustHaves,
+        niceToHaves: profile.niceToHaves,
+        moveInTimeline: profile.moveInTimeline,
+        hasAgent: profile.hasAgent,
+        bio: profile.bio,
+      }));
+
+      res.json({ matches: safeMatches, total: safeMatches.length });
+    } catch (err) {
+      console.error("Beacon match error:", err);
+      res.status(500).json({ message: "Failed to match buyers" });
+    }
+  });
 
   app.get("/api/buyer-profiles", async (req, res) => {
     try {

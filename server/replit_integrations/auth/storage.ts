@@ -5,7 +5,7 @@ import { eq, desc, sql } from "drizzle-orm";
 export interface IAuthStorage {
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
-  updateUser(id: string, updates: Partial<Pick<User, 'firstName' | 'lastName' | 'profileImageUrl'>>): Promise<User>;
+  updateUser(id: string, updates: Partial<Pick<User, 'firstName' | 'lastName' | 'profileImageUrl' | 'phone'>>): Promise<User>;
   updateAgentInfo(id: string, updates: Partial<Pick<User, 'licenseNumber' | 'licenseState' | 'association' | 'brokerageName' | 'agentVerified' | 'agentVerifiedAt' | 'agentMlsId' | 'role'>>): Promise<User>;
   getAllUsers(): Promise<User[]>;
   adminUpdateUser(id: string, updates: Partial<Pick<User, 'role' | 'status' | 'adminNotes'>>): Promise<User>;
@@ -50,7 +50,7 @@ class AuthStorage implements IAuthStorage {
     }
   }
 
-  async updateUser(id: string, updates: Partial<Pick<User, 'firstName' | 'lastName' | 'profileImageUrl'>>): Promise<User> {
+  async updateUser(id: string, updates: Partial<Pick<User, 'firstName' | 'lastName' | 'profileImageUrl' | 'phone'>>): Promise<User> {
     const [updated] = await db
       .update(users)
       .set({ ...updates, updatedAt: new Date() })

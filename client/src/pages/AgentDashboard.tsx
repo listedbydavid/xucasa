@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
-import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck } from "lucide-react";
+import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar } from "lucide-react";
 import { IdxSyncPanel } from "@/components/IdxSyncPanel";
 import type { PropertyResponse, CreatePropertyRequest } from "@shared/schema";
 import { Autocomplete } from "@react-google-maps/api";
@@ -10,8 +10,9 @@ import { useAgentClients, useClientFavorites, useClientSearches, useOpenHouses }
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { BeaconTab } from "@/components/BeaconReport";
 
-type AgentTab = "listings" | "clients" | "openhouses" | "idx";
+type AgentTab = "listings" | "clients" | "openhouses" | "beacon" | "idx";
 
 const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
@@ -84,6 +85,7 @@ export default function AgentDashboard() {
             { id: "listings",   label: "My Listings",  icon: Home },
             { id: "clients",    label: "Clients",       icon: Users },
             { id: "openhouses", label: "Open Houses",   icon: CalendarDays },
+            { id: "beacon",     label: "Beacon",        icon: Radar },
             { id: "idx",        label: "MLS Sync",      icon: Search },
           ] as { id: AgentTab; label: string; icon: any }[]).map(({ id, label, icon: Icon }) => (
             <button
@@ -179,6 +181,8 @@ export default function AgentDashboard() {
         {activeTab === "openhouses" && <AgentOpenHousesSection agentProperties={myProperties} />}
 
         {/* MLS / IDX Sync Tab */}
+        {activeTab === "beacon" && <BeaconTab />}
+
         {activeTab === "idx" && (
           <div>
             <IdxSyncPanel />

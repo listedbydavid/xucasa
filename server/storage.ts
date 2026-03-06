@@ -96,6 +96,9 @@ export interface IStorage {
   getUserBuyerProfile(userId: string): Promise<BuyerProfile | undefined>;
   getAgentBuyerProfiles(agentId: string): Promise<BuyerProfile[]>;
 
+  // Beacon
+  matchBuyersForListing(criteria: { price: number; beds: number; baths: number; sqft: number; city: string; propertyType: string }): Promise<(BuyerProfile & { user: any })[]>;
+
   // Buyer Matches
   createBuyerMatch(match: InsertBuyerMatch): Promise<BuyerMatch>;
   getBuyerMatchesForProfile(profileId: number): Promise<(BuyerMatch & { property: Property | null; sender: any })[]>;
@@ -613,6 +616,46 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(buyerProfiles)
       .where(eq(buyerProfiles.agentId, agentId))
       .orderBy(desc(buyerProfiles.createdAt));
+  }
+
+  async matchBuyersForListing(criteria: {
+    price: number;
+    beds: number;
+    baths: number;
+    sqft: number;
+    city: string;
+    propertyType: string;
+  }): Promise<(BuyerProfile & { user: any })[]> {
+    const conditions: any[] = [eq(buyerProfiles.isActive, true)];
+
+    conditions.push(sql`${buyerProfiles.preApprovalAmount} >= ${criteria.price}`);
+
+    if (criteria.beds) {
+      conditions.push(sql`(${buyerProfiles.minBeds} IS NULL OR ${buyerProfiles.minBeds} <= ${criteria.beds})`);
+      conditions.push(sql`(${buyerProfiles.maxBeds} IS NULL OR ${buyerProfiles.maxBeds} >= ${criteria.beds})`);
+    }
+    if (criteria.baths) {
+      conditions.push(sql`(${buyerProfiles.minBaths} IS NULL OR ${buyerProfiles.minBaths} <= ${criteria.baths})`);
+    }
+    if (criteria.sqft) {
+      conditions.push(sql`(${buyerProfiles.minSqft} IS NULL OR ${buyerProfiles.minSqft} <= ${criteria.sqft})`);
+      conditions.push(sql`(${buyerProfiles.maxSqft} IS NULL OR ${buyerProfiles.maxSqft} >= ${criteria.sqft})`);
+    }
+    if (criteria.city) {
+      conditions.push(sql`(${buyerProfiles.preferredCities} IS NULL OR array_length(${buyerProfiles.preferredCities}, 1) IS NULL OR LOWER(${criteria.city}) = ANY(SELECT LOWER(unnest(${buyerProfiles.preferredCities}))))`);
+    }
+    if (criteria.propertyType) {
+      conditions.push(sql`(${buyerProfiles.homeTypes} IS NULL OR array_length(${buyerProfiles.homeTypes}, 1) IS NULL OR ${criteria.propertyType} = ANY(${buyerProfiles.homeTypes}))`);
+    }
+
+    const results = await db
+      .select({ profile: buyerProfiles, user: users })
+      .from(buyerProfiles)
+      .leftJoin(users, eq(buyerProfiles.userId, users.id))
+      .where(and(...conditions))
+      .orderBy(desc(buyerProfiles.preApprovalAmount));
+
+    return results.map(r => ({ ...r.profile, user: r.user }));
   }
 
   async createBuyerMatch(match: InsertBuyerMatch): Promise<BuyerMatch> {
