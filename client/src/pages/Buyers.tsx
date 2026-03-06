@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { BuyerProfile, Property } from "@shared/schema";
+import { PropertyCard } from "@/components/PropertyCard";
+import type { BuyerProfile, Property, PropertyResponse } from "@shared/schema";
+import { Link } from "wouter";
 import {
   Users, DollarSign, Bed, Bath, Ruler, MapPin, Heart, Clock,
   Plus, Send, Filter, X, ChevronDown, ChevronUp, Sparkles, Upload,
-  Home as HomeIcon, TreePine, ShieldCheck, AlertTriangle, Scale, Lock
+  Home as HomeIcon, TreePine, ShieldCheck, AlertTriangle, Scale, Lock,
+  Search, ArrowRight, Loader2,
 } from "lucide-react";
 
 const FAIR_HOUSING_NOTICE = "xucasa supports fair housing. All profiles and communications must comply with the Fair Housing Act. Discrimination based on race, color, religion, national origin, sex, familial status, or disability is illegal and strictly prohibited.";
@@ -393,6 +396,7 @@ function CreateProfileModal({ onClose, existingProfile }: { onClose: () => void;
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/buyer-profiles"] });
       queryClient.invalidateQueries({ queryKey: ["/api/buyer-profiles/mine"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
 
       if (!isEdit && form.hasAgent === "yes" && data?.agentLinked) {
         toast({ title: "Profile created & agent linked!", description: "Your agent has been connected to your profile." });
@@ -1068,6 +1072,210 @@ function StatsBar() {
   );
 }
 
+function MatchingListings({ buyerProfile }: { buyerProfile: BuyerProfile | null | undefined }) {
+  const [showAll, setShowAll] = useState(false);
+
+  const queryParams = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("limit", showAll ? "24" : "8");
+    params.set("sort", "newest");
+
+    if (buyerProfile) {
+      if (buyerProfile.preApprovalAmount) {
+        params.set("maxPrice", buyerProfile.preApprovalAmount.toString());
+      }
+      if (buyerProfile.minBeds) {
+        params.set("minBeds", buyerProfile.minBeds.toString());
+      }
+      if (buyerProfile.minBaths) {
+        params.set("minBaths", buyerProfile.minBaths.toString());
+      }
+      if (buyerProfile.minSqft) {
+        params.set("minSqft", buyerProfile.minSqft.toString());
+      }
+      if (buyerProfile.maxSqft) {
+        params.set("maxSqft", buyerProfile.maxSqft.toString());
+      }
+      if (buyerProfile.preferredCities && buyerProfile.preferredCities.length > 0) {
+        params.set("location", buyerProfile.preferredCities[0]);
+      }
+      if (buyerProfile.homeTypes && buyerProfile.homeTypes.length > 0) {
+        const typeMap: Record<string, string> = {
+          "single family": "SFH",
+          "condo": "Condo",
+          "townhouse": "Townhouse",
+          "multi-family": "Residential Income",
+          "mobile": "Mobile",
+        };
+        const mapped = buyerProfile.homeTypes
+          .map(t => typeMap[t.toLowerCase()] || t)
+          .join(",");
+        params.set("propertyType", mapped);
+      }
+    }
+
+    return params.toString();
+  }, [buyerProfile, showAll]);
+
+  const { data, isLoading } = useQuery<{ properties: PropertyResponse[]; total: number }>({
+    queryKey: ["/api/properties", queryParams],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties?${queryParams}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load listings");
+      return res.json();
+    },
+  });
+
+  const properties = data?.properties || [];
+  const total = data?.total || 0;
+
+  const hasProfile = !!buyerProfile;
+  const hasCriteria = hasProfile && !!(
+    buyerProfile.preApprovalAmount ||
+    buyerProfile.minBeds ||
+    buyerProfile.minBaths ||
+    buyerProfile.minSqft ||
+    buyerProfile.maxSqft ||
+    (buyerProfile.preferredCities && buyerProfile.preferredCities.length > 0) ||
+    (buyerProfile.homeTypes && buyerProfile.homeTypes.length > 0)
+  );
+
+  return (
+    <div className="mb-10" data-testid="section-matching-listings">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-lg sm:text-xl font-bold text-foreground flex items-center gap-2" data-testid="text-listings-section-heading">
+            {hasCriteria ? (
+              <>
+                <Sparkles className="w-5 h-5 text-primary" />
+                Listings Matching Your Criteria
+              </>
+            ) : (
+              <>
+                <Search className="w-5 h-5 text-primary" />
+                Featured Listings
+              </>
+            )}
+          </h3>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {hasCriteria
+              ? `${total.toLocaleString()} listings match your buyer profile`
+              : "Browse homes while you set up your buyer profile"}
+          </p>
+        </div>
+        <Link
+          href="/search"
+          className="text-sm font-semibold text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"
+          data-testid="link-view-all-search"
+        >
+          View All <ArrowRight className="w-4 h-4" />
+        </Link>
+      </div>
+
+      {hasCriteria && (
+        <div className="flex flex-wrap gap-2 mb-4" data-testid="section-active-criteria-pills">
+          {buyerProfile.preApprovalAmount && (
+            <span className="px-3 py-1 bg-primary/10 text-primary text-xs font-semibold rounded-full">
+              Budget: {formatBudget(buyerProfile.preApprovalAmount)}
+            </span>
+          )}
+          {buyerProfile.minBeds && (
+            <span className="px-3 py-1 bg-primary/10 text-primary text-xs font-semibold rounded-full">
+              {buyerProfile.minBeds}+ beds
+            </span>
+          )}
+          {buyerProfile.minBaths && (
+            <span className="px-3 py-1 bg-primary/10 text-primary text-xs font-semibold rounded-full">
+              {buyerProfile.minBaths}+ baths
+            </span>
+          )}
+          {buyerProfile.minSqft && (
+            <span className="px-3 py-1 bg-primary/10 text-primary text-xs font-semibold rounded-full">
+              {buyerProfile.minSqft.toLocaleString()}+ sqft
+            </span>
+          )}
+          {buyerProfile.preferredCities?.map(city => (
+            <span key={city} className="px-3 py-1 bg-primary/10 text-primary text-xs font-semibold rounded-full">
+              {city}
+            </span>
+          ))}
+          {buyerProfile.homeTypes?.map(type => (
+            <span key={type} className="px-3 py-1 bg-primary/10 text-primary text-xs font-semibold rounded-full">
+              {type}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="bg-card rounded-2xl border border-border overflow-hidden animate-pulse">
+              <div className="aspect-[4/3] bg-muted" />
+              <div className="p-4 space-y-2">
+                <div className="h-5 bg-muted rounded w-24" />
+                <div className="h-4 bg-muted rounded w-48" />
+                <div className="h-4 bg-muted rounded w-36" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : properties.length === 0 ? (
+        <div className="text-center py-12 bg-card border border-border rounded-2xl">
+          <Search className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+          <h4 className="font-bold text-foreground mb-1">No listings found</h4>
+          <p className="text-sm text-muted-foreground mb-4">
+            {hasCriteria
+              ? "Try adjusting your buyer profile criteria to see more results."
+              : "No listings available at the moment."}
+          </p>
+          <Link
+            href="/search"
+            className="inline-flex items-center gap-2 bg-foreground text-background px-5 py-2.5 rounded-full font-bold hover:bg-primary hover:text-white transition-colors text-sm"
+            data-testid="link-browse-all-listings"
+          >
+            Browse All Listings
+          </Link>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-testid="grid-matching-listings">
+            {properties.map(property => (
+              <PropertyCard key={property.id} property={property} />
+            ))}
+          </div>
+
+          {!showAll && total > 8 && (
+            <div className="text-center mt-6">
+              <button
+                onClick={() => setShowAll(true)}
+                className="px-6 py-2.5 border border-border rounded-full font-semibold text-sm hover:bg-muted transition-colors"
+                data-testid="button-show-more-listings"
+              >
+                Show More ({total.toLocaleString()} total)
+              </button>
+            </div>
+          )}
+
+          {showAll && total > 24 && (
+            <div className="text-center mt-6">
+              <Link
+                href={hasCriteria
+                  ? `/search?maxPrice=${buyerProfile.preApprovalAmount || ""}&minBeds=${buyerProfile.minBeds || ""}&location=${buyerProfile.preferredCities?.[0] || ""}`
+                  : "/search"}
+                className="inline-flex items-center gap-2 px-6 py-2.5 bg-foreground text-background rounded-full font-bold text-sm hover:bg-primary hover:text-white transition-colors"
+                data-testid="link-see-all-on-search"
+              >
+                See All {total.toLocaleString()} Listings on Search <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Buyers() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
@@ -1171,6 +1379,8 @@ export default function Buyers() {
         </div>
 
         <QuickCriteriaForm onOpenFullForm={() => setShowCreateModal(true)} />
+
+        <MatchingListings buyerProfile={myProfile} />
 
         <StatsBar />
 

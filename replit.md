@@ -108,6 +108,16 @@ Preferred communication style: Simple, everyday language.
 - **User phone field**: Added `phone` varchar to users table for agent contact display on reports.
 - Privacy: Buyer contact info (email, phone) is redacted from the report; only aggregate profile data shown.
 
+### Buyer Marketplace Listings
+
+- The `/buyers` page now shows property listings alongside buyer profiles.
+- `MatchingListings` component in `Buyers.tsx` fetches from `/api/properties` with filters derived from the buyer's profile.
+- **No profile**: Shows "Featured Listings" (newest 8 listings).
+- **With profile**: Shows "Listings Matching Your Criteria" filtered by budget (maxPrice), beds, baths, sqft, preferred cities (location), and home types (propertyType). Criteria pills displayed above the grid.
+- Property type mapping: "Single Family" → "SFH", "Condo" → "Condo", "Townhouse" → "Townhouse", etc.
+- "Show More" button expands from 8 to 24; "See All on Search" links to `/search` with pre-filled filters.
+- Listings cache is invalidated when buyer profile is created/updated.
+
 ### Open House Route Planner
 
 - Reusable `OpenHouseRoutePlanner` component (`client/src/components/OpenHouseRoutePlanner.tsx`) used in both buyer Dashboard and Agent Dashboard.
