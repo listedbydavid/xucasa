@@ -136,6 +136,16 @@ Preferred communication style: Simple, everyday language.
 - Buttons: "Open in Google Maps" (opens native app on mobile), "Open in Apple Maps", "Copy Link", and "Share" (Web Share API).
 - No extra API usage — leverages Google Maps Embed API for preview and standard Maps URLs for navigation.
 
+### Home Report
+
+- **Page**: `/home-report` at `client/src/pages/HomeReport.tsx` — comprehensive property analysis tool inspired by Homebot.ai.
+- **Sections**: Address/property details input, Property Valuation (from `/api/valuation`), Equity & Loan Calculator (interactive), Zoning & Building Potential (from `/api/home-report/zoning`), Neighborhood Insights (from `/api/home-report/public-records`).
+- **Schema**: `userHomes` table extended with `beds`, `baths`, `sqft`, `lotSize`, `yearBuilt`, `homeType`, `purchasePrice`, `purchaseDate`, `principalBalance`, `appraisedValue`, `interestRate`, `loanTerm`, `monthlyPayment`, `loanType`, `estimatedValue` columns for saving loan/equity data.
+- **APIs**: `GET /api/home-report/public-records?streetNumber&streetName&city&state&zip` — standalone public records endpoint (neighborhood stats, flood info, nearby amenities). `GET /api/home-report/zoning?streetNumber&streetName&city&state&zip&lat&lng` — standalone zoning endpoint (land use, building context, elevation, development activity). `PATCH /api/my-homes/:id` — update saved home with loan/property details.
+- **Features**: Geocodes addresses via Census Geocoder, loads saved homes for logged-in users, ADU potential indicator for qualifying lots, appreciation calculation from purchase price, equity bar visualization, comparable sales display.
+- **Navbar**: "Home Report" link with FileText icon added to main navigation.
+- **Landing Page**: "Home Report" tab in hero search routes to `/home-report`.
+
 ### Cookie Consent & Legal Pages
 
 - **Cookie Consent Banner**: `CookieConsent` component at `client/src/components/CookieConsent.tsx`. Fixed bottom bar that appears on first visit, stores consent in `localStorage` (`xucasa-cookie-consent`). Uses shadcn `Button` components.

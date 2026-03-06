@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { Home, Search, User, LogOut, Briefcase, Layers, TrendingUp, Users, Shield, Menu, X } from "lucide-react";
+import { Home, Search, User, LogOut, Briefcase, Layers, TrendingUp, Users, Shield, Menu, X, FileText } from "lucide-react";
 import { useState } from "react";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -36,6 +36,7 @@ export function Navbar() {
   const links = [
     { href: "/search", icon: Search, label: "Search" },
     { href: "/sell", icon: TrendingUp, label: "Sell" },
+    { href: "/home-report", icon: FileText, label: "Home Report", testId: "link-home-report" },
     { href: "/buyers", icon: Users, label: "Buy" },
     ...(isAuthenticated ? [{ href: "/swipe", icon: Layers, label: "My Feed" }] : []),
     ...(!isAuthenticated ? [{ href: "/agent", icon: Briefcase, label: "For Agents" }] : []),

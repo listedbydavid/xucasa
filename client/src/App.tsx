@@ -17,6 +17,7 @@ import Swipe from "@/pages/Swipe";
 import Sell from "@/pages/Sell";
 import Buyers from "@/pages/Buyers";
 import Admin from "@/pages/Admin";
+import HomeReport from "@/pages/HomeReport";
 import AuthPage from "@/pages/AuthPage";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsOfService from "@/pages/TermsOfService";
@@ -28,6 +29,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/search" component={Search} />
       <Route path="/sell" component={Sell} />
+      <Route path="/home-report" component={HomeReport} />
       <Route path="/swipe" component={Swipe} />
       <Route path="/property/:id" component={PropertyDetail} />
       <Route path="/dashboard" component={Dashboard} />
@@ -88,6 +90,11 @@ function Footer() {
               <li>
                 <Link href="/sell" className={linkClass} data-testid="footer-link-sell">
                   Sell Your Home
+                </Link>
+              </li>
+              <li>
+                <Link href="/home-report" className={linkClass} data-testid="footer-link-home-report">
+                  Home Report
                 </Link>
               </li>
               <li>

@@ -355,6 +355,88 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/home-report/geocode", async (req, res) => {
+    try {
+      const { streetNumber, streetName, city, state, zip } = req.query as Record<string, string>;
+      if (!city || !state) {
+        return res.status(200).json({ lat: null, lng: null });
+      }
+      const { geocodeAddress } = await import("./publicRecords");
+      const result = await geocodeAddress(streetNumber || "", streetName || "", city, state, zip || "");
+      if (result) {
+        res.status(200).json({ lat: result.lat, lng: result.lng });
+      } else {
+        res.status(200).json({ lat: null, lng: null });
+      }
+    } catch (err) {
+      console.error("Home report geocode error:", err);
+      res.status(200).json({ lat: null, lng: null });
+    }
+  });
+
+  app.get("/api/home-report/public-records", async (req, res) => {
+    try {
+      const { streetNumber, streetName, city, state, zip } = req.query as Record<string, string>;
+      if (!city || !state) {
+        return res.status(200).json({ neighborhoodStats: null, floodInfo: null, nearbyPlaces: null });
+      }
+      const records = await getPublicRecords(streetNumber || "", streetName || "", city, state, zip || "");
+      const result: any = { neighborhoodStats: null, floodInfo: null, nearbyPlaces: null };
+      if (records.neighborhood) {
+        result.neighborhoodStats = {
+          medianIncome: records.neighborhood.medianIncome,
+          medianHomeValue: records.neighborhood.medianHomeValue,
+          totalPopulation: records.neighborhood.totalPopulation,
+          ownerOccupiedPct: records.neighborhood.ownerOccupiedPct,
+        };
+      }
+      if (records.flood) {
+        result.floodInfo = {
+          zone: records.flood.zone,
+          sfha: records.flood.sfha,
+          description: records.flood.description,
+        };
+      }
+      if (records.nearby) {
+        result.nearbyPlaces = records.nearby;
+      }
+      res.status(200).json(result);
+    } catch (err) {
+      console.error("Home report public records error:", err);
+      res.status(500).json({ message: "Failed to fetch public records" });
+    }
+  });
+
+  app.get("/api/home-report/zoning", async (req, res) => {
+    try {
+      const { streetNumber, streetName, city, state, zip, lat, lng } = req.query as Record<string, string>;
+      if (!lat || !lng) {
+        return res.status(200).json({ landUse: null, buildingContext: null, elevation: null, developmentActivity: null });
+      }
+      const data = await getZoningData(
+        streetNumber || "", streetName || "", city || "", state || "", zip || "",
+        parseFloat(lat), parseFloat(lng)
+      );
+      const result: any = {
+        landUse: data.landUse || null,
+        buildingContext: data.buildingContext ? {
+          typicalLevels: data.buildingContext.typicalLevels,
+          maxLevels: data.buildingContext.maxLevels,
+          buildings: data.buildingContext.sampleBuildings || [],
+        } : null,
+        elevation: data.elevation || null,
+        developmentActivity: {
+          construction: data.activeConstruction || [],
+          historic: data.historicDesignations || [],
+        },
+      };
+      res.status(200).json(result);
+    } catch (err) {
+      console.error("Home report zoning error:", err);
+      res.status(500).json({ message: "Failed to fetch zoning data" });
+    }
+  });
+
   // Saved Properties API
   app.get(api.savedProperties.list.path, isAuthenticated, async (req: any, res) => {
     try {
@@ -670,12 +752,21 @@ export async function registerRoutes(
   app.post("/api/my-homes", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { nickname, addressStreetNumber, addressStreetName, addressUnitNumber, addressCity, addressState, addressZip, notes } = req.body;
+      const {
+        nickname, addressStreetNumber, addressStreetName, addressUnitNumber,
+        addressCity, addressState, addressZip, notes,
+        beds, baths, sqft, lotSize, yearBuilt, homeType,
+        purchasePrice, purchaseDate, principalBalance, appraisedValue,
+        interestRate, loanTerm, monthlyPayment, loanType, estimatedValue,
+      } = req.body;
       if (!nickname) return res.status(400).json({ message: "nickname required" });
 
       const home = await storage.createUserHome(userId, {
         nickname, addressStreetNumber, addressStreetName, addressUnitNumber,
         addressCity, addressState, addressZip, notes, userId,
+        beds, baths, sqft, lotSize, yearBuilt, homeType,
+        purchasePrice, purchaseDate, principalBalance, appraisedValue,
+        interestRate, loanTerm, monthlyPayment, loanType, estimatedValue,
       });
 
       // Geocode in background
@@ -696,6 +787,36 @@ export async function registerRoutes(
       })();
 
       res.status(201).json(home);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.patch("/api/my-homes/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+
+      const allowedFields = [
+        "nickname", "addressStreetNumber", "addressStreetName", "addressUnitNumber",
+        "addressCity", "addressState", "addressZip", "notes", "imageUrl",
+        "beds", "baths", "sqft", "lotSize", "yearBuilt", "homeType",
+        "purchasePrice", "purchaseDate", "principalBalance", "appraisedValue",
+        "interestRate", "loanTerm", "monthlyPayment", "loanType", "estimatedValue",
+      ];
+      const updates: Record<string, any> = {};
+      for (const key of allowedFields) {
+        if (req.body[key] !== undefined) {
+          updates[key] = req.body[key];
+        }
+      }
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ message: "No valid fields to update" });
+      }
+
+      const updated = await storage.updateUserHome(id, userId, updates as any);
+      res.json(updated);
     } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
     }

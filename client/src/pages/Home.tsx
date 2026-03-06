@@ -46,19 +46,19 @@ export default function Home() {
   const heroTabs = [
     { id: "buy" as HeroTab, label: "Buy", icon: HomeIcon },
     { id: "sell" as HeroTab, label: "Sell", icon: DollarSign },
-    { id: "estimate" as HeroTab, label: "Home Estimate", icon: TrendingUp },
+    { id: "estimate" as HeroTab, label: "Home Report", icon: TrendingUp },
   ];
 
   const headlineByTab: Record<HeroTab, string> = {
     buy: "Find a home that suits your lifestyle.",
     sell: "Sell your home with confidence.",
-    estimate: "What's your home worth?",
+    estimate: "Your complete home report.",
   };
 
   const subtitleByTab: Record<HeroTab, string> = {
     buy: "Search thousands of listings by address, city, or ZIP code.",
     sell: "Get a free valuation and connect with qualified buyers instantly.",
-    estimate: "Get an instant estimate powered by real market data.",
+    estimate: "Get a full property report with valuation, equity, zoning, and more.",
   };
 
   const features = [
@@ -223,19 +223,19 @@ export default function Home() {
                     <input
                       data-testid="input-estimate-address"
                       type="text"
-                      placeholder="Enter an address for a free estimate"
+                      placeholder="Enter your address for a free home report"
                       value={estimateAddress}
                       onChange={(e) => setEstimateAddress(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") setLocation("/sell"); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") setLocation("/home-report"); }}
                       className="w-full pl-10 pr-4 py-3.5 rounded-full border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30"
                     />
                   </div>
                   <button
                     data-testid="button-estimate-start"
-                    onClick={() => setLocation("/sell")}
+                    onClick={() => setLocation("/home-report")}
                     className="bg-primary text-primary-foreground px-6 md:px-8 py-3.5 rounded-full font-bold transition-all active:scale-95 flex-shrink-0 shadow-lg shadow-primary/30"
                   >
-                    Estimate
+                    Get Report
                   </button>
                 </div>
               )}
