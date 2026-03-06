@@ -118,6 +118,12 @@ Preferred communication style: Simple, everyday language.
 - "Show More" button expands from 8 to 24; "See All on Search" links to `/search` with pre-filled filters.
 - Listings cache is invalidated when buyer profile is created/updated.
 
+### Buyer Profile Modal (Shared)
+
+- `BuyerProfileModal` component at `client/src/components/BuyerProfileModal.tsx` — shared modal for creating/editing buyer profiles.
+- Used in both the Buy page (`/buyers`) and the Dashboard (`/dashboard`) profile section.
+- Dashboard shows a "Buyer Criteria" card summarizing budget, beds, baths, sqft, cities, home types, must-haves, pre-approval status, and agent status with an "Edit" button that opens the modal.
+
 ### Open House Route Planner
 
 - Reusable `OpenHouseRoutePlanner` component (`client/src/components/OpenHouseRoutePlanner.tsx`) used in both buyer Dashboard and Agent Dashboard.

@@ -28,6 +28,9 @@ import {
 import { Autocomplete } from "@react-google-maps/api";
 import { useGoogleMaps } from "@/hooks/use-google-maps";
 import { OpenHouseRoutePlanner } from "@/components/OpenHouseRoutePlanner";
+import { BuyerProfileModal } from "@/components/BuyerProfileModal";
+import { useQuery } from "@tanstack/react-query";
+import type { BuyerProfile } from "@shared/schema";
 
 type Section = "profile" | "myhome" | "favorites" | "searches" | "history" | "agent" | "openhouses";
 
@@ -222,6 +225,8 @@ function ProfileSection({ user }: { user: any }) {
         <StatCard label="My Homes" value={<MyHomeCount />} icon={Home} color="text-green-500" />
       </div>
 
+      <BuyerCriteriaSection />
+
       <AgentVerificationSection user={user} />
 
       <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
@@ -233,6 +238,146 @@ function ProfileSection({ user }: { user: any }) {
           </a>
         </div>
       </div>
+    </div>
+  );
+}
+
+function BuyerCriteriaSection() {
+  const [showModal, setShowModal] = useState(false);
+  const { data: profile, isLoading } = useQuery<BuyerProfile | null>({
+    queryKey: ["/api/buyer-profiles/mine"],
+    queryFn: async () => {
+      const res = await fetch("/api/buyer-profiles/mine");
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error("Failed to fetch profile");
+      return res.json();
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 bg-blue-500/10 rounded-full flex items-center justify-center">
+            <Search className="w-5 h-5 text-blue-500" />
+          </div>
+          <h3 className="font-bold text-foreground">Buyer Criteria</h3>
+        </div>
+        <div className="animate-pulse space-y-3">
+          <div className="h-4 bg-muted rounded w-3/4" />
+          <div className="h-4 bg-muted rounded w-1/2" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 bg-blue-500/10 rounded-full flex items-center justify-center">
+            <Search className="w-5 h-5 text-blue-500" />
+          </div>
+          <div>
+            <h3 className="font-bold text-foreground">Buyer Criteria</h3>
+            <p className="text-sm text-muted-foreground">Set your home search preferences</p>
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          Create a buyer profile so sellers can find you, and we can match you with homes that fit your criteria.
+        </p>
+        <button
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-primary/90 transition-colors"
+          data-testid="button-create-buyer-profile"
+        >
+          <Plus className="w-4 h-4" />
+          Create Buyer Profile
+        </button>
+        {showModal && <BuyerProfileModal onClose={() => setShowModal(false)} />}
+      </div>
+    );
+  }
+
+  const fmt = (n: number | null | undefined) => n != null ? `$${n.toLocaleString()}` : null;
+  const pills: { label: string; value: string }[] = [];
+  if (profile.preApprovalAmount) pills.push({ label: "Budget", value: fmt(profile.preApprovalAmount)! });
+  if (profile.minBeds || profile.maxBeds) {
+    const beds = profile.minBeds && profile.maxBeds
+      ? `${profile.minBeds}–${profile.maxBeds}`
+      : profile.minBeds ? `${profile.minBeds}+` : `Up to ${profile.maxBeds}`;
+    pills.push({ label: "Beds", value: beds });
+  }
+  if (profile.minBaths) pills.push({ label: "Baths", value: `${profile.minBaths}+` });
+  if (profile.minSqft || profile.maxSqft) {
+    const sqft = profile.minSqft && profile.maxSqft
+      ? `${profile.minSqft.toLocaleString()}–${profile.maxSqft.toLocaleString()}`
+      : profile.minSqft ? `${profile.minSqft.toLocaleString()}+` : `Up to ${profile.maxSqft!.toLocaleString()}`;
+    pills.push({ label: "Sqft", value: sqft });
+  }
+  if (profile.moveInTimeline) pills.push({ label: "Timeline", value: profile.moveInTimeline });
+
+  return (
+    <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-blue-500/10 rounded-full flex items-center justify-center">
+            <Search className="w-5 h-5 text-blue-500" />
+          </div>
+          <div>
+            <h3 className="font-bold text-foreground">Buyer Criteria</h3>
+            <p className="text-sm text-muted-foreground" data-testid="text-buyer-display-name">{profile.displayName}</p>
+          </div>
+        </div>
+        <button
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 text-sm font-bold text-primary hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors"
+          data-testid="button-edit-buyer-criteria"
+        >
+          <Edit2 className="w-3.5 h-3.5" />
+          Edit
+        </button>
+      </div>
+
+      {pills.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-4" data-testid="criteria-pills">
+          {pills.map(p => (
+            <span key={p.label} className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary/10 text-primary rounded-full text-xs font-semibold" data-testid={`pill-${p.label.toLowerCase()}`}>
+              {p.label}: {p.value}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {profile.preferredCities && profile.preferredCities.length > 0 && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2" data-testid="text-preferred-cities">
+          <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>{profile.preferredCities.join(", ")}</span>
+        </div>
+      )}
+      {profile.homeTypes && profile.homeTypes.length > 0 && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2" data-testid="text-home-types">
+          <Home className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>{profile.homeTypes.join(", ")}</span>
+        </div>
+      )}
+      {profile.mustHaves && profile.mustHaves.length > 0 && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2" data-testid="text-must-haves">
+          <Heart className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+          <span>{profile.mustHaves.join(", ")}</span>
+        </div>
+      )}
+
+      <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border">
+        <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${profile.isPreApproved ? "bg-green-100 dark:bg-green-950/30 text-green-700 dark:text-green-400" : "bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400"}`} data-testid="status-pre-approval">
+          {profile.isPreApproved ? "Pre-approved" : "Not yet pre-approved"}
+        </span>
+        <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${profile.hasAgent ? "bg-green-100 dark:bg-green-950/30 text-green-700 dark:text-green-400" : "bg-purple-100 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400"}`} data-testid="status-has-agent">
+          {profile.hasAgent ? "Has agent" : "Needs agent"}
+        </span>
+      </div>
+
+      {showModal && <BuyerProfileModal onClose={() => setShowModal(false)} existingProfile={profile} />}
     </div>
   );
 }
