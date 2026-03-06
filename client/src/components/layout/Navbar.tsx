@@ -99,14 +99,14 @@ export function Navbar() {
           ) : (
             <div className="flex items-center gap-3">
               <a 
-                href="/api/auth/google" 
+                href="/auth" 
                 className="text-sm font-medium text-foreground hover:text-primary transition-colors px-2"
                 data-testid="link-login"
               >
                 Log in
               </a>
               <a 
-                href="/api/auth/google" 
+                href="/auth" 
                 className="px-5 py-2.5 text-sm font-semibold bg-foreground text-background hover:bg-primary hover:text-primary-foreground rounded-full transition-all shadow-sm hover:shadow active:scale-95"
                 data-testid="link-signup"
               >

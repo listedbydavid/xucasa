@@ -27,6 +27,7 @@ export const users = pgTable("users", {
   agentVerified: boolean("agent_verified").default(false),
   agentVerifiedAt: timestamp("agent_verified_at"),
   agentMlsId: varchar("agent_mls_id"),
+  passwordHash: varchar("password_hash"),
   phone: varchar("phone"),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),

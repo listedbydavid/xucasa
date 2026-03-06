@@ -3,6 +3,7 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
+import bcrypt from "bcryptjs";
 import { authStorage } from "./storage";
 
 export function getSession() {
@@ -147,6 +148,86 @@ export async function setupAuth(app: Express) {
       })(req, res, next);
     }
   );
+
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const { email, password, firstName, lastName } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+      if (password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+      const existing = await authStorage.getUserByEmail(email);
+      if (existing) {
+        return res.status(409).json({ message: "An account with this email already exists" });
+      }
+      const passwordHash = await bcrypt.hash(password, 10);
+      const user = await authStorage.upsertUser({
+        email,
+        firstName: firstName || "",
+        lastName: lastName || "",
+        passwordHash,
+      });
+      const sessionUser = {
+        claims: {
+          sub: user.id,
+          email: user.email,
+          first_name: user.firstName,
+          last_name: user.lastName,
+          profile_image_url: user.profileImageUrl,
+        },
+      };
+      req.login(sessionUser, (err) => {
+        if (err) {
+          console.error("[Auth] Session login error after register:", err);
+          return res.status(500).json({ message: "Registration succeeded but login failed" });
+        }
+        console.log("[Auth] Email registration success for:", email);
+        return res.json({ ok: true, user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName } });
+      });
+    } catch (err: any) {
+      console.error("[Auth] Registration error:", err);
+      return res.status(500).json({ message: "Registration failed" });
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+      const user = await authStorage.getUserByEmail(email);
+      if (!user || !user.passwordHash) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+      const valid = await bcrypt.compare(password, user.passwordHash);
+      if (!valid) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+      const sessionUser = {
+        claims: {
+          sub: user.id,
+          email: user.email,
+          first_name: user.firstName,
+          last_name: user.lastName,
+          profile_image_url: user.profileImageUrl,
+        },
+      };
+      req.login(sessionUser, (err) => {
+        if (err) {
+          console.error("[Auth] Session login error:", err);
+          return res.status(500).json({ message: "Login failed" });
+        }
+        console.log("[Auth] Email login success for:", email);
+        return res.json({ ok: true, user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName } });
+      });
+    } catch (err: any) {
+      console.error("[Auth] Login error:", err);
+      return res.status(500).json({ message: "Login failed" });
+    }
+  });
 
   app.get("/api/logout", (req, res) => {
     req.logout(() => {

@@ -38,8 +38,9 @@ Preferred communication style: Simple, everyday language.
 
 ### Authentication
 
-- **Provider**: Google OAuth 2.0 SSO via `passport-google-oauth20`.
-- **Strategy**: Google profile data (name, email, photo) stored in the `users` table; Google profile ID as user ID.
+- **Providers**: Google OAuth 2.0 SSO via `passport-google-oauth20` AND email/password via bcryptjs.
+- **Email/Password Auth**: `POST /api/auth/register` (email, password, firstName, lastName) and `POST /api/auth/login` (email, password). Auth page at `/auth`.
+- **Google OAuth**: Google profile data (name, email, photo) stored in the `users` table; Google profile ID as user ID.
 - **Sessions**: `express-session` backed by PostgreSQL (`connect-pg-simple`) with 1-week TTL secure/httpOnly cookies.
 - **Admin detection**: Email-based via `ADMIN_EMAIL` environment variable.
 - **Agent role**: Users with `role='agent'` get the "Agent Dashboard" nav tab and full agent capabilities. David Hussain (`david@listedbydavid.com`) is set as agent+admin.

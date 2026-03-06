@@ -197,6 +197,13 @@ export function AuthPromptModal({ feature, onClose }: AuthPromptModalProps) {
                 <GoogleIcon className="w-5 h-5" />
                 Continue with Google
               </button>
+              <a
+                href="/auth"
+                className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-primary hover:underline py-2"
+                data-testid="link-auth-email"
+              >
+                Sign in with email
+              </a>
               <button
                 onClick={handleClose}
                 className="w-full text-muted-foreground text-sm font-medium hover:text-foreground transition-colors py-2"
