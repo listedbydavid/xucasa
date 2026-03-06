@@ -73,6 +73,31 @@ Preferred communication style: Simple, everyday language.
 - Supports keyboard navigation (ArrowUp/Down, Enter, Escape), click-outside dismiss, and loading state.
 - Google Geocoder used for map centering on Search page (replaced Google Places Autocomplete).
 
+### Dark Mode
+
+- ThemeToggle component at `client/src/components/layout/ThemeToggle.tsx` toggles `.dark` class on `document.documentElement`.
+- Dark mode CSS variables defined in `client/src/index.css` under `.dark` selector.
+- `tailwind.config.ts` has `darkMode: ["class"]`.
+- Navbar, footer, and mobile nav use `bg-background` instead of hardcoded `bg-white`.
+- Theme preference persisted in localStorage (`xucasa-theme`) with `prefers-color-scheme` fallback.
+
+### Search Filters
+
+- Search page supports: minPrice, maxPrice, beds, baths, propertyType, status (active/pending/sold), isOffMarket, sort (newest/price_asc/price_desc/sqft_desc).
+- All filters defined in `shared/routes.ts` input schema and implemented in `server/storage.ts` `buildPropertyFilters`.
+- Status filter uses case-insensitive LOWER() comparison.
+
+### Property Detail Enhancements
+
+- Mortgage Calculator: collapsible section with adjustable inputs (price, down payment, rate, term, tax, insurance, HOA).
+- Neighborhood Section: fetches from `/api/properties/:id/public-records` and displays nearby schools, parks, groceries, transit, healthcare in card grid.
+- Share button: uses Web Share API with clipboard fallback. Print button: calls `window.print()`.
+- Mobile responsive: fixed bottom contact bar on mobile, responsive stats grid, scaled typography.
+
+### Loading Skeletons
+
+- Search, PropertyDetail, Dashboard, and Admin pages all use skeleton/shimmer loading states instead of spinners.
+
 ### Environment Variables Required
 
 - `DATABASE_URL`

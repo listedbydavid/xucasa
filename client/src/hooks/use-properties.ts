@@ -12,7 +12,7 @@ export interface PaginatedProperties {
 }
 
 // GET /api/properties
-export function useProperties(filters?: SearchCriteria & { isOffMarket?: 'true' | 'false'; limit?: number; offset?: number }) {
+export function useProperties(filters?: SearchCriteria & { isOffMarket?: 'true' | 'false'; maxSqft?: number; propertyType?: string; sort?: string; limit?: number; offset?: number }) {
   return useQuery<PaginatedProperties>({
     queryKey: [api.properties.list.path, filters],
     queryFn: async () => {

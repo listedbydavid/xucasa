@@ -53,6 +53,8 @@ export default function Swipe() {
     setTimeout(() => setLastActionVisible(false), 1200);
   };
 
+  const swipeHistory = useRef<Array<{ dir: "left" | "right"; propertyId: number }>>([]);
+
   const commitSwipe = useCallback((dir: "left" | "right") => {
     if (!current) return;
     if (dir === "right") {
@@ -66,6 +68,7 @@ export default function Swipe() {
     } else {
       flashAction("passed");
     }
+    swipeHistory.current.push({ dir, propertyId: current.id });
     setFlyOut(dir);
     setTimeout(() => {
       setCurrentIndex(i => i + 1);
@@ -368,7 +371,14 @@ export default function Swipe() {
         {!done && (
           <div className="flex items-center justify-center gap-5 lg:gap-7 py-5 lg:py-6">
             <button
-              onClick={() => currentIndex > 0 && setCurrentIndex(i => i - 1)}
+              onClick={() => {
+                if (currentIndex <= 0) return;
+                const lastSwipe = swipeHistory.current.pop();
+                if (lastSwipe && lastSwipe.dir === "right") {
+                  toggleSave({ propertyId: lastSwipe.propertyId, isSaved: true });
+                }
+                setCurrentIndex(i => i - 1);
+              }}
               disabled={currentIndex === 0}
               className="w-11 h-11 lg:w-14 lg:h-14 bg-card border border-border rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground/50 transition-all shadow-md disabled:opacity-25"
               aria-label="Undo last action"

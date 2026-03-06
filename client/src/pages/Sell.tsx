@@ -318,9 +318,12 @@ export default function Sell() {
         if (form.lat) params.set("lat", String(form.lat));
         if (form.lng) params.set("lng", String(form.lng));
         const res = await fetch(`/api/valuation?${params}`);
+        if (!res.ok) throw new Error("Valuation failed");
         const data = await res.json();
         setValuation(data);
-      } catch {}
+      } catch {
+        toast({ title: "Valuation unavailable", description: "We couldn't generate a valuation right now, but your info has been saved. We'll follow up with you.", variant: "destructive" });
+      }
       setStep(5);
     },
     onError: () => {

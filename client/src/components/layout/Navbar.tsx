@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Home, Search, User, LogOut, Briefcase, Layers, TrendingUp, Users, Shield, Menu, X } from "lucide-react";
 import { useState } from "react";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -44,7 +45,7 @@ export function Navbar() {
   ];
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/60" role="banner">
+    <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60" role="banner">
       <div className="max-w-7xl mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2 group" aria-label="xucasa home">
@@ -61,7 +62,8 @@ export function Navbar() {
           </nav>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
           <button
             className="md:hidden p-2 text-muted-foreground hover:text-foreground transition-colors rounded-full hover:bg-muted/50"
             onClick={() => setMobileOpen(!mobileOpen)}
@@ -116,7 +118,7 @@ export function Navbar() {
       </div>
 
       {mobileOpen && (
-        <nav id="mobile-nav" className="md:hidden border-t border-border/50 bg-white/95 backdrop-blur px-4 py-3 space-y-1 animate-in slide-in-from-top-2" aria-label="Mobile navigation">
+        <nav id="mobile-nav" className="md:hidden border-t border-border/50 bg-background/95 backdrop-blur px-4 py-3 space-y-1 animate-in slide-in-from-top-2" aria-label="Mobile navigation">
           {links.map(l => navLink(l.href, l.icon, l.label, (l as any).testId))}
         </nav>
       )}

@@ -422,8 +422,8 @@ export async function registerRoutes(
     try {
       const user = req.user.claims;
       const { name } = req.body;
-      if (!name || typeof name !== "string" || name.trim().length === 0) {
-        return res.status(400).json({ message: "List name is required" });
+      if (!name || typeof name !== "string" || name.trim().length === 0 || name.trim().length > 100) {
+        return res.status(400).json({ message: "List name is required and must be under 100 characters" });
       }
       const list = await storage.createFavoriteList(user.sub, name.trim());
       res.status(201).json(list);
@@ -520,8 +520,13 @@ export async function registerRoutes(
     try {
       const { authStorage } = await import("./replit_integrations/auth/storage");
       const userId = req.user.claims.sub;
-      const { firstName, lastName } = req.body;
-      const updated = await authStorage.updateUser(userId, { firstName, lastName });
+      const profileSchema = z.object({
+        firstName: z.string().min(1).max(100).optional(),
+        lastName: z.string().min(1).max(100).optional(),
+      });
+      const parsed = profileSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
+      const updated = await authStorage.updateUser(userId, parsed.data);
       res.status(200).json(updated);
     } catch (err) {
       res.status(500).json({ message: "Failed to update profile" });
@@ -846,10 +851,31 @@ export async function registerRoutes(
 
   app.post("/api/sell-leads", async (req, res) => {
     try {
-      const lead = req.body;
-      if (!lead.name || !lead.email) {
-        return res.status(400).json({ message: "Name and email are required" });
-      }
+      const sellLeadSchema = z.object({
+        name: z.string().min(1).max(200),
+        email: z.string().email().max(200),
+        phone: z.string().max(30).optional(),
+        address: z.string().max(500).optional(),
+        beds: z.number().optional(),
+        baths: z.number().optional(),
+        sqft: z.number().optional(),
+        lotSize: z.number().optional(),
+        yearBuilt: z.number().optional(),
+        homeType: z.string().max(100).optional(),
+        condition: z.string().max(100).optional(),
+        hoaFee: z.number().optional(),
+        timeline: z.string().max(100).optional(),
+        motivation: z.string().max(100).optional(),
+        needsToBuyNext: z.boolean().optional(),
+        hasAgent: z.boolean().optional(),
+        sellerAgentEmail: z.string().email().max(200).optional().nullable(),
+        listingType: z.string().max(50).optional(),
+        lat: z.number().optional().nullable(),
+        lng: z.number().optional().nullable(),
+      });
+      const parsed = sellLeadSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
+      const lead: any = parsed.data;
 
       lead.needsLenderReferral = lead.needsToBuyNext === true;
       lead.needsAgentReferral = lead.hasAgent === false;

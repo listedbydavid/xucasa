@@ -566,7 +566,20 @@ function MyHomeSection() {
       )}
 
       {isLoading ? (
-        <div className="space-y-4">{[1, 2].map(i => <div key={i} className="h-28 bg-muted animate-pulse rounded-2xl" />)}</div>
+        <div className="grid grid-cols-1 gap-4" data-testid="skeleton-my-homes">
+          {[1, 2].map(i => (
+            <div key={i} className="bg-card border border-border rounded-2xl overflow-hidden animate-pulse">
+              <div className="flex gap-4">
+                <div className="w-32 flex-shrink-0 bg-muted h-28" />
+                <div className="flex-1 p-4 space-y-3">
+                  <div className="h-5 bg-muted rounded-md w-40" />
+                  <div className="h-4 bg-muted rounded-md w-64" />
+                  <div className="h-3 bg-muted rounded-md w-32" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       ) : homes.length === 0 && !showAdd ? (
         <EmptyState icon={Home} title="No homes tracked yet" description="Add your home address to get detailed neighborhood intelligence, zoning info, flood data, and more.">
           <button onClick={() => setShowAdd(true)} className="bg-foreground text-background px-6 py-2.5 rounded-full font-bold hover:bg-primary hover:text-white transition-colors">
@@ -710,9 +723,20 @@ function HomeIntelligencePanel({ homeId }: { homeId: number }) {
 
   if (isLoading) {
     return (
-      <div className="border-t border-border p-6 flex items-center gap-3 text-muted-foreground">
-        <Loader2 className="w-5 h-5 animate-spin" />
-        <span className="text-sm font-medium">Loading public records & zoning data...</span>
+      <div className="border-t border-border bg-muted/30 p-6 space-y-6" data-testid="skeleton-home-intelligence">
+        <div className="h-4 bg-muted animate-pulse rounded-md w-40" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1,2,3,4,5,6].map(i => (
+            <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-9 h-9 bg-muted rounded-lg" />
+                <div className="h-4 bg-muted rounded-md w-24" />
+              </div>
+              <div className="h-6 bg-muted rounded-md w-16 mb-1" />
+              <div className="h-3 bg-muted rounded-md w-28" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -843,7 +867,15 @@ function MyAgentSection() {
       />
 
       {isLoading ? (
-        <div className="h-32 bg-muted animate-pulse rounded-2xl" />
+        <div className="bg-card border border-border rounded-2xl p-6 animate-pulse" data-testid="skeleton-my-agent">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-muted rounded-full flex-shrink-0" />
+            <div className="flex-1 space-y-2">
+              <div className="h-5 bg-muted rounded-md w-48" />
+              <div className="h-4 bg-muted rounded-md w-72" />
+            </div>
+          </div>
+        </div>
       ) : link ? (
         <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-4">
           <div className="flex items-center gap-4">
@@ -967,7 +999,21 @@ function OpenHousesSection() {
       />
 
       {isLoading ? (
-        <div className="space-y-4">{[1, 2, 3].map(i => <div key={i} className="h-28 bg-muted animate-pulse rounded-2xl" />)}</div>
+        <div className="grid grid-cols-1 gap-4" data-testid="skeleton-open-houses">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="bg-card border border-border rounded-2xl overflow-hidden animate-pulse">
+              <div className="flex gap-4">
+                <div className="w-32 flex-shrink-0 bg-muted h-28" />
+                <div className="flex-1 p-4 space-y-3">
+                  <div className="h-5 bg-muted rounded-md w-48" />
+                  <div className="h-4 bg-muted rounded-md w-36" />
+                  <div className="h-5 bg-muted rounded-md w-28" />
+                  <div className="h-4 bg-muted rounded-md w-52" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       ) : openHouses.length === 0 ? (
         <EmptyState icon={CalendarDays} title="No upcoming open houses" description="Check back soon — agents will post open house dates for their listings here.">
           <Link href="/search" className="bg-foreground text-background px-6 py-2.5 rounded-full font-bold hover:bg-primary hover:text-white transition-colors">
@@ -1170,8 +1216,21 @@ function FavoritesSection() {
       </div>
 
       {(isLoading || listsLoading) ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {[1, 2, 3, 4].map(i => <div key={i} className="h-80 bg-muted animate-pulse rounded-2xl" />)}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6" data-testid="skeleton-favorites">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="rounded-2xl border border-border bg-card overflow-hidden animate-pulse">
+              <div className="aspect-[4/3] bg-muted" />
+              <div className="p-4 space-y-3">
+                <div className="h-6 bg-muted rounded-md w-32" />
+                <div className="h-4 bg-muted rounded-md w-full" />
+                <div className="flex items-center gap-3">
+                  <div className="h-4 bg-muted rounded-md w-16" />
+                  <div className="h-4 bg-muted rounded-md w-16" />
+                  <div className="h-4 bg-muted rounded-md w-20" />
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       ) : filteredProps.length === 0 ? (
         <EmptyState
@@ -1192,7 +1251,7 @@ function FavoritesSection() {
                 <div className="absolute top-3 left-3 z-20">
                   <button
                     onClick={e => { e.preventDefault(); e.stopPropagation(); setMoveMenuPropertyId(moveMenuPropertyId === property.id ? null : property.id); }}
-                    className="w-8 h-8 bg-black/40 backdrop-blur-sm border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-black/60 transition-colors opacity-0 group-hover/card:opacity-100"
+                    className="w-8 h-8 bg-black/40 backdrop-blur-sm border border-white/20 rounded-full flex items-center justify-center text-white hover:bg-black/60 transition-colors sm:opacity-0 sm:group-hover/card:opacity-100"
                     title="Move to list"
                     data-testid={`button-move-property-${property.id}`}
                   >
@@ -1271,7 +1330,19 @@ function SavedSearchesSection() {
       <SectionHeader title="Saved Searches" subtitle="Jump back into a search with your saved filters" />
 
       {isLoading ? (
-        <div className="space-y-4">{[1, 2].map(i => <div key={i} className="h-28 bg-muted animate-pulse rounded-2xl" />)}</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-testid="skeleton-saved-searches">
+          {[1, 2].map(i => (
+            <div key={i} className="bg-card border border-border rounded-2xl p-5 animate-pulse">
+              <div className="h-5 bg-muted rounded-md w-36 mb-3" />
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                <div className="h-5 bg-muted rounded-md w-24" />
+                <div className="h-5 bg-muted rounded-md w-20" />
+                <div className="h-5 bg-muted rounded-md w-16" />
+              </div>
+              <div className="h-4 bg-muted rounded-md w-28" />
+            </div>
+          ))}
+        </div>
       ) : savedSearches.length === 0 ? (
         <EmptyState icon={BookmarkCheck} title="No saved searches" description='Use the "Save Search" button while browsing to bookmark your search filters here.'>
           <Link href="/search" className="bg-foreground text-background px-6 py-2.5 rounded-full font-bold hover:bg-primary hover:text-white transition-colors">
@@ -1375,7 +1446,17 @@ function SearchHistorySection() {
       />
 
       {isLoading ? (
-        <div className="space-y-2">{[1, 2, 3, 4].map(i => <div key={i} className="h-14 bg-muted animate-pulse rounded-xl" />)}</div>
+        <div className="bg-card border border-border rounded-2xl overflow-hidden divide-y divide-border" data-testid="skeleton-search-history">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="flex items-center gap-3 px-5 py-3 animate-pulse">
+              <div className="w-4 h-4 bg-muted rounded-full flex-shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <div className="h-4 bg-muted rounded-md w-48" />
+                <div className="h-3 bg-muted rounded-md w-16" />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : history.length === 0 ? (
         <EmptyState icon={Clock} title="No search history" description="Your searches will appear here. Log in before searching to track your history.">
           <Link href="/search" className="bg-foreground text-background px-6 py-2.5 rounded-full font-bold hover:bg-primary hover:text-white transition-colors">

@@ -733,7 +733,16 @@ export default function Admin() {
           </div>
         </div>
 
-        {stats && (
+        {!stats ? (
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 mb-6" data-testid="skeleton-admin-stats">
+            {[1,2,3,4,5,6].map(i => (
+              <div key={i} className="bg-card rounded-xl border p-4 animate-pulse">
+                <div className="h-7 bg-muted rounded-md w-12 mx-auto mb-2" />
+                <div className="h-3 bg-muted rounded-md w-20 mx-auto" />
+              </div>
+            ))}
+          </div>
+        ) : (
           <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 mb-6" data-testid="section-admin-stats">
             <div className="bg-white rounded-xl border p-4 text-center">
               <div className="text-2xl font-bold text-indigo-600">{allUsers?.length || 0}</div>
@@ -762,7 +771,7 @@ export default function Admin() {
           </div>
         )}
 
-        <div className="bg-white rounded-xl border p-4 mb-6" data-testid="section-admin-quicknav">
+        <div className="bg-card rounded-xl border p-4 mb-6" data-testid="section-admin-quicknav">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Navigation</h3>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2">
             {[
@@ -983,11 +992,28 @@ export default function Admin() {
         {activeTab === "buyers" && (
           <div className="space-y-3">
             {buyersLoading ? (
-              <div className="space-y-3">
+              <div className="space-y-3" data-testid="skeleton-admin-buyers">
                 {[1, 2, 3].map(i => (
-                  <div key={i} className="bg-white rounded-xl border p-5 animate-pulse">
-                    <div className="h-4 bg-muted rounded w-1/3 mb-2" />
-                    <div className="h-3 bg-muted rounded w-1/2" />
+                  <div key={i} className="bg-card rounded-xl border p-5 animate-pulse">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-muted rounded-full" />
+                        <div className="space-y-2">
+                          <div className="h-4 bg-muted rounded-md w-32" />
+                          <div className="h-3 bg-muted rounded-md w-44" />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5 text-right">
+                        <div className="h-5 bg-muted rounded-md w-20 ml-auto" />
+                        <div className="h-3 bg-muted rounded-md w-12 ml-auto" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div className="h-4 bg-muted rounded-md" />
+                      <div className="h-4 bg-muted rounded-md" />
+                      <div className="h-4 bg-muted rounded-md" />
+                      <div className="h-4 bg-muted rounded-md" />
+                    </div>
                   </div>
                 ))}
               </div>

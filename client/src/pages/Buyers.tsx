@@ -361,7 +361,7 @@ function CreateProfileModal({ onClose, existingProfile }: { onClose: () => void;
         preApprovalAmount: parseInt(form.preApprovalAmount),
         minBeds: form.minBeds ? parseInt(form.minBeds) : null,
         maxBeds: form.maxBeds ? parseInt(form.maxBeds) : null,
-        minBaths: form.minBaths || null,
+        minBaths: form.minBaths ? parseFloat(form.minBaths) : null,
         minSqft: form.minSqft ? parseInt(form.minSqft) : null,
         maxSqft: form.maxSqft ? parseInt(form.maxSqft) : null,
         minLotSize: form.minLotSize ? parseInt(form.minLotSize) : null,
@@ -1121,8 +1121,7 @@ export default function Buyers() {
   };
 
   const realProfiles = profiles || [];
-  const combined = [...realProfiles, ...MOCK_BUYERS.filter(mock => !realProfiles.some(p => p.id === mock.id))];
-  const allProfiles = combined.length % 2 !== 0 ? combined.slice(0, combined.length - 1) : combined;
+  const allProfiles = [...realProfiles, ...MOCK_BUYERS.filter(mock => !realProfiles.some(p => p.id === mock.id))];
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">

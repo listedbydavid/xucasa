@@ -157,9 +157,20 @@ export class DatabaseStorage implements IStorage {
       if (filters.minBeds) conditions.push(sql`${properties.beds} >= ${filters.minBeds}`);
       if (filters.minBaths) conditions.push(sql`${properties.baths} >= ${filters.minBaths}`);
       if (filters.minSqft) conditions.push(sql`${properties.sqft} >= ${filters.minSqft}`);
+      if (filters.maxSqft) conditions.push(sql`${properties.sqft} <= ${filters.maxSqft}`);
       if (filters.maxHoaFee) conditions.push(sql`${properties.hoaFee} <= ${filters.maxHoaFee}`);
       if (filters.isOffMarket !== undefined) {
         conditions.push(eq(properties.isOffMarket, filters.isOffMarket === 'true'));
+      }
+      if (filters.propertyType) {
+        const types = filters.propertyType.split(',').map((t: string) => t.trim()).filter(Boolean);
+        if (types.length > 0) {
+          const typeConds = types.map((t: string) => sql`${properties.propertyType} ILIKE ${t}`);
+          conditions.push(sql`(${sql.join(typeConds, sql` OR `)})`);
+        }
+      }
+      if (filters.status) {
+        conditions.push(sql`LOWER(${properties.status}) = LOWER(${filters.status})`);
       }
       if (filters.source) {
         conditions.push(eq(properties.source, filters.source));
@@ -173,12 +184,29 @@ export class DatabaseStorage implements IStorage {
     const limit = filters?.limit ? Math.min(Number(filters.limit), 200) : 50;
     const offset = filters?.offset ? Number(filters.offset) : 0;
 
+    let orderByClause;
+    switch (filters?.sort) {
+      case 'price_asc':
+        orderByClause = sql`${properties.price} ASC`;
+        break;
+      case 'price_desc':
+        orderByClause = sql`${properties.price} DESC`;
+        break;
+      case 'sqft_desc':
+        orderByClause = sql`${properties.sqft} DESC`;
+        break;
+      case 'newest':
+      default:
+        orderByClause = sql`${properties.createdAt} DESC`;
+        break;
+    }
+
     const results = await db
       .select({ property: properties, agent: users })
       .from(properties)
       .leftJoin(users, eq(properties.agentId, users.id))
       .where(whereClause)
-      .orderBy(desc(properties.createdAt))
+      .orderBy(orderByClause)
       .limit(limit)
       .offset(offset);
 

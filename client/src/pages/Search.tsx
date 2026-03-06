@@ -5,7 +5,7 @@ import { useProperties } from "@/hooks/use-properties";
 import { useCreateSavedSearch } from "@/hooks/use-saved";
 import { useAddSearchHistory } from "@/hooks/use-client-dashboard";
 import { useAuth } from "@/hooks/use-auth";
-import { Search as SearchIcon, MapPin, Map, BookmarkPlus, X, Check } from "lucide-react";
+import { Search as SearchIcon, MapPin, Map, BookmarkPlus, X, Check, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { MapView } from "@/components/MapView";
 import { useGoogleMaps } from "@/hooks/use-google-maps";
 import queryString from "query-string";
@@ -20,9 +20,15 @@ export default function Search() {
   const [locationInput, setLocationInput] = useState(searchParams.get("location") || "");
   const [filters, setFilters] = useState({
     minPrice: searchParams.get("minPrice") || "",
+    maxPrice: searchParams.get("maxPrice") || "",
     beds: searchParams.get("beds") || "",
+    baths: searchParams.get("baths") || "",
+    propertyType: searchParams.get("propertyType") || "",
     isOffMarket: searchParams.get("isOffMarket") || "",
+    status: searchParams.get("status") || "",
+    sort: searchParams.get("sort") || "",
   });
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
 
   const [activeQuery, setActiveQuery] = useState<Record<string, any>>({});
   const [mapCenter, setMapCenter] = useState<[number, number]>([-122.4194, 37.7749]);
@@ -55,8 +61,13 @@ export default function Search() {
     const query: Record<string, any> = {};
     if (locationInput) query.location = locationInput;
     if (filters.minPrice) query.minPrice = Number(filters.minPrice);
+    if (filters.maxPrice) query.maxPrice = Number(filters.maxPrice);
     if (filters.beds) query.minBeds = Number(filters.beds);
+    if (filters.baths) query.minBaths = Number(filters.baths);
+    if (filters.propertyType) query.propertyType = filters.propertyType;
     if (filters.isOffMarket) query.isOffMarket = filters.isOffMarket;
+    if (filters.status) query.status = filters.status;
+    if (filters.sort) query.sort = filters.sort;
     setActiveQuery(query);
 
     // Handle geolocation from map search button (Home page)
@@ -151,22 +162,48 @@ export default function Search() {
             />
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
+          <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
             <select
-              className="bg-background border border-border rounded-xl px-4 py-2.5 font-medium text-sm outline-none focus:border-primary hover:border-primary/50 transition-colors"
+              className="bg-background border border-border rounded-md px-3 py-2 font-medium text-sm outline-none focus:border-primary transition-colors min-w-0"
               value={filters.minPrice}
               onChange={(e) => setFilters(prev => ({ ...prev, minPrice: e.target.value }))}
               data-testid="select-min-price"
               aria-label="Filter by minimum price"
             >
-              <option value="">Any Price</option>
+              <option value="">Min Price</option>
+              <option value="100000">$100k+</option>
+              <option value="200000">$200k+</option>
+              <option value="300000">$300k+</option>
+              <option value="400000">$400k+</option>
               <option value="500000">$500k+</option>
+              <option value="750000">$750k+</option>
               <option value="1000000">$1M+</option>
               <option value="1500000">$1.5M+</option>
+              <option value="2000000">$2M+</option>
             </select>
 
             <select
-              className="bg-background border border-border rounded-xl px-4 py-2.5 font-medium text-sm outline-none focus:border-primary hover:border-primary/50 transition-colors"
+              className="bg-background border border-border rounded-md px-3 py-2 font-medium text-sm outline-none focus:border-primary transition-colors min-w-0"
+              value={filters.maxPrice}
+              onChange={(e) => setFilters(prev => ({ ...prev, maxPrice: e.target.value }))}
+              data-testid="select-max-price"
+              aria-label="Filter by maximum price"
+            >
+              <option value="">Max Price</option>
+              <option value="200000">Up to $200k</option>
+              <option value="300000">Up to $300k</option>
+              <option value="400000">Up to $400k</option>
+              <option value="500000">Up to $500k</option>
+              <option value="750000">Up to $750k</option>
+              <option value="1000000">Up to $1M</option>
+              <option value="1500000">Up to $1.5M</option>
+              <option value="2000000">Up to $2M</option>
+              <option value="3000000">Up to $3M</option>
+              <option value="5000000">Up to $5M</option>
+            </select>
+
+            <select
+              className="bg-background border border-border rounded-md px-3 py-2 font-medium text-sm outline-none focus:border-primary transition-colors min-w-0"
               value={filters.beds}
               onChange={(e) => setFilters(prev => ({ ...prev, beds: e.target.value }))}
               data-testid="select-beds"
@@ -177,22 +214,65 @@ export default function Search() {
               <option value="2">2+ Beds</option>
               <option value="3">3+ Beds</option>
               <option value="4">4+ Beds</option>
+              <option value="5">5+ Beds</option>
             </select>
 
             <select
-              className="bg-background border border-border rounded-xl px-4 py-2.5 font-medium text-sm outline-none focus:border-primary hover:border-primary/50 transition-colors"
+              className="bg-background border border-border rounded-md px-3 py-2 font-medium text-sm outline-none focus:border-primary transition-colors min-w-0"
+              value={filters.baths}
+              onChange={(e) => setFilters(prev => ({ ...prev, baths: e.target.value }))}
+              data-testid="select-baths"
+              aria-label="Filter by number of bathrooms"
+            >
+              <option value="">Baths</option>
+              <option value="1">1+ Baths</option>
+              <option value="2">2+ Baths</option>
+              <option value="3">3+ Baths</option>
+              <option value="4">4+ Baths</option>
+            </select>
+
+            <select
+              className="bg-background border border-border rounded-md px-3 py-2 font-medium text-sm outline-none focus:border-primary transition-colors min-w-0"
+              value={filters.propertyType}
+              onChange={(e) => setFilters(prev => ({ ...prev, propertyType: e.target.value }))}
+              data-testid="select-property-type"
+              aria-label="Filter by property type"
+            >
+              <option value="">Property Type</option>
+              <option value="Single Family">House</option>
+              <option value="Condo">Condo</option>
+              <option value="Townhouse,Townhome">Townhome</option>
+              <option value="Multi-Family">Multi-Family</option>
+              <option value="Land">Land</option>
+            </select>
+
+            <select
+              className="bg-background border border-border rounded-md px-3 py-2 font-medium text-sm outline-none focus:border-primary transition-colors min-w-0"
+              value={filters.status}
+              onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+              data-testid="select-status"
+              aria-label="Filter by listing status"
+            >
+              <option value="">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="pending">Pending</option>
+              <option value="sold">Sold</option>
+            </select>
+
+            <select
+              className="bg-background border border-border rounded-md px-3 py-2 font-medium text-sm outline-none focus:border-primary transition-colors min-w-0"
               value={filters.isOffMarket}
               onChange={(e) => setFilters(prev => ({ ...prev, isOffMarket: e.target.value }))}
               data-testid="select-listing-type"
               aria-label="Filter by listing type"
             >
               <option value="">All Types</option>
-              <option value="false">Active Only</option>
-              <option value="true">Buy it Now Only</option>
+              <option value="false">MLS Listed</option>
+              <option value="true">Buy it Now</option>
             </select>
 
             {showSaveNameInput ? (
-              <div className="ml-auto sm:ml-0 flex items-center gap-1.5 bg-card border border-border rounded-xl px-3 py-1.5 shadow-md">
+              <div className="flex items-center gap-1.5 bg-card border border-border rounded-md px-3 py-1.5 shadow-md">
                 <input
                   className="text-sm bg-transparent outline-none w-36 lg:w-48 placeholder-muted-foreground text-foreground"
                   placeholder="Name your search..."
@@ -225,11 +305,11 @@ export default function Search() {
               <button
                 onClick={handleSaveSearch}
                 disabled={isSavingSearch}
-                className="ml-auto sm:ml-0 flex items-center gap-2 bg-primary/10 text-primary hover:bg-primary hover:text-white px-4 py-2.5 rounded-xl font-bold text-sm transition-colors"
+                className="flex items-center gap-2 bg-primary/10 text-primary px-3 py-2 rounded-md font-bold text-sm transition-colors hover-elevate"
                 data-testid="button-save-search"
               >
                 <BookmarkPlus className="w-4 h-4" />
-                <span className="hidden lg:inline">Save Search</span>
+                <span className="hidden lg:inline">Save</span>
               </button>
             )}
           </div>
@@ -253,10 +333,12 @@ export default function Search() {
           </div>
 
           <div className="p-4 sm:p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <h2 className="font-display font-bold text-xl text-foreground">
-                  {isLoading ? "Searching..." : `${totalProperties.toLocaleString()} Homes`}
+            <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-4 flex-wrap">
+                <h2 className="font-display font-bold text-xl text-foreground" data-testid="text-results-count">
+                  {isLoading ? (
+                    <span className="inline-block h-6 w-28 bg-muted animate-pulse rounded-md align-middle" />
+                  ) : `${totalProperties.toLocaleString()} Homes`}
                 </h2>
                 {!isMapVisible && (
                   <button
@@ -269,11 +351,36 @@ export default function Search() {
                   </button>
                 )}
               </div>
+              <select
+                className="bg-background border border-border rounded-md px-3 py-2 font-medium text-sm outline-none focus:border-primary transition-colors"
+                value={filters.sort}
+                onChange={(e) => setFilters(prev => ({ ...prev, sort: e.target.value }))}
+                data-testid="select-sort"
+                aria-label="Sort results"
+              >
+                <option value="">Sort: Newest</option>
+                <option value="price_asc">Price: Low to High</option>
+                <option value="price_desc">Price: High to Low</option>
+                <option value="sqft_desc">Sqft: Largest</option>
+              </select>
             </div>
 
             {isLoading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                {[1,2,3,4].map(i => <div key={i} className="h-80 bg-muted animate-pulse rounded-2xl" />)}
+                {[1,2,3,4,5,6].map(i => (
+                  <div key={i} className="rounded-2xl border border-border bg-card overflow-hidden animate-pulse" data-testid={`skeleton-property-card-${i}`}>
+                    <div className="aspect-[4/3] bg-muted" />
+                    <div className="p-4 space-y-3">
+                      <div className="h-6 bg-muted rounded-md w-32" />
+                      <div className="h-4 bg-muted rounded-md w-full" />
+                      <div className="flex items-center gap-3">
+                        <div className="h-4 bg-muted rounded-md w-16" />
+                        <div className="h-4 bg-muted rounded-md w-16" />
+                        <div className="h-4 bg-muted rounded-md w-20" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : properties?.length === 0 ? (
               <div className="h-64 flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-border rounded-3xl mt-8">
