@@ -18,6 +18,9 @@ import Sell from "@/pages/Sell";
 import Buyers from "@/pages/Buyers";
 import Admin from "@/pages/Admin";
 import AuthPage from "@/pages/AuthPage";
+import PrivacyPolicy from "@/pages/PrivacyPolicy";
+import TermsOfService from "@/pages/TermsOfService";
+import { CookieConsent } from "@/components/CookieConsent";
 
 function Router() {
   return (
@@ -32,6 +35,8 @@ function Router() {
       <Route path="/buyers" component={Buyers} />
       <Route path="/admin" component={Admin} />
       <Route path="/auth" component={AuthPage} />
+      <Route path="/privacy" component={PrivacyPolicy} />
+      <Route path="/terms" component={TermsOfService} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -130,24 +135,24 @@ function Footer() {
             <h3 className="font-semibold text-sm text-foreground mb-4">Legal</h3>
             <ul className="space-y-2.5 text-sm">
               <li>
-                <span className={`cursor-default ${linkClass}`} data-testid="footer-link-terms">
+                <Link href="/terms" className={linkClass} data-testid="footer-link-terms">
                   Terms of Service
-                </span>
+                </Link>
               </li>
               <li>
-                <span className={`cursor-default ${linkClass}`} data-testid="footer-link-privacy">
+                <Link href="/privacy" className={linkClass} data-testid="footer-link-privacy">
                   Privacy Policy
-                </span>
+                </Link>
               </li>
               <li>
-                <span className={`cursor-default ${linkClass}`} data-testid="footer-link-fair-housing">
+                <Link href="/terms#fair-housing" className={linkClass} data-testid="footer-link-fair-housing">
                   Fair Housing
-                </span>
+                </Link>
               </li>
               <li>
-                <span className={`cursor-default ${linkClass}`} data-testid="footer-link-accessibility">
+                <Link href="/terms#accessibility" className={linkClass} data-testid="footer-link-accessibility">
                   Accessibility
-                </span>
+                </Link>
               </li>
             </ul>
           </div>
@@ -175,6 +180,7 @@ function App() {
             <Router />
           </main>
           <Footer />
+          <CookieConsent />
         </div>
         <Toaster />
       </TooltipProvider>

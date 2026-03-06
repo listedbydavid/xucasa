@@ -194,7 +194,7 @@ export async function setupAuth(app: Express) {
 
   app.post("/api/auth/login", async (req, res) => {
     try {
-      const { email, password } = req.body;
+      const { email, password, rememberMe } = req.body;
       if (!email || !password) {
         return res.status(400).json({ message: "Email and password are required" });
       }
@@ -205,6 +205,9 @@ export async function setupAuth(app: Express) {
       const valid = await bcrypt.compare(password, user.passwordHash);
       if (!valid) {
         return res.status(401).json({ message: "Invalid email or password" });
+      }
+      if (rememberMe) {
+        req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
       }
       const sessionUser = {
         claims: {
@@ -220,7 +223,7 @@ export async function setupAuth(app: Express) {
           console.error("[Auth] Session login error:", err);
           return res.status(500).json({ message: "Login failed" });
         }
-        console.log("[Auth] Email login success for:", email);
+        console.log("[Auth] Email login success for:", email, rememberMe ? "(remember me)" : "");
         return res.json({ ok: true, user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName } });
       });
     } catch (err: any) {

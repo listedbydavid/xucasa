@@ -24,6 +24,7 @@ export default function AuthPage() {
   const [lastName, setLastName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
 
   if (isAuthenticated) {
@@ -42,6 +43,8 @@ export default function AuthPage() {
       if (mode === "register") {
         body.firstName = firstName;
         body.lastName = lastName;
+      } else if (rememberMe) {
+        body.rememberMe = true;
       }
 
       const res = await fetch(endpoint, {
@@ -162,6 +165,19 @@ export default function AuthPage() {
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+
+            {mode === "login" && (
+              <label className="flex items-center gap-2 cursor-pointer select-none" data-testid="label-remember-me">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={e => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary accent-primary"
+                  data-testid="input-remember-me"
+                />
+                <span className="text-sm text-muted-foreground">Remember me for 30 days</span>
+              </label>
+            )}
 
             {error && (
               <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2" data-testid="text-auth-error">
