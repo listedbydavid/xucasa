@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { Autocomplete } from "@react-google-maps/api";
 import { useGoogleMaps } from "@/hooks/use-google-maps";
+import { OpenHouseRoutePlanner } from "@/components/OpenHouseRoutePlanner";
 
 type Section = "profile" | "myhome" | "favorites" | "searches" | "history" | "agent" | "openhouses";
 
@@ -987,71 +988,13 @@ function MyAgentSection() {
 function OpenHousesSection() {
   const { data: openHouses = [], isLoading } = useOpenHouses();
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-  };
-
   return (
     <div className="space-y-6">
       <SectionHeader
         title="Open Houses"
-        subtitle="Upcoming open houses for active listings"
+        subtitle="Select open houses to plan your visiting route"
       />
-
-      {isLoading ? (
-        <div className="grid grid-cols-1 gap-4" data-testid="skeleton-open-houses">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="bg-card border border-border rounded-2xl overflow-hidden animate-pulse">
-              <div className="flex gap-4">
-                <div className="w-32 flex-shrink-0 bg-muted h-28" />
-                <div className="flex-1 p-4 space-y-3">
-                  <div className="h-5 bg-muted rounded-md w-48" />
-                  <div className="h-4 bg-muted rounded-md w-36" />
-                  <div className="h-5 bg-muted rounded-md w-28" />
-                  <div className="h-4 bg-muted rounded-md w-52" />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : openHouses.length === 0 ? (
-        <EmptyState icon={CalendarDays} title="No upcoming open houses" description="Check back soon — agents will post open house dates for their listings here.">
-          <Link href="/search" className="bg-foreground text-background px-6 py-2.5 rounded-full font-bold hover:bg-primary hover:text-white transition-colors">
-            Browse Listings
-          </Link>
-        </EmptyState>
-      ) : (
-        <div className="grid grid-cols-1 gap-4">
-          {openHouses.map((property: any) => (
-            <Link key={property.id} href={`/property/${property.id}`}>
-              <div className="bg-card border border-border rounded-2xl overflow-hidden hover:shadow-md transition-shadow flex gap-4" data-testid={`card-open-house-${property.id}`}>
-                <div className="w-32 flex-shrink-0 bg-muted relative">
-                  {property.imageUrl ? (
-                    <img src={property.imageUrl} alt={property.title} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center min-h-[96px]">
-                      <Home className="w-8 h-8 text-muted-foreground/30" />
-                    </div>
-                  )}
-                  <div className="absolute top-2 left-2 bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    OPEN
-                  </div>
-                </div>
-                <div className="flex-1 p-4 min-w-0">
-                  <h3 className="font-bold text-foreground truncate">{property.title}</h3>
-                  <p className="text-sm text-muted-foreground truncate">{property.location}</p>
-                  <p className="font-bold text-foreground mt-1">${property.price?.toLocaleString()}</p>
-                  <div className="flex items-center gap-1.5 mt-2 text-primary text-sm font-bold">
-                    <CalendarDays className="w-4 h-4 flex-shrink-0" />
-                    <span>{property.openHouseDate ? formatDate(property.openHouseDate) : ""}</span>
-                    {property.openHouseTime && <span className="text-muted-foreground font-normal">· {property.openHouseTime}</span>}
-                  </div>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
+      <OpenHouseRoutePlanner openHouses={openHouses} isLoading={isLoading} variant="buyer" />
     </div>
   );
 }

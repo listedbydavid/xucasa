@@ -108,6 +108,15 @@ Preferred communication style: Simple, everyday language.
 - **User phone field**: Added `phone` varchar to users table for agent contact display on reports.
 - Privacy: Buyer contact info (email, phone) is redacted from the report; only aggregate profile data shown.
 
+### Open House Route Planner
+
+- Reusable `OpenHouseRoutePlanner` component (`client/src/components/OpenHouseRoutePlanner.tsx`) used in both buyer Dashboard and Agent Dashboard.
+- Users select open houses via checkboxes, then click "Plan Route" to see a route preview map (Google Maps Embed API) and action buttons.
+- Generates Google Maps directions URLs with origin, destination, and waypoints for multi-stop routes.
+- Generates Apple Maps URLs as an alternative for iPhone users.
+- Buttons: "Open in Google Maps" (opens native app on mobile), "Open in Apple Maps", "Copy Link", and "Share" (Web Share API).
+- No extra API usage — leverages Google Maps Embed API for preview and standard Maps URLs for navigation.
+
 ### Environment Variables Required
 
 - `DATABASE_URL`

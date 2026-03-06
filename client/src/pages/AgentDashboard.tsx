@@ -11,6 +11,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { BeaconTab } from "@/components/BeaconReport";
+import { OpenHouseRoutePlanner } from "@/components/OpenHouseRoutePlanner";
 
 type AgentTab = "listings" | "clients" | "openhouses" | "beacon" | "idx";
 
@@ -737,56 +738,13 @@ function ClientCard({ client, expanded, onToggle }: { client: any; expanded: boo
 function AgentOpenHousesSection({ agentProperties }: { agentProperties: PropertyResponse[] }) {
   const { data: allOpenHouses = [], isLoading } = useOpenHouses();
 
-  const formatDate = (date: string) =>
-    new Date(date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-
   return (
     <div className="space-y-4">
       <div className="pb-4 border-b border-border">
         <h2 className="text-xl font-display font-bold text-foreground">Open Houses</h2>
-        <p className="text-sm text-muted-foreground">All upcoming open houses across active listings</p>
+        <p className="text-sm text-muted-foreground">Select open houses to plan a visiting route on Google Maps</p>
       </div>
-
-      {isLoading ? (
-        <div className="space-y-4">{[1, 2, 3].map(i => <div key={i} className="h-24 bg-muted animate-pulse rounded-2xl" />)}</div>
-      ) : allOpenHouses.length === 0 ? (
-        <div className="text-center py-16 bg-card border border-border rounded-3xl">
-          <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-            <CalendarDays className="w-7 h-7 text-muted-foreground opacity-40" />
-          </div>
-          <h3 className="font-display font-bold text-xl mb-2">No upcoming open houses</h3>
-          <p className="text-muted-foreground text-sm">Set an open house date on any listing by editing it.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {allOpenHouses.map((property: any) => (
-            <div
-              key={property.id}
-              className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm flex gap-3"
-              data-testid={`card-agent-openhouse-${property.id}`}
-            >
-              <div className="w-28 flex-shrink-0 bg-muted relative">
-                {property.imageUrl
-                  ? <img src={property.imageUrl} alt={property.title} className="w-full h-full object-cover" />
-                  : <div className="w-full h-full flex items-center justify-center min-h-[96px]"><Home className="w-6 h-6 text-muted-foreground/30" /></div>
-                }
-              </div>
-              <div className="p-3 flex-1 min-w-0">
-                <p className="font-bold text-foreground truncate text-sm">{property.title}</p>
-                <p className="text-xs text-muted-foreground truncate">{property.location}</p>
-                <p className="font-bold text-foreground text-sm mt-1">${property.price?.toLocaleString()}</p>
-                <div className="flex items-center gap-1 mt-2 text-primary text-xs font-bold">
-                  <CalendarDays className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="truncate">{property.openHouseDate ? formatDate(property.openHouseDate) : ""}</span>
-                </div>
-                {property.openHouseTime && (
-                  <p className="text-xs text-muted-foreground mt-0.5">{property.openHouseTime}</p>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <OpenHouseRoutePlanner openHouses={allOpenHouses} isLoading={isLoading} variant="agent" />
     </div>
   );
 }
