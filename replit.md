@@ -41,7 +41,8 @@ Preferred communication style: Simple, everyday language.
 - **Providers**: Google OAuth 2.0 SSO via `passport-google-oauth20` AND email/password via bcryptjs.
 - **Email/Password Auth**: `POST /api/auth/register` (email, password, firstName, lastName) and `POST /api/auth/login` (email, password). Auth page at `/auth`.
 - **Google OAuth**: Google profile data (name, email, photo) stored in the `users` table; Google profile ID as user ID.
-- **Sessions**: `express-session` backed by PostgreSQL (`connect-pg-simple`) with 1-week TTL secure/httpOnly cookies.
+- **Sessions**: `express-session` backed by PostgreSQL (`connect-pg-simple`) with 1-week TTL (or 30 days with "Remember me") secure/httpOnly cookies.
+- **Remember Me**: Login form checkbox extends session cookie maxAge from 1 week to 30 days.
 - **Admin detection**: Email-based via `ADMIN_EMAIL` environment variable.
 - **Agent role**: Users with `role='agent'` get the "Agent Dashboard" nav tab and full agent capabilities. David Hussain (`david@listedbydavid.com`) is set as agent+admin.
 
@@ -133,6 +134,13 @@ Preferred communication style: Simple, everyday language.
 - Generates Apple Maps URLs as an alternative for iPhone users.
 - Buttons: "Open in Google Maps" (opens native app on mobile), "Open in Apple Maps", "Copy Link", and "Share" (Web Share API).
 - No extra API usage — leverages Google Maps Embed API for preview and standard Maps URLs for navigation.
+
+### Cookie Consent & Legal Pages
+
+- **Cookie Consent Banner**: `CookieConsent` component at `client/src/components/CookieConsent.tsx`. Fixed bottom bar that appears on first visit, stores consent in `localStorage` (`xucasa-cookie-consent`). Uses shadcn `Button` components.
+- **Privacy Policy**: `/privacy` route at `client/src/pages/PrivacyPolicy.tsx`. Covers data collection, cookies, third-party services (Google OAuth, Google Maps, RealtyFeed), data retention, user rights, CCPA.
+- **Terms of Service**: `/terms` route at `client/src/pages/TermsOfService.tsx`. Covers account responsibilities, MLS data disclaimer, buyer marketplace, agent services, fair housing (id="fair-housing"), accessibility (id="accessibility"), governing law (California).
+- **Footer Legal Links**: All footer legal items (Terms, Privacy, Fair Housing, Accessibility) use wouter `Link` components pointing to `/terms` and `/privacy` with hash anchors.
 
 ### Environment Variables Required
 

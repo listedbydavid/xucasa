@@ -142,7 +142,20 @@ export default function TermsOfService() {
       </div>
 
       <div className={sectionClass}>
-        <h2 className={headingClass}>12. Termination</h2>
+        <h2 id="accessibility" className={headingClass}>12. Accessibility</h2>
+        <p className={textClass}>
+          xucasa is committed to ensuring digital accessibility for people with disabilities. We continually work to
+          improve the user experience for everyone and apply relevant accessibility standards. Our platform includes
+          keyboard navigation support, screen reader compatibility, skip-to-content links, and sufficient color contrast
+          ratios. If you experience any accessibility barriers on our site, please contact us at{" "}
+          <a href="mailto:david@xucasa.com" className="text-primary hover:underline">david@xucasa.com</a> so we can
+          assist you and work to resolve the issue.
+        </p>
+      </div>
+
+      <div className={sectionClass}>
+        <h2 className={headingClass}>13. Termination</h2>
+
         <p className={textClass}>
           We may terminate or suspend your access to xucasa at any time, with or without cause, and with or without
           notice. Upon termination, your right to use the platform ceases immediately. Provisions of these terms that
@@ -152,7 +165,7 @@ export default function TermsOfService() {
       </div>
 
       <div className={sectionClass}>
-        <h2 className={headingClass}>13. Governing Law</h2>
+        <h2 className={headingClass}>14. Governing Law</h2>
         <p className={textClass}>
           These Terms of Service shall be governed by and construed in accordance with the laws of the State of California,
           without regard to its conflict of law provisions. Any disputes arising from these terms shall be resolved in the
@@ -161,7 +174,7 @@ export default function TermsOfService() {
       </div>
 
       <div className={sectionClass}>
-        <h2 className={headingClass}>14. Contact Us</h2>
+        <h2 className={headingClass}>15. Contact Us</h2>
         <p className={textClass}>
           If you have questions about these Terms of Service, please contact us at:{" "}
           <a href="mailto:david@xucasa.com" className="text-primary hover:underline">david@xucasa.com</a>

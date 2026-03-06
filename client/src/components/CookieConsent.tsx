@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Cookie, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const STORAGE_KEY = "xucasa-cookie-consent";
 
@@ -58,21 +59,22 @@ export function CookieConsent() {
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-              <button
+              <Button
                 onClick={accept}
-                className="flex-1 sm:flex-none px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors active:scale-[.98]"
+                className="flex-1 sm:flex-none"
                 data-testid="button-accept-cookies"
               >
                 Accept
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={dismiss}
-                className="p-2.5 text-muted-foreground hover:text-foreground rounded-xl hover:bg-muted transition-colors"
                 aria-label="Dismiss cookie notice"
                 data-testid="button-dismiss-cookies"
               >
                 <X className="w-4 h-4" />
-              </button>
+              </Button>
             </div>
           </div>
         </div>
