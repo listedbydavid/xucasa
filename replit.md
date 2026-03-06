@@ -130,6 +130,7 @@ Preferred communication style: Simple, everyday language.
 
 - Reusable `OpenHouseRoutePlanner` component (`client/src/components/OpenHouseRoutePlanner.tsx`) used in both buyer Dashboard and Agent Dashboard.
 - Users select open houses via checkboxes, then click "Plan Route" to see a route preview map (Google Maps Embed API) and action buttons.
+- `getFullAddress` helper always constructs fully qualified addresses (street, city, state, zip) for waypoints. Falls back to `title` + structured city/state/zip fields, then `location` field, to prevent Google/Apple Maps from geocoding to wrong cities.
 - Generates Google Maps directions URLs with origin, destination, and waypoints for multi-stop routes.
 - Generates Apple Maps URLs as an alternative for iPhone users.
 - Buttons: "Open in Google Maps" (opens native app on mobile), "Open in Apple Maps", "Copy Link", and "Share" (Web Share API).

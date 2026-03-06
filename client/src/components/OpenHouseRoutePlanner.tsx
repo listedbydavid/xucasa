@@ -41,10 +41,25 @@ function formatDate(date: string) {
 }
 
 function getFullAddress(p: OpenHouseProperty): string {
-  if (p.addressStreetNumber && p.addressStreetName && p.addressCity && p.addressState) {
-    return `${p.addressStreetNumber} ${p.addressStreetName}, ${p.addressCity}, ${p.addressState} ${p.addressZip || ""}`.trim();
+  const street = p.addressStreetNumber && p.addressStreetName
+    ? `${p.addressStreetNumber} ${p.addressStreetName}`
+    : (p.title || "");
+
+  const parts: string[] = [];
+  if (street) parts.push(street);
+  if (p.addressCity) parts.push(p.addressCity);
+  if (p.addressState) parts.push(p.addressZip ? `${p.addressState} ${p.addressZip}` : p.addressState);
+  else if (p.addressZip) parts.push(p.addressZip);
+
+  if (parts.length >= 2) {
+    return parts.join(", ");
   }
-  return p.title || p.location || "";
+
+  if (street && p.location) {
+    return `${street}, ${p.location}`;
+  }
+
+  return street || p.location || "";
 }
 
 function buildGoogleMapsUrl(selected: OpenHouseProperty[]): string {
