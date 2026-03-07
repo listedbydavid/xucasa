@@ -11,6 +11,8 @@ import {
   buyerMatches,
   sellerPitches,
   favoriteLists,
+  propertyOffers,
+  swipeNotifications,
   type Property,
   type InsertProperty,
   type SavedProperty,
@@ -29,6 +31,10 @@ import {
   type SellerPitch,
   type InsertSellerPitch,
   type FavoriteList,
+  type PropertyOffer,
+  type InsertPropertyOffer,
+  type SwipeNotification,
+  type InsertSwipeNotification,
   users,
 } from "@shared/schema";
 import { eq, and, desc, sql, gte, count } from "drizzle-orm";
@@ -125,6 +131,20 @@ export interface IStorage {
     addressState: string | null;
     addressZip: string | null;
   }[]>;
+
+  // Property Offers (Reverse Offers)
+  createPropertyOffer(offer: InsertPropertyOffer): Promise<PropertyOffer>;
+  getPropertyOffersForProperty(propertyId: number): Promise<(PropertyOffer & { property: Property; buyer: any })[]>;
+  getPropertyOffersForBuyer(userId: string): Promise<(PropertyOffer & { property: Property })[]>;
+  getPropertyOffersForAgent(agentId: string): Promise<(PropertyOffer & { property: Property; buyer: any })[]>;
+  updatePropertyOfferStatus(id: number, status: string, adminNotes?: string): Promise<PropertyOffer>;
+
+  // Swipe Notifications
+  createSwipeNotification(notification: InsertSwipeNotification): Promise<SwipeNotification>;
+  getSwipeNotificationsForUser(userId: string): Promise<(SwipeNotification & { property: Property; buyer: any })[]>;
+  getAdminSwipeNotifications(): Promise<(SwipeNotification & { property: Property; buyer: any })[]>;
+  updateSwipeNotificationStatus(id: number, status: string, offerId?: number): Promise<SwipeNotification>;
+  getExistingSwipeNotification(buyerUserId: string, propertyId: number): Promise<SwipeNotification | undefined>;
 
   // Valuation
   getValuation(beds: number, sqft: number, lat?: number, lng?: number): Promise<{
@@ -714,6 +734,92 @@ export class DatabaseStorage implements IStorage {
     if (adminNotes !== undefined) updates.adminNotes = adminNotes;
     const [updated] = await db.update(sellerPitches).set(updates).where(eq(sellerPitches.id, id)).returning();
     return updated;
+  }
+
+  async createPropertyOffer(offer: InsertPropertyOffer): Promise<PropertyOffer> {
+    const [created] = await db.insert(propertyOffers).values(offer).returning();
+    return created;
+  }
+
+  async getPropertyOffersForProperty(propertyId: number): Promise<(PropertyOffer & { property: Property; buyer: any })[]> {
+    const rows = await db
+      .select({ offer: propertyOffers, property: properties, buyer: users })
+      .from(propertyOffers)
+      .innerJoin(properties, eq(propertyOffers.propertyId, properties.id))
+      .leftJoin(users, eq(propertyOffers.buyerUserId, users.id))
+      .where(eq(propertyOffers.propertyId, propertyId))
+      .orderBy(desc(propertyOffers.createdAt));
+    return rows.map(r => ({ ...r.offer, property: r.property, buyer: r.buyer }));
+  }
+
+  async getPropertyOffersForBuyer(userId: string): Promise<(PropertyOffer & { property: Property })[]> {
+    const rows = await db
+      .select({ offer: propertyOffers, property: properties })
+      .from(propertyOffers)
+      .innerJoin(properties, eq(propertyOffers.propertyId, properties.id))
+      .where(eq(propertyOffers.buyerUserId, userId))
+      .orderBy(desc(propertyOffers.createdAt));
+    return rows.map(r => ({ ...r.offer, property: r.property }));
+  }
+
+  async getPropertyOffersForAgent(agentId: string): Promise<(PropertyOffer & { property: Property; buyer: any })[]> {
+    const rows = await db
+      .select({ offer: propertyOffers, property: properties, buyer: users })
+      .from(propertyOffers)
+      .innerJoin(properties, eq(propertyOffers.propertyId, properties.id))
+      .leftJoin(users, eq(propertyOffers.buyerUserId, users.id))
+      .where(sql`${propertyOffers.listingAgentId} = ${agentId} OR ${propertyOffers.buyerAgentId} = ${agentId}`)
+      .orderBy(desc(propertyOffers.createdAt));
+    return rows.map(r => ({ ...r.offer, property: r.property, buyer: r.buyer }));
+  }
+
+  async updatePropertyOfferStatus(id: number, status: string, adminNotes?: string): Promise<PropertyOffer> {
+    const updates: any = { status, updatedAt: new Date() };
+    if (adminNotes !== undefined) updates.adminNotes = adminNotes;
+    const [updated] = await db.update(propertyOffers).set(updates).where(eq(propertyOffers.id, id)).returning();
+    return updated;
+  }
+
+  async createSwipeNotification(notification: InsertSwipeNotification): Promise<SwipeNotification> {
+    const [created] = await db.insert(swipeNotifications).values(notification).returning();
+    return created;
+  }
+
+  async getSwipeNotificationsForUser(userId: string): Promise<(SwipeNotification & { property: Property; buyer: any })[]> {
+    const rows = await db
+      .select({ notification: swipeNotifications, property: properties, buyer: users })
+      .from(swipeNotifications)
+      .innerJoin(properties, eq(swipeNotifications.propertyId, properties.id))
+      .leftJoin(users, eq(swipeNotifications.buyerUserId, users.id))
+      .where(eq(swipeNotifications.notifiedUserId, userId))
+      .orderBy(desc(swipeNotifications.createdAt));
+    return rows.map(r => ({ ...r.notification, property: r.property, buyer: r.buyer }));
+  }
+
+  async getAdminSwipeNotifications(): Promise<(SwipeNotification & { property: Property; buyer: any })[]> {
+    const rows = await db
+      .select({ notification: swipeNotifications, property: properties, buyer: users })
+      .from(swipeNotifications)
+      .innerJoin(properties, eq(swipeNotifications.propertyId, properties.id))
+      .leftJoin(users, eq(swipeNotifications.buyerUserId, users.id))
+      .orderBy(desc(swipeNotifications.createdAt));
+    return rows.map(r => ({ ...r.notification, property: r.property, buyer: r.buyer }));
+  }
+
+  async updateSwipeNotificationStatus(id: number, status: string, offerId?: number): Promise<SwipeNotification> {
+    const updates: any = { status };
+    if (offerId !== undefined) updates.offerId = offerId;
+    const [updated] = await db.update(swipeNotifications).set(updates).where(eq(swipeNotifications.id, id)).returning();
+    return updated;
+  }
+
+  async getExistingSwipeNotification(buyerUserId: string, propertyId: number): Promise<SwipeNotification | undefined> {
+    const rows = await db
+      .select()
+      .from(swipeNotifications)
+      .where(and(eq(swipeNotifications.buyerUserId, buyerUserId), eq(swipeNotifications.propertyId, propertyId)))
+      .limit(1);
+    return rows[0];
   }
 }
 

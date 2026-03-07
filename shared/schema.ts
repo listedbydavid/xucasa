@@ -282,6 +282,66 @@ export const sellerPitchesRelations = relations(sellerPitches, ({ one }) => ({
   user: one(users, { fields: [sellerPitches.userId], references: [users.id] }),
 }));
 
+export const propertyOffers = pgTable("property_offers", {
+  id: serial("id").primaryKey(),
+  propertyId: integer("property_id").references(() => properties.id).notNull(),
+  buyerUserId: varchar("buyer_user_id").references(() => users.id).notNull(),
+  buyerProfileId: integer("buyer_profile_id").references(() => buyerProfiles.id),
+  sellerUserId: varchar("seller_user_id").references(() => users.id),
+  listingAgentId: varchar("listing_agent_id").references(() => users.id),
+  buyerAgentId: varchar("buyer_agent_id").references(() => users.id),
+  offerPrice: integer("offer_price"),
+  escrowLengthDays: integer("escrow_length_days"),
+  inspectionContingencyDays: integer("inspection_contingency_days"),
+  loanContingencyDays: integer("loan_contingency_days"),
+  appraisalContingencyDays: integer("appraisal_contingency_days"),
+  insuranceContingencyDays: integer("insurance_contingency_days"),
+  disclosureReviewDays: integer("disclosure_review_days"),
+  leasedLienedItemsDays: integer("leased_liened_items_days"),
+  sellerConcessions: integer("seller_concessions"),
+  sellerConcessionNotes: text("seller_concession_notes"),
+  buydownOffered: boolean("buydown_offered").default(false),
+  buydownType: text("buydown_type"),
+  buydownAmount: integer("buydown_amount"),
+  additionalTerms: text("additional_terms"),
+  status: text("status").default("pending_agent_review").notNull(),
+  adminNotes: text("admin_notes"),
+  triggeredBySwipe: boolean("triggered_by_swipe").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const propertyOffersRelations = relations(propertyOffers, ({ one }) => ({
+  property: one(properties, { fields: [propertyOffers.propertyId], references: [properties.id] }),
+  buyer: one(users, { fields: [propertyOffers.buyerUserId], references: [users.id] }),
+  buyerProfile: one(buyerProfiles, { fields: [propertyOffers.buyerProfileId], references: [buyerProfiles.id] }),
+  listingAgent: one(users, { fields: [propertyOffers.listingAgentId], references: [users.id] }),
+  buyerAgent: one(users, { fields: [propertyOffers.buyerAgentId], references: [users.id] }),
+}));
+
+export const swipeNotifications = pgTable("swipe_notifications", {
+  id: serial("id").primaryKey(),
+  buyerUserId: varchar("buyer_user_id").references(() => users.id).notNull(),
+  propertyId: integer("property_id").references(() => properties.id).notNull(),
+  notifiedParty: text("notified_party").notNull(),
+  notifiedUserId: varchar("notified_user_id").references(() => users.id),
+  notifiedEmail: text("notified_email"),
+  buyerRepresented: boolean("buyer_represented").default(false),
+  sellerRepresented: boolean("seller_represented").default(false),
+  buyerAgentEmail: text("buyer_agent_email"),
+  listingAgentEmail: text("listing_agent_email"),
+  offerId: integer("offer_id").references(() => propertyOffers.id),
+  status: text("status").default("notified").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const swipeNotificationsRelations = relations(swipeNotifications, ({ one }) => ({
+  buyer: one(users, { fields: [swipeNotifications.buyerUserId], references: [users.id] }),
+  property: one(properties, { fields: [swipeNotifications.propertyId], references: [properties.id] }),
+  notifiedUser: one(users, { fields: [swipeNotifications.notifiedUserId], references: [users.id] }),
+  offer: one(propertyOffers, { fields: [swipeNotifications.offerId], references: [propertyOffers.id] }),
+}));
+
 // Insert Schemas
 export const insertPropertySchema = createInsertSchema(properties).omit({ id: true, createdAt: true });
 export const insertSellLeadSchema = createInsertSchema(sellLeads).omit({ id: true, createdAt: true });
@@ -294,6 +354,8 @@ export const insertSavedSearchSchema = createInsertSchema(savedSearches).omit({ 
 export const insertSearchHistorySchema = createInsertSchema(searchHistory).omit({ id: true, createdAt: true });
 export const insertUserHomeSchema = createInsertSchema(userHomes).omit({ id: true, createdAt: true });
 export const insertClientAgentLinkSchema = createInsertSchema(clientAgentLinks).omit({ id: true, createdAt: true });
+export const insertPropertyOfferSchema = createInsertSchema(propertyOffers).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertSwipeNotificationSchema = createInsertSchema(swipeNotifications).omit({ id: true, createdAt: true });
 
 // Types
 export type Property = typeof properties.$inferSelect;
@@ -318,6 +380,10 @@ export type BuyerMatch = typeof buyerMatches.$inferSelect;
 export type InsertBuyerMatch = z.infer<typeof insertBuyerMatchSchema>;
 export type SellerPitch = typeof sellerPitches.$inferSelect;
 export type InsertSellerPitch = z.infer<typeof insertSellerPitchSchema>;
+export type PropertyOffer = typeof propertyOffers.$inferSelect;
+export type InsertPropertyOffer = z.infer<typeof insertPropertyOfferSchema>;
+export type SwipeNotification = typeof swipeNotifications.$inferSelect;
+export type InsertSwipeNotification = z.infer<typeof insertSwipeNotificationSchema>;
 
 // Request Types
 export type CreatePropertyRequest = InsertProperty;

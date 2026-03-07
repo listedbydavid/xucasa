@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useProperties } from "@/hooks/use-properties";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
 import { useAuth } from "@/hooks/use-auth";
+import { apiRequest } from "@/lib/queryClient";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import {
   Heart, X, RotateCcw, MapPin, BedDouble, Bath,
@@ -64,6 +65,7 @@ export default function Swipe() {
         return;
       }
       if (!isSaved) toggleSave({ propertyId: current.id, isSaved: false });
+      apiRequest("POST", "/api/swipe-interest", { propertyId: current.id }).catch(() => {});
       flashAction("liked");
     } else {
       flashAction("passed");

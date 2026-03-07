@@ -3,7 +3,7 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { db } from "./db";
-import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks } from "@shared/schema";
+import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications } from "@shared/schema";
 import { eq, desc, sql, or } from "drizzle-orm";
 import { api } from "@shared/routes";
 import { z } from "zod";
@@ -1020,6 +1020,254 @@ export async function registerRoutes(
     }
   });
 
+  // ── Swipe Interest & Reverse Offers ──────────────────────────────────────
+
+  app.post("/api/swipe-interest", isAuthenticated, async (req: any, res) => {
+    try {
+      const buyerUserId = req.user.claims.sub;
+      const { propertyId } = req.body;
+      if (!propertyId) return res.status(400).json({ message: "propertyId required" });
+
+      const existing = await storage.getExistingSwipeNotification(buyerUserId, propertyId);
+      if (existing) return res.status(200).json({ message: "Already notified", notification: existing });
+
+      const prop = await storage.getProperty(propertyId);
+      if (!prop) return res.status(404).json({ message: "Property not found" });
+
+      const buyerProfile = await storage.getUserBuyerProfile(buyerUserId);
+      const buyerLink = await storage.getClientAgentLink(buyerUserId);
+
+      const buyerRepresented = !!(
+        (buyerProfile && (buyerProfile.agentId || buyerProfile.buyerAgentEmail)) ||
+        (buyerLink && buyerLink.agentId)
+      );
+      const buyerAgentEmail = buyerProfile?.buyerAgentEmail || buyerLink?.agentEmail || null;
+
+      const sellerRepresented = !!(prop.agentId || prop.listingAgentEmail);
+      const listingAgentEmail = prop.listingAgentEmail || null;
+
+      const adminEmail = process.env.ADMIN_EMAIL || "";
+      const adminUser = adminEmail
+        ? await db.select().from(users).where(eq(users.email, adminEmail)).limit(1).then(r => r[0])
+        : null;
+
+      const notifications: any[] = [];
+
+      if (sellerRepresented) {
+        if (prop.agentId) {
+          notifications.push({
+            buyerUserId,
+            propertyId,
+            notifiedParty: "listing_agent",
+            notifiedUserId: prop.agentId,
+            notifiedEmail: prop.listingAgentEmail || "",
+            buyerRepresented,
+            sellerRepresented: true,
+            buyerAgentEmail,
+            listingAgentEmail,
+            status: "notified",
+          });
+        } else if (prop.listingAgentEmail) {
+          notifications.push({
+            buyerUserId,
+            propertyId,
+            notifiedParty: "listing_agent",
+            notifiedUserId: null,
+            notifiedEmail: prop.listingAgentEmail,
+            buyerRepresented,
+            sellerRepresented: true,
+            buyerAgentEmail,
+            listingAgentEmail,
+            status: "notified",
+          });
+        }
+      } else {
+        notifications.push({
+          buyerUserId,
+          propertyId,
+          notifiedParty: "admin",
+          notifiedUserId: adminUser?.id || null,
+          notifiedEmail: adminEmail,
+          buyerRepresented,
+          sellerRepresented: false,
+          buyerAgentEmail,
+          listingAgentEmail: null,
+          status: "notified",
+        });
+      }
+
+      if (!buyerRepresented) {
+        const alreadyHasAdminNotif = notifications.some(n => n.notifiedParty === "admin");
+        if (!alreadyHasAdminNotif) {
+          notifications.push({
+            buyerUserId,
+            propertyId,
+            notifiedParty: "admin",
+            notifiedUserId: adminUser?.id || null,
+            notifiedEmail: adminEmail,
+            buyerRepresented: false,
+            sellerRepresented,
+            buyerAgentEmail: null,
+            listingAgentEmail,
+            status: "notified",
+          });
+        } else {
+          const adminNotif = notifications.find(n => n.notifiedParty === "admin");
+          if (adminNotif) adminNotif.buyerRepresented = false;
+        }
+      }
+
+      const created = [];
+      for (const notif of notifications) {
+        const n = await storage.createSwipeNotification(notif);
+        created.push(n);
+      }
+
+      res.status(201).json({
+        message: "Interest registered",
+        notifications: created,
+        buyerRepresented,
+        sellerRepresented,
+      });
+    } catch (err) {
+      console.error("Swipe interest error:", err);
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.post("/api/property-offers", isAuthenticated, async (req: any, res) => {
+    try {
+      const creatorId = req.user.claims.sub;
+      const {
+        propertyId, buyerUserId, offerPrice, escrowLengthDays,
+        inspectionContingencyDays, loanContingencyDays, appraisalContingencyDays,
+        insuranceContingencyDays, disclosureReviewDays, leasedLienedItemsDays,
+        sellerConcessions, sellerConcessionNotes,
+        buydownOffered, buydownType, buydownAmount,
+        additionalTerms, swipeNotificationId,
+      } = req.body;
+
+      if (!propertyId || !buyerUserId) {
+        return res.status(400).json({ message: "propertyId and buyerUserId required" });
+      }
+
+      const prop = await storage.getProperty(propertyId);
+      if (!prop) return res.status(404).json({ message: "Property not found" });
+
+      const creator = await storage.getUser(creatorId);
+      const isAdmin = creator?.email === process.env.ADMIN_EMAIL;
+      const isListingAgent = prop.agentId === creatorId;
+      if (!isListingAgent && !isAdmin) {
+        return res.status(403).json({ message: "Only the listing agent or admin can create reverse offers" });
+      }
+
+      const buyerProfile = await storage.getUserBuyerProfile(buyerUserId);
+      const buyerLink = await storage.getClientAgentLink(buyerUserId);
+      const buyerAgentId = buyerProfile?.agentId || buyerLink?.agentId || null;
+
+      const offer = await storage.createPropertyOffer({
+        propertyId,
+        buyerUserId,
+        buyerProfileId: buyerProfile?.id || null,
+        sellerUserId: prop.agentId || null,
+        listingAgentId: prop.agentId || null,
+        buyerAgentId,
+        offerPrice: offerPrice || prop.price,
+        escrowLengthDays: escrowLengthDays || 30,
+        inspectionContingencyDays: inspectionContingencyDays ?? 17,
+        loanContingencyDays: loanContingencyDays ?? 21,
+        appraisalContingencyDays: appraisalContingencyDays ?? 17,
+        insuranceContingencyDays: insuranceContingencyDays ?? 5,
+        disclosureReviewDays: disclosureReviewDays ?? 7,
+        leasedLienedItemsDays: leasedLienedItemsDays ?? 5,
+        sellerConcessions: sellerConcessions || 0,
+        sellerConcessionNotes: sellerConcessionNotes || null,
+        buydownOffered: buydownOffered || false,
+        buydownType: buydownType || null,
+        buydownAmount: buydownAmount || null,
+        additionalTerms: additionalTerms || null,
+        status: "sent_to_buyer",
+        triggeredBySwipe: !!swipeNotificationId,
+      });
+
+      if (swipeNotificationId) {
+        await storage.updateSwipeNotificationStatus(swipeNotificationId, "offer_created", offer.id);
+      }
+
+      res.status(201).json(offer);
+    } catch (err) {
+      console.error("Create property offer error:", err);
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.get("/api/property-offers/incoming", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const offers = await storage.getPropertyOffersForBuyer(userId);
+      res.json(offers);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.get("/api/property-offers/agent", isAuthenticated, async (req: any, res) => {
+    try {
+      const agentId = req.user.claims.sub;
+      const offers = await storage.getPropertyOffersForAgent(agentId);
+      res.json(offers);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.get("/api/swipe-notifications/agent", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const notifications = await storage.getSwipeNotificationsForUser(userId);
+      res.json(notifications);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.patch("/api/property-offers/:id/status", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      const { status, adminNotes } = req.body;
+      if (!status) return res.status(400).json({ message: "status required" });
+
+      const validStatuses = ["pending_agent_review", "sent_to_buyer", "viewed", "accepted", "rejected", "expired", "pending_admin"];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      const isAdmin = user?.email === process.env.ADMIN_EMAIL;
+
+      const offers = await db.select().from(propertyOffers).where(eq(propertyOffers.id, id));
+      const offer = offers[0];
+      if (!offer) return res.status(404).json({ message: "Offer not found" });
+
+      const buyerStatuses = ["accepted", "rejected", "viewed"];
+      const agentStatuses = ["sent_to_buyer", "pending_agent_review", "expired"];
+
+      if (buyerStatuses.includes(status) && offer.buyerUserId !== userId && !isAdmin) {
+        return res.status(403).json({ message: "Only the buyer can accept or reject an offer" });
+      }
+      if (agentStatuses.includes(status) && offer.listingAgentId !== userId && !isAdmin) {
+        return res.status(403).json({ message: "Only the listing agent or admin can update this status" });
+      }
+
+      const updated = await storage.updatePropertyOfferStatus(id, status, adminNotes);
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
   // ── Seller Pitches ─────────────────────────────────────────────────────────
 
   const isAdmin = async (req: any, res: any, next: any) => {
@@ -1106,6 +1354,29 @@ export async function registerRoutes(
         totalBuyerProfiles: profiles.length,
         totalProperties,
       });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/swipe-notifications", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const notifications = await storage.getAdminSwipeNotifications();
+      res.json(notifications);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/property-offers", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const rows = await db
+        .select({ offer: propertyOffers, property: properties, buyer: users })
+        .from(propertyOffers)
+        .innerJoin(properties, eq(propertyOffers.propertyId, properties.id))
+        .leftJoin(users, eq(propertyOffers.buyerUserId, users.id))
+        .orderBy(desc(propertyOffers.createdAt));
+      res.json(rows.map(r => ({ ...r.offer, property: r.property, buyer: r.buyer })));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

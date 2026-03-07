@@ -1,7 +1,8 @@
 import { useState, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
-import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar } from "lucide-react";
+import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar, Send, Eye } from "lucide-react";
+import { ReverseOfferForm } from "@/components/ReverseOfferForm";
 import { IdxSyncPanel } from "@/components/IdxSyncPanel";
 import type { PropertyResponse, CreatePropertyRequest } from "@shared/schema";
 import { Autocomplete } from "@react-google-maps/api";
@@ -13,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { BeaconTab } from "@/components/BeaconReport";
 import { OpenHouseRoutePlanner } from "@/components/OpenHouseRoutePlanner";
 
-type AgentTab = "listings" | "clients" | "openhouses" | "beacon" | "idx";
+type AgentTab = "listings" | "clients" | "openhouses" | "beacon" | "idx" | "buyerinterest";
 
 const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
@@ -87,6 +88,7 @@ export default function AgentDashboard() {
             { id: "clients",    label: "Clients",       icon: Users },
             { id: "openhouses", label: "Open Houses",   icon: CalendarDays },
             { id: "beacon",     label: "Beacon",        icon: Radar },
+            { id: "buyerinterest", label: "Buyer Interest", icon: Heart },
             { id: "idx",        label: "MLS Sync",      icon: Search },
           ] as { id: AgentTab; label: string; icon: any }[]).map(({ id, label, icon: Icon }) => (
             <button
@@ -184,6 +186,8 @@ export default function AgentDashboard() {
         {/* MLS / IDX Sync Tab */}
         {activeTab === "beacon" && <BeaconTab />}
 
+        {activeTab === "buyerinterest" && <BuyerInterestSection />}
+
         {activeTab === "idx" && (
           <div>
             <IdxSyncPanel />
@@ -203,6 +207,162 @@ export default function AgentDashboard() {
             }
           }}
           isPending={isCreating || isUpdating}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Buyer Interest Section ────────────────────────────────────────────────────
+
+function BuyerInterestSection() {
+  const { data: notifications = [], isLoading: notifLoading } = useQuery<any[]>({
+    queryKey: ["/api/swipe-notifications/agent"],
+  });
+  const { data: offers = [] } = useQuery<any[]>({
+    queryKey: ["/api/property-offers/agent"],
+  });
+
+  const [selectedNotification, setSelectedNotification] = useState<any | null>(null);
+
+  const getNotificationStatus = (notif: any) => {
+    const hasOffer = offers.some(
+      (o: any) => o.propertyId === notif.propertyId && o.buyerUserId === notif.buyerUserId
+    );
+    return hasOffer ? "offer_created" : notif.status || "notified";
+  };
+
+  return (
+    <div className="space-y-4" data-testid="section-buyer-interest">
+      <div className="flex items-center gap-3 pb-4 border-b border-border">
+        <div>
+          <h2 className="text-xl font-display font-bold text-foreground">Buyer Interest</h2>
+          <p className="text-sm text-muted-foreground">Buyers who swiped right on your listings</p>
+        </div>
+      </div>
+
+      {notifLoading ? (
+        <div className="space-y-4">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-24 bg-muted animate-pulse rounded-2xl" />
+          ))}
+        </div>
+      ) : notifications.length === 0 ? (
+        <div className="text-center py-16 bg-card border border-border rounded-3xl">
+          <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+            <Heart className="w-7 h-7 text-muted-foreground opacity-40" />
+          </div>
+          <h3 className="font-display font-bold text-xl mb-2" data-testid="text-no-interest">No buyer interest yet</h3>
+          <p className="text-muted-foreground text-sm max-w-sm mx-auto">
+            When buyers swipe right on your listings, notifications will appear here so you can send reverse offers.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {notifications.map((notif: any) => {
+            const status = getNotificationStatus(notif);
+            const property = notif.property;
+            const buyer = notif.buyer;
+
+            return (
+              <div
+                key={notif.id}
+                className="bg-card border border-border rounded-2xl p-5 shadow-sm"
+                data-testid={`card-buyer-interest-${notif.id}`}
+              >
+                <div className="flex items-start gap-4">
+                  <div className="w-20 h-20 rounded-xl bg-muted overflow-hidden flex-shrink-0">
+                    {property?.imageUrl ? (
+                      <img
+                        src={property.imageUrl}
+                        alt={property.title}
+                        className="w-full h-full object-cover"
+                        data-testid={`img-property-${notif.id}`}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <ImageOff className="w-5 h-5 text-muted-foreground/40" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div>
+                        <h3 className="font-bold text-foreground text-base" data-testid={`text-property-title-${notif.id}`}>
+                          {property?.title || "Property"}
+                        </h3>
+                        <p className="text-sm font-semibold text-foreground" data-testid={`text-property-price-${notif.id}`}>
+                          ${property?.price?.toLocaleString()}
+                        </p>
+                        <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
+                          {property?.beds != null && <span>{property.beds} beds</span>}
+                          {property?.baths != null && <span>{property.baths} baths</span>}
+                          {property?.sqft != null && <span>{property.sqft.toLocaleString()} sqft</span>}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {status === "offer_created" ? (
+                          <span
+                            className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-bold"
+                            data-testid={`badge-status-${notif.id}`}
+                          >
+                            Offer Sent
+                          </span>
+                        ) : (
+                          <span
+                            className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-bold"
+                            data-testid={`badge-status-${notif.id}`}
+                          >
+                            Notified
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Eye className="w-4 h-4" />
+                        <span data-testid={`text-buyer-name-${notif.id}`}>
+                          Interested Buyer{buyer?.firstName ? ` — ${buyer.firstName}` : ""}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-muted-foreground" data-testid={`text-date-${notif.id}`}>
+                          {new Date(notif.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        </span>
+                        {status !== "offer_created" && (
+                          <button
+                            onClick={() => setSelectedNotification(notif)}
+                            className="flex items-center gap-1.5 bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-semibold transition-all active:scale-95 shadow-sm"
+                            data-testid={`button-send-offer-${notif.id}`}
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            Send Reverse Offer
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {selectedNotification && (
+        <ReverseOfferForm
+          propertyId={selectedNotification.propertyId}
+          buyerUserId={selectedNotification.buyerUserId}
+          propertyPrice={selectedNotification.property?.price || 0}
+          propertyTitle={selectedNotification.property?.title || "Property"}
+          swipeNotificationId={selectedNotification.id}
+          buyerName={selectedNotification.buyer?.firstName}
+          onClose={() => setSelectedNotification(null)}
+          onSuccess={() => setSelectedNotification(null)}
         />
       )}
     </div>

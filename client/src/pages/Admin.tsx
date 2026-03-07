@@ -11,6 +11,7 @@ import {
   MessageSquare, Image, FileText, Search, Layers, Briefcase,
   User, ExternalLink, UserCog, Ban, Trash2, Edit3, Save,
   Activity, Crown, ShieldCheck, UserX, MoreVertical,
+  Handshake, AlertTriangle,
 } from "lucide-react";
 
 
@@ -611,7 +612,7 @@ function UsersTab({ users, isLoading, currentUserId, onUpdateUser, onDeleteUser,
 export default function Admin() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals" | "buyers" | "users">("overview");
+  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals" | "buyers" | "users" | "representation">("overview");
 
   const isAdminUser = isAuthenticated && (user as any)?.isAdmin;
 
@@ -647,6 +648,16 @@ export default function Admin() {
 
   const { data: allUsers, isLoading: usersLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/users"],
+    enabled: isAdminUser,
+  });
+
+  const { data: swipeNotifications, isLoading: swipeNotificationsLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/swipe-notifications"],
+    enabled: isAdminUser,
+  });
+
+  const { data: propertyOffers, isLoading: propertyOffersLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/property-offers"],
     enabled: isAdminUser,
   });
 
@@ -799,7 +810,7 @@ export default function Admin() {
         </div>
 
         <div className="flex gap-1 mb-6 bg-muted/30 rounded-xl p-1 overflow-x-auto" data-testid="section-admin-tabs">
-          {(["overview", "users", "pitches", "leads", "buyers", "referrals"] as const).map(tab => (
+          {(["overview", "users", "pitches", "leads", "buyers", "referrals", "representation"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -813,7 +824,8 @@ export default function Admin() {
                 : tab === "pitches" ? `Pitches (${pitches?.length || 0})`
                 : tab === "leads" ? `Leads (${sellLeads?.length || 0})`
                 : tab === "buyers" ? `Buyers (${allBuyerProfiles?.length || 0})`
-                : `Referrals (${(referrals?.length || 0) + (sellerReferrals?.length || 0)})`}
+                : tab === "referrals" ? `Referrals (${(referrals?.length || 0) + (sellerReferrals?.length || 0)})`
+                : `Representation (${swipeNotifications?.length || 0})`}
             </button>
           ))}
         </div>
@@ -1162,6 +1174,164 @@ export default function Admin() {
             isDeleting={deleteUserMutation.isPending}
           />
         )}
+
+        {activeTab === "representation" && (() => {
+          const notifications = swipeNotifications || [];
+          const offers = propertyOffers || [];
+          const unrepBuyers = notifications.filter((n: any) => n.buyerRepresented === false).length;
+          const unrepSellers = notifications.filter((n: any) => n.sellerRepresented === false).length;
+          const totalOffers = offers.length;
+          const sorted = [...notifications].sort((a: any, b: any) => {
+            const aUnrep = (a.buyerRepresented === false || a.sellerRepresented === false) ? 1 : 0;
+            const bUnrep = (b.buyerRepresented === false || b.sellerRepresented === false) ? 1 : 0;
+            if (bUnrep !== aUnrep) return bUnrep - aUnrep;
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          });
+
+          const notifStatusColors: Record<string, string> = {
+            notified: "bg-blue-100 text-blue-800 border-blue-200",
+            offer_created: "bg-green-100 text-green-800 border-green-200",
+            dismissed: "bg-gray-100 text-gray-700 border-gray-200",
+          };
+
+          return (
+            <div className="space-y-6" data-testid="section-representation">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-testid="section-representation-stats">
+                <div className="bg-white rounded-xl border p-4 text-center">
+                  <div className="text-2xl font-bold text-foreground" data-testid="stat-total-signals">{notifications.length}</div>
+                  <div className="text-xs text-muted-foreground">Total Interest Signals</div>
+                </div>
+                <div className="bg-white rounded-xl border p-4 text-center">
+                  <div className="text-2xl font-bold text-amber-600" data-testid="stat-unrep-buyers">{unrepBuyers}</div>
+                  <div className="text-xs text-muted-foreground">Unrepresented Buyers</div>
+                </div>
+                <div className="bg-white rounded-xl border p-4 text-center">
+                  <div className="text-2xl font-bold text-orange-600" data-testid="stat-unrep-sellers">{unrepSellers}</div>
+                  <div className="text-xs text-muted-foreground">Unrepresented Sellers</div>
+                </div>
+                <div className="bg-white rounded-xl border p-4 text-center">
+                  <div className="text-2xl font-bold text-green-600" data-testid="stat-total-offers">{totalOffers}</div>
+                  <div className="text-xs text-muted-foreground">Total Offers Created</div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Handshake className="w-4 h-4 text-primary" />
+                  Representation Opportunities
+                </h3>
+                {swipeNotificationsLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map(i => (
+                      <div key={i} className="bg-white rounded-xl border p-5 animate-pulse">
+                        <div className="h-4 bg-muted rounded w-1/3 mb-2" />
+                        <div className="h-3 bg-muted rounded w-1/2" />
+                      </div>
+                    ))}
+                  </div>
+                ) : sorted.length > 0 ? (
+                  <div className="space-y-3">
+                    {sorted.map((n: any) => (
+                      <div key={n.id} className="bg-white rounded-xl border border-border/60 shadow-sm p-5" data-testid={`card-swipe-notification-${n.id}`}>
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <h4 className="font-semibold text-foreground" data-testid={`text-notification-property-${n.id}`}>
+                                {n.property?.title || `Property #${n.propertyId}`}
+                              </h4>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${notifStatusColors[n.status] || "bg-gray-100 text-gray-700 border-gray-200"}`} data-testid={`badge-notification-status-${n.id}`}>
+                                {n.status === "offer_created" ? "Offer Created" : n.status?.charAt(0).toUpperCase() + n.status?.slice(1)}
+                              </span>
+                            </div>
+                            {n.property?.location && (
+                              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                <MapPin className="w-3.5 h-3.5" /> {n.property.location}
+                              </div>
+                            )}
+                          </div>
+                          {n.property?.price && (
+                            <div className="text-right">
+                              <div className="text-lg font-bold text-primary" data-testid={`text-notification-price-${n.id}`}>{fmt(n.property.price)}</div>
+                              <span className="text-xs text-muted-foreground">listing price</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {n.buyerRepresented === false && (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200" data-testid={`badge-buyer-needs-rep-${n.id}`}>
+                              <AlertTriangle className="w-3 h-3 inline mr-1" />
+                              Buyer needs representation
+                            </span>
+                          )}
+                          {n.sellerRepresented === false && (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 border border-orange-200" data-testid={`badge-seller-needs-rep-${n.id}`}>
+                              <AlertTriangle className="w-3 h-3 inline mr-1" />
+                              Seller needs representation
+                            </span>
+                          )}
+                          {n.buyerRepresented === true && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200" data-testid={`badge-buyer-represented-${n.id}`}>
+                              Buyer represented
+                            </span>
+                          )}
+                          {n.sellerRepresented === true && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200" data-testid={`badge-seller-represented-${n.id}`}>
+                              Seller represented
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="bg-muted/30 rounded-lg p-3 mb-3">
+                          <div className="text-xs font-medium text-muted-foreground mb-1.5">Buyer Contact</div>
+                          <div className="flex items-center gap-3 text-sm">
+                            <span className="font-medium text-foreground" data-testid={`text-buyer-name-${n.id}`}>
+                              {n.buyer?.firstName && n.buyer?.lastName
+                                ? `${n.buyer.firstName} ${n.buyer.lastName}`
+                                : n.buyer?.firstName || n.buyer?.email || "Unknown"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                            {n.buyer?.email && (
+                              <a href={`mailto:${n.buyer.email}`} className="flex items-center gap-1 hover:text-primary transition-colors" data-testid={`link-buyer-email-${n.id}`}>
+                                <Mail className="w-3 h-3" /> {n.buyer.email}
+                              </a>
+                            )}
+                            {n.buyer?.phone && (
+                              <span className="flex items-center gap-1" data-testid={`text-buyer-phone-${n.id}`}>
+                                <Phone className="w-3 h-3" /> {n.buyer.phone}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                          <span>{new Date(n.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                          {n.buyerAgentEmail && (
+                            <span className="flex items-center gap-1" data-testid={`text-buyer-agent-${n.id}`}>
+                              <Briefcase className="w-3 h-3" /> Buyer agent: {n.buyerAgentEmail}
+                            </span>
+                          )}
+                          {n.listingAgentEmail && (
+                            <span className="flex items-center gap-1" data-testid={`text-listing-agent-${n.id}`}>
+                              <Briefcase className="w-3 h-3" /> Listing agent: {n.listingAgentEmail}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl border p-12 text-center">
+                    <Handshake className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                    <h3 className="font-semibold mb-1">No interest signals yet</h3>
+                    <p className="text-sm text-muted-foreground">When buyers swipe right on properties, representation opportunities will appear here.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {activeTab === "referrals" && (
           <div className="space-y-6">

@@ -24,15 +24,18 @@ import {
   UserPlus, CalendarDays, Mail, CheckCircle2, AlertCircle,
   FolderPlus, FolderOpen, MoreHorizontal, Pencil, List,
   Briefcase, ShieldCheck, BadgeCheck,
+  FileText, DollarSign, ThumbsUp, ThumbsDown, Eye,
+  ArrowRightLeft, Shield, Banknote,
 } from "lucide-react";
 import { Autocomplete } from "@react-google-maps/api";
 import { useGoogleMaps } from "@/hooks/use-google-maps";
 import { OpenHouseRoutePlanner } from "@/components/OpenHouseRoutePlanner";
 import { BuyerProfileModal } from "@/components/BuyerProfileModal";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { BuyerProfile } from "@shared/schema";
 
-type Section = "profile" | "myhome" | "favorites" | "searches" | "history" | "agent" | "openhouses";
+type Section = "profile" | "myhome" | "favorites" | "searches" | "history" | "agent" | "openhouses" | "offers";
 
 export default function Dashboard() {
   const { user, isAuthenticated } = useAuth();
@@ -59,6 +62,7 @@ export default function Dashboard() {
     { id: "myhome",     label: "My Home",          icon: Home },
     { id: "favorites",  label: "Favorites",        icon: Heart },
     { id: "searches",   label: "Saved Searches",   icon: BookmarkCheck },
+    { id: "offers",     label: "Incoming Offers",  icon: FileText },
     { id: "agent",      label: "My Agent",         icon: UserPlus },
     { id: "openhouses", label: "Open Houses",      icon: CalendarDays },
     { id: "history",    label: "Search History",   icon: Clock },
@@ -127,6 +131,7 @@ export default function Dashboard() {
             {activeSection === "myhome"     && <MyHomeSection />}
             {activeSection === "favorites"  && <FavoritesSection />}
             {activeSection === "searches"   && <SavedSearchesSection />}
+            {activeSection === "offers"     && <IncomingOffersSection />}
             {activeSection === "agent"      && <MyAgentSection />}
             {activeSection === "openhouses" && <OpenHousesSection />}
             {activeSection === "history"    && <SearchHistorySection />}
@@ -1490,6 +1495,313 @@ function SavedSearchesSection() {
               >
                 View Results <ChevronRight className="w-4 h-4" />
               </Link>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Incoming Offers Section ────────────────────────────────────────────────────
+
+interface IncomingOffer {
+  id: number;
+  propertyId: number;
+  offerPrice: number;
+  escrowLengthDays: number;
+  inspectionContingencyDays: number;
+  loanContingencyDays: number;
+  appraisalContingencyDays: number;
+  insuranceContingencyDays: number;
+  disclosureReviewDays: number;
+  leasedLienedItemsDays: number;
+  sellerConcessions: number;
+  sellerConcessionNotes: string | null;
+  buydownOffered: boolean;
+  buydownType: string | null;
+  buydownAmount: number | null;
+  additionalTerms: string | null;
+  status: string;
+  createdAt: string;
+  property: {
+    id: number;
+    title: string;
+    price: number;
+    beds: number | null;
+    baths: number | null;
+    sqft: number | null;
+    imageUrl: string | null;
+    location: string | null;
+  };
+}
+
+function formatCurrency(val: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(val);
+}
+
+function offerStatusLabel(status: string): string {
+  const map: Record<string, string> = {
+    sent_to_buyer: "New",
+    viewed: "Viewed",
+    accepted: "Accepted",
+    rejected: "Declined",
+  };
+  return map[status] || status;
+}
+
+function offerStatusColor(status: string): string {
+  const map: Record<string, string> = {
+    sent_to_buyer: "bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400",
+    viewed: "bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400",
+    accepted: "bg-green-100 dark:bg-green-950/30 text-green-700 dark:text-green-400",
+    rejected: "bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-400",
+  };
+  return map[status] || "bg-muted text-muted-foreground";
+}
+
+function IncomingOffersSection() {
+  const { data: offers = [], isLoading } = useQuery<IncomingOffer[]>({
+    queryKey: ["/api/property-offers/incoming"],
+  });
+
+  const { data: buyerProfile } = useQuery<BuyerProfile | null>({
+    queryKey: ["/api/buyer-profiles/mine"],
+    queryFn: async () => {
+      const res = await fetch("/api/buyer-profiles/mine");
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error("Failed to fetch profile");
+      return res.json();
+    },
+  });
+
+  const { mutate: updateStatus, isPending: isUpdating } = useMutation({
+    mutationFn: async ({ offerId, status }: { offerId: number; status: string }) => {
+      await apiRequest("PATCH", `/api/property-offers/${offerId}/status`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/property-offers/incoming"] });
+    },
+  });
+
+  const needsReferral = buyerProfile?.needsAgentReferral === true || !buyerProfile?.hasAgent;
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        title="Incoming Offers"
+        subtitle="Reverse offers from listing agents on properties you've liked"
+      />
+
+      {needsReferral && (
+        <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6" data-testid="cta-agent-referral">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+              <Shield className="w-6 h-6" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-foreground text-lg" data-testid="text-referral-title">Get represented by xucasa to negotiate this offer</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Having an agent ensures you get the best terms and protections on any offer. Set up your buyer profile to get matched with a xucasa agent.
+              </p>
+              <Link
+                href="/buyers"
+                className="inline-flex items-center gap-2 mt-3 bg-primary text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-primary/90 transition-colors"
+                data-testid="link-setup-buyer-profile"
+              >
+                <UserPlus className="w-4 h-4" />
+                Set Up Buyer Profile
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="space-y-4" data-testid="skeleton-incoming-offers">
+          {[1, 2].map(i => (
+            <div key={i} className="bg-card border border-border rounded-2xl overflow-hidden animate-pulse">
+              <div className="flex flex-col sm:flex-row">
+                <div className="sm:w-48 h-40 sm:h-auto bg-muted flex-shrink-0" />
+                <div className="flex-1 p-5 space-y-3">
+                  <div className="h-5 bg-muted rounded-md w-48" />
+                  <div className="h-4 bg-muted rounded-md w-32" />
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="h-4 bg-muted rounded-md" />
+                    <div className="h-4 bg-muted rounded-md" />
+                    <div className="h-4 bg-muted rounded-md" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : offers.length === 0 ? (
+        <EmptyState
+          icon={FileText}
+          title="No offers yet"
+          description="Swipe right on properties you like to attract seller interest!"
+        >
+          <Link
+            href="/swipe"
+            className="bg-foreground text-background px-6 py-2.5 rounded-full font-bold hover:bg-primary hover:text-white transition-colors"
+            data-testid="link-go-swipe"
+          >
+            Start Swiping
+          </Link>
+        </EmptyState>
+      ) : (
+        <div className="space-y-4" data-testid="offers-list">
+          {offers.map(offer => (
+            <div
+              key={offer.id}
+              className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm"
+              data-testid={`card-offer-${offer.id}`}
+            >
+              <div className="flex flex-col sm:flex-row">
+                <div className="sm:w-48 h-40 sm:h-auto bg-muted flex-shrink-0 relative">
+                  {offer.property.imageUrl ? (
+                    <img
+                      src={offer.property.imageUrl}
+                      alt={offer.property.title}
+                      className="w-full h-full object-cover"
+                      data-testid={`img-offer-property-${offer.id}`}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Home className="w-10 h-10 text-muted-foreground/30" />
+                    </div>
+                  )}
+                  <span
+                    className={`absolute top-3 left-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${offerStatusColor(offer.status)}`}
+                    data-testid={`badge-offer-status-${offer.id}`}
+                  >
+                    {offerStatusLabel(offer.status)}
+                  </span>
+                </div>
+
+                <div className="flex-1 p-5 min-w-0">
+                  <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+                    <div>
+                      <h3 className="font-bold text-foreground text-lg" data-testid={`text-offer-title-${offer.id}`}>
+                        {offer.property.title}
+                      </h3>
+                      {offer.property.location && (
+                        <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5" data-testid={`text-offer-location-${offer.id}`}>
+                          <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                          {offer.property.location}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-lg font-bold text-primary" data-testid={`text-offer-price-${offer.id}`}>
+                        {formatCurrency(offer.offerPrice)}
+                      </p>
+                      <p className="text-xs text-muted-foreground" data-testid={`text-list-price-${offer.id}`}>
+                        List: {formatCurrency(offer.property.price)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {(offer.property.beds || offer.property.baths || offer.property.sqft) && (
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground mb-3" data-testid={`text-offer-specs-${offer.id}`}>
+                      {offer.property.beds != null && <span>{offer.property.beds} beds</span>}
+                      {offer.property.baths != null && <span>{offer.property.baths} baths</span>}
+                      {offer.property.sqft != null && <span>{offer.property.sqft.toLocaleString()} sqft</span>}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-sm border-t border-border pt-3 mb-3" data-testid={`grid-offer-terms-${offer.id}`}>
+                    <div>
+                      <span className="text-muted-foreground text-xs font-bold block">Escrow</span>
+                      <span className="text-foreground" data-testid={`text-escrow-${offer.id}`}>{offer.escrowLengthDays} days</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-xs font-bold block">Inspection</span>
+                      <span className="text-foreground" data-testid={`text-inspection-${offer.id}`}>{offer.inspectionContingencyDays} days</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-xs font-bold block">Loan</span>
+                      <span className="text-foreground" data-testid={`text-loan-${offer.id}`}>{offer.loanContingencyDays} days</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-xs font-bold block">Appraisal</span>
+                      <span className="text-foreground" data-testid={`text-appraisal-${offer.id}`}>{offer.appraisalContingencyDays} days</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-xs font-bold block">Insurance</span>
+                      <span className="text-foreground" data-testid={`text-insurance-${offer.id}`}>{offer.insuranceContingencyDays} days</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-xs font-bold block">Disclosure Review</span>
+                      <span className="text-foreground" data-testid={`text-disclosure-${offer.id}`}>{offer.disclosureReviewDays} days</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-xs font-bold block">Leased/Liened Items</span>
+                      <span className="text-foreground" data-testid={`text-leased-liened-${offer.id}`}>{offer.leasedLienedItemsDays} days</span>
+                    </div>
+                    {offer.sellerConcessions > 0 && (
+                      <div>
+                        <span className="text-muted-foreground text-xs font-bold block">Concessions</span>
+                        <span className="text-foreground" data-testid={`text-concessions-${offer.id}`}>{formatCurrency(offer.sellerConcessions)}</span>
+                      </div>
+                    )}
+                    {offer.buydownOffered && (
+                      <div>
+                        <span className="text-muted-foreground text-xs font-bold block">Buydown</span>
+                        <span className="text-foreground" data-testid={`text-buydown-${offer.id}`}>
+                          {offer.buydownType || "Yes"}{offer.buydownAmount ? ` — ${formatCurrency(offer.buydownAmount)}` : ""}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {offer.sellerConcessionNotes && (
+                    <p className="text-xs text-muted-foreground mb-2" data-testid={`text-concession-notes-${offer.id}`}>
+                      <span className="font-bold">Concession notes:</span> {offer.sellerConcessionNotes}
+                    </p>
+                  )}
+
+                  {offer.additionalTerms && (
+                    <p className="text-xs text-muted-foreground mb-3" data-testid={`text-additional-terms-${offer.id}`}>
+                      <span className="font-bold">Additional terms:</span> {offer.additionalTerms}
+                    </p>
+                  )}
+
+                  <div className="flex items-center gap-2 pt-2 border-t border-border flex-wrap">
+                    {(offer.status === "sent_to_buyer" || offer.status === "viewed") && (
+                      <>
+                        <button
+                          onClick={() => updateStatus({ offerId: offer.id, status: "accepted" })}
+                          disabled={isUpdating}
+                          className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-green-700 transition-colors disabled:opacity-50"
+                          data-testid={`button-accept-offer-${offer.id}`}
+                        >
+                          {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />}
+                          Interested
+                        </button>
+                        <button
+                          onClick={() => updateStatus({ offerId: offer.id, status: "rejected" })}
+                          disabled={isUpdating}
+                          className="flex items-center gap-2 bg-muted text-muted-foreground px-4 py-2 rounded-xl text-sm font-bold hover:bg-muted/80 transition-colors disabled:opacity-50"
+                          data-testid={`button-reject-offer-${offer.id}`}
+                        >
+                          {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsDown className="w-4 h-4" />}
+                          Not Interested
+                        </button>
+                      </>
+                    )}
+                    <Link
+                      href={`/property/${offer.propertyId}`}
+                      className="flex items-center gap-2 text-sm font-bold text-primary hover:bg-primary/10 px-4 py-2 rounded-xl transition-colors"
+                      data-testid={`link-view-property-${offer.id}`}
+                    >
+                      <Eye className="w-4 h-4" />
+                      View Property
+                    </Link>
+                  </div>
+                </div>
+              </div>
             </div>
           ))}
         </div>
