@@ -350,10 +350,10 @@ export default function Sell() {
     }
     submitMutation.mutate({
       ...form,
-      baths: String(form.baths),
+      baths: Number(form.baths),
       estimatedValue: valuation?.estimatedMid ?? null,
-      lat: form.lat ? String(form.lat) : null,
-      lng: form.lng ? String(form.lng) : null,
+      lat: form.lat ? Number(form.lat) : null,
+      lng: form.lng ? Number(form.lng) : null,
       needsToBuyNext: form.needsToBuyNext === "yes",
       hasAgent: form.hasAgent === "yes",
       sellerAgentName: form.hasAgent === "yes" ? form.sellerAgentName || null : null,

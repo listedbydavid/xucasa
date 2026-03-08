@@ -979,7 +979,7 @@ export async function registerRoutes(
         phone: z.string().max(30).optional(),
         address: z.string().max(500).optional(),
         beds: z.number().optional(),
-        baths: z.number().optional(),
+        baths: z.union([z.number(), z.string().transform(v => parseFloat(v))]).optional(),
         sqft: z.number().optional(),
         lotSize: z.number().optional(),
         yearBuilt: z.number().optional(),
@@ -992,8 +992,8 @@ export async function registerRoutes(
         hasAgent: z.boolean().optional(),
         sellerAgentEmail: z.string().email().max(200).optional().nullable(),
         listingType: z.string().max(50).optional(),
-        lat: z.number().optional().nullable(),
-        lng: z.number().optional().nullable(),
+        lat: z.union([z.number(), z.string().transform(v => parseFloat(v))]).optional().nullable(),
+        lng: z.union([z.number(), z.string().transform(v => parseFloat(v))]).optional().nullable(),
       });
       const parsed = sellLeadSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
