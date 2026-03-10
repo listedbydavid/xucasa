@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
-import { Home as HomeIcon, Mail, MapPin } from "lucide-react";
+import { Mail, MapPin } from "lucide-react";
 
 import { Navbar } from "@/components/layout/Navbar";
 import Home from "@/pages/Home";
@@ -58,9 +58,7 @@ function Footer() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
           <div className="col-span-2 md:col-span-1">
             <Link href="/" className="flex items-center gap-2 mb-4" data-testid="footer-logo">
-              <div className="bg-primary text-white p-1.5 rounded-md">
-                <HomeIcon className="w-4 h-4" aria-hidden="true" />
-              </div>
+              <img src="/icons/icon-192.png" alt="" className="w-7 h-7 rounded-md" aria-hidden="true" />
               <span className="font-display font-bold text-lg tracking-tight text-foreground">
                 xucasa
               </span>

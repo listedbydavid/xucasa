@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { Home, Search, User, LogOut, Briefcase, Layers, TrendingUp, Users, Shield, Menu, X, FileText, ChevronLeft } from "lucide-react";
+import { Search, User, LogOut, Briefcase, Layers, TrendingUp, Users, Shield, Menu, X, FileText, ChevronLeft } from "lucide-react";
 import { useState } from "react";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -58,9 +58,7 @@ export function Navbar() {
             <ChevronLeft className="w-5 h-5" aria-hidden="true" />
           </button>
           <Link href="/" className="flex items-center gap-2 group" aria-label="xucasa home">
-            <div className="bg-primary text-white p-1.5 rounded-lg group-hover:scale-105 transition-transform">
-              <Home className="w-5 h-5" aria-hidden="true" />
-            </div>
+            <img src="/icons/icon-192.png" alt="" className="w-8 h-8 rounded-lg group-hover:scale-105 transition-transform" aria-hidden="true" />
             <span className="font-display font-bold text-xl tracking-tight text-foreground">
               xucasa
             </span>
