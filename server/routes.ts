@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { db } from "./db";
 import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews } from "@shared/schema";
-import { eq, desc, sql, or } from "drizzle-orm";
+import { eq, desc, sql, or, and, ilike } from "drizzle-orm";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { registerAuthRoutes } from "./replit_integrations/auth";
@@ -371,6 +371,62 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Home report geocode error:", err);
       res.status(200).json({ lat: null, lng: null });
+    }
+  });
+
+  app.get("/api/property-lookup", async (req, res) => {
+    try {
+      const { streetNumber, streetName, city, state, zip } = req.query as Record<string, string>;
+      if (!streetName || !city) {
+        return res.status(200).json({ found: false });
+      }
+      const conditions = [
+        ilike(properties.addressCity, city.trim()),
+      ];
+      if (streetNumber) {
+        conditions.push(eq(properties.addressStreetNumber, streetNumber.trim()));
+      }
+      if (streetName) {
+        conditions.push(ilike(properties.addressStreetName, streetName.trim()));
+      }
+      if (state) {
+        conditions.push(eq(properties.addressState, state.trim()));
+      }
+      if (zip) {
+        conditions.push(eq(properties.addressZip, zip.trim()));
+      }
+      const [match] = await db.select({
+        beds: properties.beds,
+        baths: properties.baths,
+        sqft: properties.sqft,
+        lotSize: properties.lotSize,
+        propertyType: properties.propertyType,
+        hoaFee: properties.hoaFee,
+        id: properties.id,
+        title: properties.title,
+        price: properties.price,
+        imageUrl: properties.imageUrl,
+      }).from(properties).where(and(...conditions)).limit(1);
+      if (match) {
+        res.json({
+          found: true,
+          beds: match.beds,
+          baths: match.baths ? parseFloat(match.baths) : null,
+          sqft: match.sqft,
+          lotSize: match.lotSize,
+          propertyType: match.propertyType,
+          hoaFee: match.hoaFee,
+          id: match.id,
+          title: match.title,
+          price: match.price,
+          imageUrl: match.imageUrl,
+        });
+      } else {
+        res.json({ found: false });
+      }
+    } catch (err) {
+      console.error("Property lookup error:", err);
+      res.status(200).json({ found: false });
     }
   });
 

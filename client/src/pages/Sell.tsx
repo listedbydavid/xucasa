@@ -371,6 +371,8 @@ export default function Sell() {
   const [pitchPhotos, setPitchPhotos] = useState<string[]>([]);
   const [pitchDescription, setPitchDescription] = useState("");
   const [pitchPrice, setPitchPrice] = useState("");
+  const [autoFilled, setAutoFilled] = useState<{ found: boolean; title?: string } | null>(null);
+  const [lookingUp, setLookingUp] = useState(false);
 
   const pitchMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -465,7 +467,7 @@ export default function Sell() {
     setAutocompleteRef(ac);
   }, []);
 
-  const onPlaceChanged = useCallback(() => {
+  const onPlaceChanged = useCallback(async () => {
     if (!autocompleteRef) return;
     const place = autocompleteRef.getPlace();
     if (!place.geometry) return;
@@ -496,7 +498,53 @@ export default function Sell() {
       lat,
       lng,
     }));
-  }, [autocompleteRef]);
+
+    if (streetName && city) {
+      setLookingUp(true);
+      setAutoFilled(null);
+      try {
+        const params = new URLSearchParams();
+        if (streetNumber) params.set("streetNumber", streetNumber);
+        params.set("streetName", streetName);
+        params.set("city", city);
+        if (state) params.set("state", state);
+        if (zip) params.set("zip", zip);
+        const res = await fetch(`/api/property-lookup?${params}`);
+        const data = await res.json();
+        if (data.found) {
+          const homeTypeMap: Record<string, string> = {
+            "SFH": "single-family",
+            "Single Family Residential": "single-family",
+            "Condo": "condo",
+            "Condominium": "condo",
+            "Townhome": "townhouse",
+            "Townhouse": "townhouse",
+            "Multi-Family": "multi-family",
+            "Residential Income": "multi-family",
+            "Residential Lease": "single-family",
+            "Land": "land",
+          };
+          setForm(f => ({
+            ...f,
+            beds: data.beds ?? f.beds,
+            baths: data.baths ?? f.baths,
+            sqft: data.sqft ?? f.sqft,
+            lotSize: data.lotSize ?? f.lotSize,
+            hoaFee: data.hoaFee ?? f.hoaFee,
+            homeType: homeTypeMap[data.propertyType] || f.homeType,
+          }));
+          setAutoFilled({ found: true, title: data.title });
+          toast({ title: "Property found!", description: "We auto-filled your home details from MLS records. You can adjust them if needed." });
+        } else {
+          setAutoFilled({ found: false });
+        }
+      } catch {
+        setAutoFilled({ found: false });
+      } finally {
+        setLookingUp(false);
+      }
+    }
+  }, [autocompleteRef, toast]);
 
   const submitMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/sell-leads", data),
@@ -742,6 +790,25 @@ export default function Sell() {
                     The more details you provide, the more accurate your estimate.
                   </p>
                 </div>
+
+                {autoFilled?.found && (
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-3 flex items-start gap-2 animate-in slide-in-from-top-2" data-testid="banner-auto-filled">
+                    <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-green-800">Property details auto-filled from MLS records</p>
+                      <p className="text-xs text-green-700 mt-0.5">
+                        We found <span className="font-medium">{autoFilled.title}</span> in our database and pre-filled the details below. Feel free to adjust anything that needs updating.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {lookingUp && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-2 animate-in slide-in-from-top-2" data-testid="banner-looking-up">
+                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    <p className="text-sm text-blue-700">Looking up property records...</p>
+                  </div>
+                )}
 
                 {/* Beds / Baths */}
                 <div className="grid grid-cols-2 gap-4">
