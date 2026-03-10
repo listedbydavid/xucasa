@@ -13,6 +13,7 @@ import {
   favoriteLists,
   propertyOffers,
   swipeNotifications,
+  propertyReviews,
   type Property,
   type InsertProperty,
   type SavedProperty,
@@ -35,6 +36,8 @@ import {
   type InsertPropertyOffer,
   type SwipeNotification,
   type InsertSwipeNotification,
+  type PropertyReview,
+  type InsertPropertyReview,
   users,
 } from "@shared/schema";
 import { eq, and, desc, sql, gte, count } from "drizzle-orm";
@@ -138,6 +141,13 @@ export interface IStorage {
   getPropertyOffersForBuyer(userId: string): Promise<(PropertyOffer & { property: Property })[]>;
   getPropertyOffersForAgent(agentId: string): Promise<(PropertyOffer & { property: Property; buyer: any })[]>;
   updatePropertyOfferStatus(id: number, status: string, adminNotes?: string): Promise<PropertyOffer>;
+
+  // Property Reviews
+  createPropertyReview(review: InsertPropertyReview): Promise<PropertyReview>;
+  getPropertyReviews(propertyId: number): Promise<(PropertyReview & { user: any })[]>;
+  updateReviewVisibility(id: number, isPublic: boolean, moderatedBy: string): Promise<PropertyReview>;
+  deletePropertyReview(id: number): Promise<void>;
+  getUserReviewForProperty(userId: string, propertyId: number): Promise<PropertyReview | undefined>;
 
   // Swipe Notifications
   createSwipeNotification(notification: InsertSwipeNotification): Promise<SwipeNotification>;
@@ -818,6 +828,42 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(swipeNotifications)
       .where(and(eq(swipeNotifications.buyerUserId, buyerUserId), eq(swipeNotifications.propertyId, propertyId)))
+      .limit(1);
+    return rows[0];
+  }
+  async createPropertyReview(review: InsertPropertyReview): Promise<PropertyReview> {
+    const [newReview] = await db.insert(propertyReviews).values(review).returning();
+    return newReview;
+  }
+
+  async getPropertyReviews(propertyId: number): Promise<(PropertyReview & { user: any })[]> {
+    const rows = await db
+      .select({ review: propertyReviews, user: users })
+      .from(propertyReviews)
+      .leftJoin(users, eq(propertyReviews.userId, users.id))
+      .where(eq(propertyReviews.propertyId, propertyId))
+      .orderBy(desc(propertyReviews.createdAt));
+    return rows.map(r => ({ ...r.review, user: r.user }));
+  }
+
+  async updateReviewVisibility(id: number, isPublic: boolean, moderatedBy: string): Promise<PropertyReview> {
+    const [updated] = await db
+      .update(propertyReviews)
+      .set({ isPublic, moderatedBy })
+      .where(eq(propertyReviews.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deletePropertyReview(id: number): Promise<void> {
+    await db.delete(propertyReviews).where(eq(propertyReviews.id, id));
+  }
+
+  async getUserReviewForProperty(userId: string, propertyId: number): Promise<PropertyReview | undefined> {
+    const rows = await db
+      .select()
+      .from(propertyReviews)
+      .where(and(eq(propertyReviews.userId, userId), eq(propertyReviews.propertyId, propertyId)))
       .limit(1);
     return rows[0];
   }

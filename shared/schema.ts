@@ -342,6 +342,22 @@ export const swipeNotificationsRelations = relations(swipeNotifications, ({ one 
   offer: one(propertyOffers, { fields: [swipeNotifications.offerId], references: [propertyOffers.id] }),
 }));
 
+export const propertyReviews = pgTable("property_reviews", {
+  id: serial("id").primaryKey(),
+  propertyId: integer("property_id").references(() => properties.id).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  rating: integer("rating").notNull(),
+  comment: text("comment").notNull(),
+  isPublic: boolean("is_public").default(true).notNull(),
+  moderatedBy: varchar("moderated_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const propertyReviewsRelations = relations(propertyReviews, ({ one }) => ({
+  property: one(properties, { fields: [propertyReviews.propertyId], references: [properties.id] }),
+  user: one(users, { fields: [propertyReviews.userId], references: [users.id] }),
+}));
+
 // Insert Schemas
 export const insertPropertySchema = createInsertSchema(properties).omit({ id: true, createdAt: true });
 export const insertSellLeadSchema = createInsertSchema(sellLeads).omit({ id: true, createdAt: true });
@@ -356,6 +372,7 @@ export const insertUserHomeSchema = createInsertSchema(userHomes).omit({ id: tru
 export const insertClientAgentLinkSchema = createInsertSchema(clientAgentLinks).omit({ id: true, createdAt: true });
 export const insertPropertyOfferSchema = createInsertSchema(propertyOffers).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSwipeNotificationSchema = createInsertSchema(swipeNotifications).omit({ id: true, createdAt: true });
+export const insertPropertyReviewSchema = createInsertSchema(propertyReviews).omit({ id: true, createdAt: true });
 
 // Types
 export type Property = typeof properties.$inferSelect;
@@ -384,6 +401,8 @@ export type PropertyOffer = typeof propertyOffers.$inferSelect;
 export type InsertPropertyOffer = z.infer<typeof insertPropertyOfferSchema>;
 export type SwipeNotification = typeof swipeNotifications.$inferSelect;
 export type InsertSwipeNotification = z.infer<typeof insertSwipeNotificationSchema>;
+export type PropertyReview = typeof propertyReviews.$inferSelect;
+export type InsertPropertyReview = z.infer<typeof insertPropertyReviewSchema>;
 
 // Request Types
 export type CreatePropertyRequest = InsertProperty;

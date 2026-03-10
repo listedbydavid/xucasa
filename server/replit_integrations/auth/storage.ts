@@ -29,11 +29,12 @@ class AuthStorage implements IAuthStorage {
     try {
       const [user] = await db
         .insert(users)
-        .values({ ...userData, lastLoginAt: new Date() })
+        .values({ ...userData, emailVerified: true, lastLoginAt: new Date() })
         .onConflictDoUpdate({
           target: users.id,
           set: {
             ...userData,
+            emailVerified: true,
             lastLoginAt: new Date(),
             updatedAt: new Date(),
           },

@@ -37,7 +37,7 @@ Preferred communication style: Simple, everyday language.
 
 - **Database**: PostgreSQL.
 - **ORM**: Drizzle ORM (`drizzle-orm/node-postgres`) with `drizzle-kit` for migrations.
-- **Schema**: Includes tables for users, sessions, properties, saved properties/searches, search history, user homes, buyer profiles, buyer matches, seller pitches, swipe notifications, and property offers.
+- **Schema**: Includes tables for users, sessions, properties, saved properties/searches, search history, user homes, buyer profiles, buyer matches, seller pitches, swipe notifications, property offers, and property reviews.
 
 ### Authentication
 
@@ -55,6 +55,7 @@ Preferred communication style: Simple, everyday language.
 - **Open House Route Planner**: Component for planning multi-stop routes to selected open houses using Google/Apple Maps.
 - **Home Report**: Comprehensive property analysis tool providing valuation, equity insights, zoning, and neighborhood data.
 - **Reverse Offer / Swipe Interest System**: Facilitates buyer interest expression and reverse offer creation, with notifications for agents and admins based on representation status.
+- **Property Ratings & Reviews**: Users with complete profiles (photo, verified email, phone, mailing address) can rate (1-5 stars) and comment (300 chars max) on properties. Listing agents and admins can toggle review visibility. An example review is displayed when no real reviews exist. Profile completeness gate shows inline fields to complete missing profile data. Routes: `GET/POST /api/properties/:id/reviews`, `PATCH /api/reviews/:id/visibility`, `DELETE /api/reviews/:id`, `GET /api/profile/completeness`, `PATCH /api/profile`. Component: `PropertyReviewSection.tsx`.
 - **Legal & Compliance**: Cookie consent banner, Privacy Policy, and Terms of Service pages with fair housing and accessibility statements.
 
 ## External Dependencies

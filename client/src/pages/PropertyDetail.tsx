@@ -10,6 +10,7 @@ import { PublicRecordsPanel } from "@/components/PublicRecordsPanel";
 import { ZoningPanel } from "@/components/ZoningPanel";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import { SdmlsDisclaimer } from "@/components/SdmlsDisclaimer";
+import { PropertyReviewSection } from "@/components/PropertyReviewSection";
 
 const FALLBACK = "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1600&h=900&fit=crop";
 
@@ -1358,6 +1359,12 @@ export default function PropertyDetail() {
           <NeighborhoodSection propertyId={property.id} />
 
           <MortgageCalculator price={property.price} hoaFee={property.hoaFee} />
+
+          <PropertyReviewSection
+            propertyId={property.id}
+            isListingAgent={!!(user && property.agentId && property.agentId === (user as any).id)}
+            isAdmin={!!(user && (user as any)?.isAdmin)}
+          />
 
           <PriceHistorySection property={property} daysOnMarket={daysOnMarket} />
           <ListingActivitySection property={property} daysOnMarket={daysOnMarket} />
