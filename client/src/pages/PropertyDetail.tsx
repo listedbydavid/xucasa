@@ -629,12 +629,15 @@ function MortgageCalculator({ price, hoaFee }: { price: number; hoaFee?: number 
       : loanAmount / numPayments;
 
   const monthlyPropertyTax = Math.round((homePrice * (propertyTaxRate / 100)) / 12);
-  const totalMonthly = Math.round(monthlyPrincipalInterest + monthlyPropertyTax + homeInsurance + monthlyHoa);
+  const pmiRate = 0.75;
+  const monthlyPmi = downPaymentPercent < 20 ? Math.round((loanAmount * (pmiRate / 100)) / 12) : 0;
+  const totalMonthly = Math.round(monthlyPrincipalInterest + monthlyPropertyTax + homeInsurance + monthlyHoa + monthlyPmi);
 
   const piPercent = totalMonthly > 0 ? Math.round((monthlyPrincipalInterest / totalMonthly) * 100) : 0;
   const taxPercent = totalMonthly > 0 ? Math.round((monthlyPropertyTax / totalMonthly) * 100) : 0;
   const insurancePercent = totalMonthly > 0 ? Math.round((homeInsurance / totalMonthly) * 100) : 0;
   const hoaPercent = totalMonthly > 0 ? Math.round((monthlyHoa / totalMonthly) * 100) : 0;
+  const pmiPercent = totalMonthly > 0 ? Math.round((monthlyPmi / totalMonthly) * 100) : 0;
 
   return (
     <div className="mt-10 pt-8 border-t border-border" data-testid="section-mortgage-calculator">
@@ -666,6 +669,9 @@ function MortgageCalculator({ price, hoaFee }: { price: number; hoaFee?: number 
             {monthlyHoa > 0 && (
               <div className="bg-violet-500 h-full" style={{ width: `${hoaPercent}%` }} title="HOA" />
             )}
+            {monthlyPmi > 0 && (
+              <div className="bg-rose-500 h-full" style={{ width: `${pmiPercent}%` }} title="PMI" />
+            )}
           </div>
 
           <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm mb-8">
@@ -689,6 +695,13 @@ function MortgageCalculator({ price, hoaFee }: { price: number; hoaFee?: number 
                 <span className="w-3 h-3 rounded-full bg-violet-500 flex-shrink-0" />
                 <span className="text-muted-foreground">HOA</span>
                 <span className="font-semibold text-foreground" data-testid="text-hoa-amount">${monthlyHoa.toLocaleString()}</span>
+              </div>
+            )}
+            {monthlyPmi > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-rose-500 flex-shrink-0" />
+                <span className="text-muted-foreground">PMI</span>
+                <span className="font-semibold text-foreground" data-testid="text-pmi-amount">${monthlyPmi.toLocaleString()}</span>
               </div>
             )}
           </div>
@@ -814,7 +827,7 @@ function MortgageCalculator({ price, hoaFee }: { price: number; hoaFee?: number 
           </div>
 
           <p className="text-xs text-muted-foreground mt-6">
-            This is an estimate. Actual payments may vary based on your credit score, lender, and other factors. Does not include PMI.
+            This is an estimate. Actual payments may vary based on your credit score, lender, and other factors.{monthlyPmi > 0 ? " PMI (0.75% annual rate) is included and will be removed once you reach 20% equity." : ""}
           </p>
         </div>
       )}

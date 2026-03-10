@@ -18,7 +18,7 @@ Preferred communication style: Simple, everyday language.
 - **UI Components**: shadcn/ui (New York style) built on Radix UI primitives, styled with Tailwind CSS.
 - **Styling**: Tailwind CSS with custom properties for Redfin-inspired theming (red primary color). Fonts: DM Sans (body) + Outfit (headings).
 - **Forms**: React Hook Form + Zod resolvers.
-- **Maps**: Google Maps JavaScript API via `@react-google-maps/api`, utilizing AdvancedMarkerElements and Street View Panorama.
+- **Maps**: Google Maps JavaScript API via `@react-google-maps/api`, utilizing AdvancedMarkerElements with custom price-bubble HTML markers and Street View Panorama.
 - **URL Params**: `query-string` for serializing search filters into query strings.
 - **Theme**: Dark mode supported with `ThemeToggle` component, persisting preference in localStorage.
 - **Address Autocomplete**: Reusable component providing property suggestions with thumbnails and details.
@@ -47,8 +47,10 @@ Preferred communication style: Simple, everyday language.
 
 ### Core Features
 
-- **Property Search & Filters**: Comprehensive search capabilities with filters for price, beds, baths, property type, status, and sorting.
-- **Property Details**: Enhanced with mortgage calculator, neighborhood insights, share and print options.
+- **Property Search & Filters**: Comprehensive search capabilities with filters for price, beds, baths, property type, status, and sorting. Map view uses price-bubble markers showing formatted prices ("$1.2M", "$899K").
+- **Property Cards**: Feature "New" badge (≤7 days), "Days on Market" with clock icon, always-visible pagination dots, photo counter ("1/24"), persistent photo position on mouse leave.
+- **Hero Address Flow**: All three hero tabs (Buy, Sell, Estimate) use AddressAutocomplete. Sell and Estimate tabs pass typed address via `?address=` URL param to /sell and /home-report pages, which pre-fill their address fields.
+- **Property Details**: Enhanced with mortgage calculator (with PMI auto-calculation when down payment < 20%), neighborhood insights, share and print options.
 - **Buyer Marketplace**: Displays property listings alongside buyer profiles, with matching criteria.
 - **Buyer Profile Management**: Shared modal for creating/editing buyer profiles.
 - **Agent Beacon Report**: Generates branded PDF reports for agents, matching buyers to prospective listings.

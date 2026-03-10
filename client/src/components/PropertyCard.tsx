@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
-import { BedDouble, Bath, Maximize, Heart, Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
+import { BedDouble, Bath, Maximize, Heart, Sparkles, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import type { PropertyResponse } from "@shared/schema";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
 import { useAuth } from "@/hooks/use-auth";
@@ -34,6 +34,15 @@ export function PropertyCard({ property }: PropertyCardProps) {
   const maxPhotos = Math.min(photos.length, 15);
 
   const isSaved = savedProps.some((sp) => sp.propertyId === property.id);
+
+  const { isNew, daysOnMarket } = useMemo(() => {
+    const referenceDate = property.listDate ? new Date(property.listDate) : property.createdAt ? new Date(property.createdAt) : null;
+    if (!referenceDate || isNaN(referenceDate.getTime())) return { isNew: false, daysOnMarket: null };
+    const now = new Date();
+    const diffMs = now.getTime() - referenceDate.getTime();
+    const days = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+    return { isNew: days <= 7, daysOnMarket: days };
+  }, [property.listDate, property.createdAt]);
 
   const pauseAutoAdvance = useCallback(() => {
     if (autoAdvanceRef.current) {
@@ -124,7 +133,7 @@ export function PropertyCard({ property }: PropertyCardProps) {
           onPointerDown={handlePointerDown}
           onPointerUp={handlePointerUp}
           onMouseEnter={() => setIsHovering(true)}
-          onMouseLeave={() => { setIsHovering(false); setPhotoIndex(0); }}
+          onMouseLeave={() => { setIsHovering(false); }}
         >
           <div
             className="absolute inset-0 flex"
@@ -156,7 +165,7 @@ export function PropertyCard({ property }: PropertyCardProps) {
                 onClick={(e) => { e.stopPropagation(); goTo(photoIndex - 1, e); }}
                 aria-label="Previous photo"
                 className={`absolute left-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/80 text-foreground shadow transition-all
-                  opacity-0 group-hover:opacity-100 focus:opacity-100 ${photoIndex === 0 ? "invisible" : ""}`}
+                  opacity-70 group-hover:opacity-100 focus:opacity-100 ${photoIndex === 0 ? "invisible" : ""}`}
               >
                 <ChevronLeft className="w-4 h-4" aria-hidden="true" />
               </button>
@@ -165,7 +174,7 @@ export function PropertyCard({ property }: PropertyCardProps) {
                 onClick={(e) => { e.stopPropagation(); goTo(photoIndex + 1, e); }}
                 aria-label="Next photo"
                 className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/80 text-foreground shadow transition-all
-                  opacity-0 group-hover:opacity-100 focus:opacity-100 ${photoIndex === maxPhotos - 1 ? "invisible" : ""}`}
+                  opacity-70 group-hover:opacity-100 focus:opacity-100 ${photoIndex === maxPhotos - 1 ? "invisible" : ""}`}
               >
                 <ChevronRight className="w-4 h-4" aria-hidden="true" />
               </button>
@@ -190,6 +199,15 @@ export function PropertyCard({ property }: PropertyCardProps) {
             </div>
           )}
 
+          {maxPhotos > 1 && (
+            <span
+              data-testid={`text-photo-counter-${property.id}`}
+              className="absolute top-4 right-16 bg-black/50 text-white text-xs font-semibold px-2 py-1 rounded-full pointer-events-none backdrop-blur-sm"
+            >
+              {photoIndex + 1}/{maxPhotos}
+            </span>
+          )}
+
           <div className="absolute top-4 right-4 pointer-events-auto">
             <button
               data-testid={`btn-save-${property.id}`}
@@ -209,6 +227,14 @@ export function PropertyCard({ property }: PropertyCardProps) {
           </div>
 
           <div className="absolute top-4 left-4 flex flex-col gap-2 pointer-events-none">
+            {isNew && (
+              <span
+                className="bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg"
+                data-testid={`badge-new-${property.id}`}
+              >
+                New
+              </span>
+            )}
             {property.isOffMarket && (
               <span className="bg-foreground text-background text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-lg">
                 <Sparkles className="w-3 h-3 text-yellow-400" />
@@ -240,7 +266,7 @@ export function PropertyCard({ property }: PropertyCardProps) {
             </span>
           </div>
 
-          {maxPhotos > 1 && isHovering && (
+          {maxPhotos > 1 && (
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/20">
               <div
                 className="h-full bg-white/80 transition-all duration-300"
@@ -258,11 +284,17 @@ export function PropertyCard({ property }: PropertyCardProps) {
           tabIndex={0}
           aria-label={`View details for ${property.title || property.location}, $${property.price.toLocaleString()}`}
         >
-          <div className="flex items-end gap-2 mb-2">
+          <div className="flex items-end gap-2 mb-1">
             <h3 className="font-display font-bold text-2xl tracking-tight text-foreground">
               ${property.price.toLocaleString()}
             </h3>
           </div>
+          {daysOnMarket !== null && (
+            <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1" data-testid={`text-dom-${property.id}`}>
+              <Clock className="w-3 h-3" />
+              {daysOnMarket === 0 ? "Listed today" : daysOnMarket === 1 ? "1 day on market" : `${daysOnMarket} days on market`}
+            </p>
+          )}
 
           <div className="flex items-center gap-4 text-sm font-medium text-foreground mb-3">
             <span className="flex items-center gap-1.5">

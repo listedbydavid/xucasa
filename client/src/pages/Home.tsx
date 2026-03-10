@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import {
   Search, Map, Home as HomeIcon, DollarSign, TrendingUp,
   Heart, Users, ArrowRight, Sparkles,
-  Building2, MapPin, BarChart3, Shield
+  Building2, BarChart3, Shield
 } from "lucide-react";
 import { useProperties } from "@/hooks/use-properties";
 import { PropertyCard } from "@/components/PropertyCard";
@@ -16,9 +16,9 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const { data: propertiesData, isLoading } = useProperties({ limit: 20 });
   const currentQueryRef = useRef("");
+  const sellAddressRef = useRef("");
+  const estimateAddressRef = useRef("");
   const [activeTab, setActiveTab] = useState<HeroTab>("buy");
-  const [sellAddress, setSellAddress] = useState("");
-  const [estimateAddress, setEstimateAddress] = useState("");
 
   const handleMapSearch = () => {
     if ("geolocation" in navigator) {
@@ -197,21 +197,18 @@ export default function Home() {
 
               {activeTab === "sell" && (
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                  <div className="flex-1 relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <input
-                      data-testid="input-sell-address"
-                      type="text"
+                  <div className="flex-1">
+                    <AddressAutocomplete
+                      variant="hero"
                       placeholder="Enter your home address"
-                      value={sellAddress}
-                      onChange={(e) => setSellAddress(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") setLocation("/sell"); }}
-                      className="w-full pl-10 pr-4 py-3.5 rounded-full border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30"
+                      onQueryChange={(q) => { sellAddressRef.current = q; }}
+                      onSearch={(q) => { if (q.trim()) setLocation(`/sell?address=${encodeURIComponent(q)}`); }}
+                      onSelect={(p) => setLocation(`/sell?address=${encodeURIComponent(p.title)}`)}
                     />
                   </div>
                   <button
                     data-testid="button-sell-start"
-                    onClick={() => setLocation("/sell")}
+                    onClick={() => setLocation(sellAddressRef.current.trim() ? `/sell?address=${encodeURIComponent(sellAddressRef.current)}` : "/sell")}
                     className="bg-primary text-primary-foreground px-6 md:px-8 py-3.5 rounded-full font-bold transition-all active:scale-95 flex-shrink-0 shadow-lg shadow-primary/30"
                   >
                     Get Started
@@ -221,21 +218,18 @@ export default function Home() {
 
               {activeTab === "estimate" && (
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                  <div className="flex-1 relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                    <input
-                      data-testid="input-estimate-address"
-                      type="text"
+                  <div className="flex-1">
+                    <AddressAutocomplete
+                      variant="hero"
                       placeholder="Enter your address for a free home report"
-                      value={estimateAddress}
-                      onChange={(e) => setEstimateAddress(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") setLocation("/home-report"); }}
-                      className="w-full pl-10 pr-4 py-3.5 rounded-full border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30"
+                      onQueryChange={(q) => { estimateAddressRef.current = q; }}
+                      onSearch={(q) => { if (q.trim()) setLocation(`/home-report?address=${encodeURIComponent(q)}`); }}
+                      onSelect={(p) => setLocation(`/home-report?address=${encodeURIComponent(p.title)}`)}
                     />
                   </div>
                   <button
                     data-testid="button-estimate-start"
-                    onClick={() => setLocation("/home-report")}
+                    onClick={() => setLocation(estimateAddressRef.current.trim() ? `/home-report?address=${encodeURIComponent(estimateAddressRef.current)}` : "/home-report")}
                     className="bg-primary text-primary-foreground px-6 md:px-8 py-3.5 rounded-full font-bold transition-all active:scale-95 flex-shrink-0 shadow-lg shadow-primary/30"
                   >
                     Get Report

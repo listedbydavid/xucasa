@@ -10,6 +10,18 @@ interface MapViewProps {
   zoom?: number;
 }
 
+function formatPriceShort(price: number): string {
+  if (price >= 1_000_000) {
+    const m = price / 1_000_000;
+    return `$${m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)}M`;
+  }
+  if (price >= 1_000) {
+    const k = Math.round(price / 1_000);
+    return `$${k}K`;
+  }
+  return `$${price}`;
+}
+
 export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }: MapViewProps) {
   const { isLoaded, loadError } = useGoogleMaps();
 
@@ -53,17 +65,47 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }
       const position = getMarkerPosition(property, index);
       positions.push(position);
 
+      const isOff = property.isOffMarket;
+      const bgColor = isOff ? '#f59e0b' : 'hsl(var(--primary))';
+      const textColor = isOff ? '#111' : 'hsl(var(--primary-foreground))';
+      const priceLabel = formatPriceShort(property.price);
+
       const pin = document.createElement('div');
+      pin.setAttribute('data-testid', `map-marker-${property.id}`);
       pin.style.cssText = `
-        width: 28px; height: 28px; border-radius: 50%;
-        background: ${property.isOffMarket ? '#f59e0b' : '#ef4444'};
-        border: 3px solid white;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+        display: flex; align-items: center; justify-content: center;
+        padding: 4px 8px; border-radius: 6px;
+        background: ${bgColor}; color: ${textColor};
+        font-size: 12px; font-weight: 700; white-space: nowrap;
+        border: 2px solid white;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         cursor: pointer;
-        transition: transform 0.15s;
+        transition: transform 0.15s, box-shadow 0.15s;
+        position: relative;
       `;
-      pin.addEventListener('mouseenter', () => { pin.style.transform = 'scale(1.2)'; });
-      pin.addEventListener('mouseleave', () => { pin.style.transform = 'scale(1)'; });
+
+      const arrow = document.createElement('div');
+      arrow.style.cssText = `
+        position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+        width: 0; height: 0;
+        border-left: 6px solid transparent; border-right: 6px solid transparent;
+        border-top: 6px solid ${bgColor};
+      `;
+      pin.textContent = priceLabel;
+      pin.appendChild(arrow);
+
+      pin.addEventListener('mouseenter', () => {
+        pin.style.transform = 'scale(1.15)';
+        pin.style.boxShadow = '0 4px 14px rgba(0,0,0,0.4)';
+        pin.style.zIndex = '10';
+      });
+      pin.addEventListener('mouseleave', () => {
+        if (selectedProperty?.id !== property.id) {
+          pin.style.transform = 'scale(1)';
+          pin.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+          pin.style.zIndex = '';
+        }
+      });
 
       const marker = new google.maps.marker.AdvancedMarkerElement({
         map: mapRef.current!,

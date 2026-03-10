@@ -205,7 +205,10 @@ export default function HomeReport() {
   const { toast } = useToast();
   const { isLoaded } = useGoogleMaps();
 
-  const [fullAddress, setFullAddress] = useState("");
+  const [fullAddress, setFullAddress] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("address") || "";
+  });
   const [addressParts, setAddressParts] = useState({ streetNumber: "", streetName: "", city: "", state: "", zip: "" });
   const [details, setDetails] = useState({ beds: 3, baths: "2", sqft: 1800, lotSize: 5000, yearBuilt: 2000, homeType: "SFH" });
   const [loan, setLoan] = useState({ principalBalance: 0, appraisedValue: 0, interestRate: 5.95, loanTerm: 30, monthlyPayment: 0, loanType: "fixed", purchasePrice: 0, purchaseDate: "" });
