@@ -84,7 +84,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="flex gap-8">
+        <div className="flex flex-col md:flex-row gap-4 md:gap-8">
           {/* Sidebar Nav */}
           <aside className="hidden md:flex flex-col w-56 flex-shrink-0 gap-1">
             {navItems.map(({ id, label, icon: Icon }) => (
@@ -106,8 +106,8 @@ export default function Dashboard() {
           </aside>
 
           {/* Mobile nav pills */}
-          <div className="md:hidden w-full overflow-x-auto pb-4">
-            <div className="flex gap-2 mb-6">
+          <div className="md:hidden w-full overflow-x-auto">
+            <div className="flex gap-2">
               {navItems.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
