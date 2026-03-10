@@ -359,7 +359,13 @@ const RESO_SELECT_FIELDS = [
   "PropertyType", "PropertySubType", "YearBuilt",
   "ListAgentFullName", "ListAgentFirstName", "ListAgentLastName",
   "ListAgentEmail", "ListAgentDirectPhone", "ListAgentOfficePhone",
-  "ListOfficeName",
+  "ListAgentMlsId", "ListAgentStateLicense",
+  "ListOfficeName", "ListOfficeMlsId", "ListOfficePhone",
+  "CoListAgentFullName", "CoListAgentEmail", "CoListAgentDirectPhone",
+  "PrivateRemarks", "ShowingInstructions",
+  "ShowingContactName", "ShowingContactPhone",
+  "LockBoxType", "AccessCode",
+  "BuyerAgencyCompensation", "SpecialListingConditions",
 ].join(",");
 
 export async function realtyFeedODataFetch(url: string, token: string): Promise<Response> {
@@ -483,6 +489,24 @@ function normaliseReso(raw: any) {
   const agentName = raw.ListAgentFullName ||
     (raw.ListAgentFirstName ? `${raw.ListAgentFirstName || ""} ${raw.ListAgentLastName || ""}`.trim() : null);
 
+  let mlsDocuments: any[] | null = null;
+  if (raw.Media && Array.isArray(raw.Media)) {
+    const docMedia = raw.Media
+      .filter((m: any) => {
+        const cat = (m.MediaCategory || "").toLowerCase();
+        return cat === "document" || cat === "supplement" || cat === "pdf" || cat === "brochure";
+      })
+      .map((m: any) => ({
+        url: m.MediaURL,
+        name: m.ShortDescription || m.MediaCategory || "Document",
+        type: m.MediaCategory || "Document",
+      }))
+      .filter((d: any) => d.url);
+    if (docMedia.length > 0) mlsDocuments = docMedia;
+  }
+
+  const coAgentName = raw.CoListAgentFullName || null;
+
   return {
     idxId: String(raw.ListingKey || raw.ListingId || ""),
     mlsNumber: raw.ListingId || null,
@@ -514,6 +538,22 @@ function normaliseReso(raw: any) {
     listingAgentPhone: raw.ListAgentDirectPhone || raw.ListAgentOfficePhone || null,
     listingBrokerage: raw.ListOfficeName || null,
     propertyType: normalisePropertyType(raw.PropertyType, raw.PropertySubType),
+    confidentialRemarks: raw.PrivateRemarks || null,
+    showingInstructions: raw.ShowingInstructions || null,
+    showingContactName: raw.ShowingContactName || null,
+    showingContactPhone: raw.ShowingContactPhone || null,
+    lockboxType: raw.LockBoxType || null,
+    accessInstructions: raw.AccessCode || null,
+    listingAgentMlsId: raw.ListAgentMlsId || null,
+    listingAgentLicenseNumber: raw.ListAgentStateLicense || null,
+    coListingAgentName: coAgentName,
+    coListingAgentEmail: raw.CoListAgentEmail || null,
+    coListingAgentPhone: raw.CoListAgentDirectPhone || null,
+    listingOfficeMlsId: raw.ListOfficeMlsId || null,
+    listingOfficePhone: raw.ListOfficePhone || null,
+    buyerAgentCommission: raw.BuyerAgencyCompensation || null,
+    specialConditions: raw.SpecialListingConditions || null,
+    mlsDocuments,
   };
 }
 

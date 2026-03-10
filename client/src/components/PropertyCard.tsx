@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
-import { BedDouble, Bath, Maximize, Heart, Sparkles, ChevronLeft, ChevronRight, Clock } from "lucide-react";
+import { BedDouble, Bath, Maximize, Heart, Sparkles, ChevronLeft, ChevronRight, Clock, Shield } from "lucide-react";
 import type { PropertyResponse } from "@shared/schema";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
 import { useAuth } from "@/hooks/use-auth";
@@ -16,7 +16,7 @@ export function PropertyCard({ property }: PropertyCardProps) {
   const [, navigate] = useLocation();
   const { data: savedProps = [] } = useSavedProperties();
   const { mutate: toggleSave, isPending } = useToggleSavedProperty();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [transitioning, setTransitioning] = useState(false);
@@ -272,6 +272,17 @@ export function PropertyCard({ property }: PropertyCardProps) {
                 className="h-full bg-white/80 transition-all duration-300"
                 style={{ width: `${((photoIndex + 1) / maxPhotos) * 100}%` }}
               />
+            </div>
+          )}
+
+          {user?.role === "agent" && user?.agentVerified && (
+            <div
+              data-testid="badge-agent-mls"
+              className="absolute bottom-4 right-4 flex items-center gap-1 bg-indigo-500/80 text-white px-2.5 py-1.5 rounded-full text-xs font-semibold backdrop-blur-sm pointer-events-none"
+              title="MLS data available - Verified agent"
+            >
+              <Shield className="w-3.5 h-3.5" />
+              MLS
             </div>
           )}
         </div>

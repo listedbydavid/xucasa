@@ -44,6 +44,23 @@ export const properties = pgTable("properties", {
   listingAgentName: text("listing_agent_name"),
   listingAgentEmail: text("listing_agent_email"),
   listingAgentPhone: text("listing_agent_phone"),
+  // Agent MLS confidential fields (visible only to verified agents)
+  confidentialRemarks: text("confidential_remarks"),
+  showingInstructions: text("showing_instructions"),
+  showingContactName: text("showing_contact_name"),
+  showingContactPhone: text("showing_contact_phone"),
+  lockboxType: text("lockbox_type"),
+  accessInstructions: text("access_instructions"),
+  listingAgentMlsId: text("listing_agent_mls_id"),
+  listingAgentLicenseNumber: text("listing_agent_license_number"),
+  coListingAgentName: text("co_listing_agent_name"),
+  coListingAgentEmail: text("co_listing_agent_email"),
+  coListingAgentPhone: text("co_listing_agent_phone"),
+  listingOfficeMlsId: text("listing_office_mls_id"),
+  listingOfficePhone: text("listing_office_phone"),
+  buyerAgentCommission: text("buyer_agent_commission"),
+  specialConditions: text("special_conditions"),
+  mlsDocuments: jsonb("mls_documents"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

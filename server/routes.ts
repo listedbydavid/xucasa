@@ -13,6 +13,22 @@ import { getPublicRecords } from "./publicRecords";
 import { getZoningData } from "./zoningData";
 import { runIdxSync, isSyncInProgress, idxConfigured, getLastSyncLog, getSyncLogs, startIdxAutoSync, verifyAgentLicense, getRealtyFeedToken, realtyFeedODataFetch, REALTYFEED_API_BASE } from "./idxSync";
 
+const CONFIDENTIAL_MLS_FIELDS = [
+  'confidentialRemarks', 'showingInstructions', 'showingContactName', 'showingContactPhone',
+  'lockboxType', 'accessInstructions', 'listingAgentMlsId', 'listingAgentLicenseNumber',
+  'coListingAgentName', 'coListingAgentEmail', 'coListingAgentPhone',
+  'listingOfficeMlsId', 'listingOfficePhone', 'buyerAgentCommission',
+  'specialConditions', 'mlsDocuments',
+] as const;
+
+function stripConfidentialFields<T extends Record<string, any>>(prop: T): Omit<T, typeof CONFIDENTIAL_MLS_FIELDS[number]> {
+  const result = { ...prop };
+  for (const field of CONFIDENTIAL_MLS_FIELDS) {
+    delete (result as any)[field];
+  }
+  return result;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -49,7 +65,7 @@ export async function registerRoutes(
         storage.getProperties(normalizedFilters),
         storage.getPropertiesCount(normalizedFilters),
       ]);
-      res.status(200).json({ properties: props, total, limit: effectiveLimit, offset: effectiveOffset });
+      res.status(200).json({ properties: props.map(stripConfidentialFields), total, limit: effectiveLimit, offset: effectiveOffset });
     } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
     }
@@ -69,7 +85,7 @@ export async function registerRoutes(
   app.get("/api/properties/mine", isAuthenticated, async (req, res) => {
     try {
       const mine = await storage.getPropertiesByAgent(req.user!.claims.sub);
-      res.json(mine);
+      res.json(mine.map(stripConfidentialFields));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -82,7 +98,7 @@ export async function registerRoutes(
     const prop = await storage.getProperty(id);
     if (!prop) return res.status(404).json({ message: "Property not found" });
     
-    res.status(200).json(prop);
+    res.status(200).json(stripConfidentialFields(prop));
   });
 
   // Background geocoding: adds lat/lng to a property if address fields are present
@@ -211,7 +227,7 @@ export async function registerRoutes(
         )`)
         .limit(8);
 
-      const result = similar.map(r => ({ ...r.property, agent: r.agent }));
+      const result = similar.map(r => ({ ...stripConfidentialFields(r.property), agent: r.agent }));
       res.json(result);
     } catch (err) {
       console.error("Similar properties error:", err);
@@ -379,6 +395,52 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Public records error:", err);
       res.status(500).json({ message: "Failed to fetch public records" });
+    }
+  });
+
+  app.get("/api/properties/:id/agent-mls", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user?.claims;
+      if (!user) return res.status(401).json({ message: "Not authenticated" });
+
+      const { authStorage } = await import("./replit_integrations/auth/storage");
+      const dbUser = await authStorage.getUser(user.sub);
+      if (!dbUser || dbUser.role !== "agent" || dbUser.agentVerified !== true) {
+        return res.status(403).json({ message: "Verified agent access required" });
+      }
+
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+
+      const prop = await storage.getProperty(id);
+      if (!prop) return res.status(404).json({ message: "Property not found" });
+
+      res.json({
+        mlsNumber: prop.mlsNumber,
+        confidentialRemarks: prop.confidentialRemarks,
+        showingInstructions: prop.showingInstructions,
+        showingContactName: prop.showingContactName,
+        showingContactPhone: prop.showingContactPhone,
+        lockboxType: prop.lockboxType,
+        accessInstructions: prop.accessInstructions,
+        listingAgentName: prop.listingAgentName,
+        listingAgentEmail: prop.listingAgentEmail,
+        listingAgentPhone: prop.listingAgentPhone,
+        listingAgentMlsId: prop.listingAgentMlsId,
+        listingAgentLicenseNumber: prop.listingAgentLicenseNumber,
+        listingBrokerage: prop.listingBrokerage,
+        listingOfficeMlsId: prop.listingOfficeMlsId,
+        listingOfficePhone: prop.listingOfficePhone,
+        coListingAgentName: prop.coListingAgentName,
+        coListingAgentEmail: prop.coListingAgentEmail,
+        coListingAgentPhone: prop.coListingAgentPhone,
+        buyerAgentCommission: prop.buyerAgentCommission,
+        specialConditions: prop.specialConditions,
+        mlsDocuments: prop.mlsDocuments,
+      });
+    } catch (err) {
+      console.error("Agent MLS data error:", err);
+      res.status(500).json({ message: "Failed to fetch agent MLS data" });
     }
   });
 
@@ -558,7 +620,7 @@ export async function registerRoutes(
     try {
       const user = req.user.claims;
       const saved = await storage.getSavedProperties(user.sub);
-      res.status(200).json(saved);
+      res.status(200).json(saved.map(s => ({ ...s, property: stripConfidentialFields(s.property) })));
     } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
     }
@@ -1039,7 +1101,7 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Not authorized to view this client" });
       }
       const saved = await storage.getSavedProperties(clientId);
-      res.json(saved);
+      res.json(saved.map(s => ({ ...s, property: stripConfidentialFields(s.property) })));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -1870,7 +1932,7 @@ export async function registerRoutes(
       if (!user) return res.status(401).json({ message: "Not authenticated" });
       const { authStorage } = await import("./replit_integrations/auth/storage");
       const dbUser = await authStorage.getUser(user.sub);
-      if (!dbUser || (dbUser.role !== "agent" && dbUser.agentVerified !== true)) {
+      if (!dbUser || dbUser.role !== "agent" || dbUser.agentVerified !== true) {
         return res.status(403).json({ message: "Agent access required" });
       }
 

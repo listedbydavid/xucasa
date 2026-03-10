@@ -11,6 +11,7 @@ import { ZoningPanel } from "@/components/ZoningPanel";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import { SdmlsDisclaimer } from "@/components/SdmlsDisclaimer";
 import { PropertyReviewSection } from "@/components/PropertyReviewSection";
+import { AgentMLSPanel } from "@/components/AgentMLSPanel";
 
 const FALLBACK = "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1600&h=900&fit=crop";
 
@@ -1368,6 +1369,8 @@ export default function PropertyDetail() {
               </div>
             </div>
           </div>
+
+          <AgentMLSPanel propertyId={property.id} isAgent={!!(user?.role === 'agent' && user?.agentVerified)} />
 
           <NeighborhoodSection propertyId={property.id} />
 
