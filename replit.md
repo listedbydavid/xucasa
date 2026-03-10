@@ -61,6 +61,7 @@ Preferred communication style: Simple, everyday language.
 - **Reverse Offer / Swipe Interest System**: Facilitates buyer interest expression and reverse offer creation, with notifications for agents and admins based on representation status.
 - **Property Ratings & Reviews**: Users with complete profiles (photo, verified email, phone, mailing address) can rate (1-5 stars) and comment (300 chars max) on properties. Listing agents and admins can toggle review visibility. An example review is displayed when no real reviews exist. Profile completeness gate shows inline fields to complete missing profile data. Routes: `GET/POST /api/properties/:id/reviews`, `PATCH /api/reviews/:id/visibility`, `DELETE /api/reviews/:id`, `GET /api/profile/completeness`, `PATCH /api/profile`. Component: `PropertyReviewSection.tsx`.
 - **Legal & Compliance**: Cookie consent banner, Privacy Policy, and Terms of Service pages with fair housing and accessibility statements.
+- **Progressive Web App (PWA)**: Full PWA support for iPhone/iPad "Add to Home Screen" experience. Includes: 18 Apple splash screen images for all device sizes, enhanced service worker with cache-first static assets + network-first API calls + offline fallback page, iOS safe area handling (notch/Dynamic Island), standalone mode back button in navbar, pull-to-refresh prevention, smart install banner for iOS Safari users (dismissible, 30-day cooldown), web manifest with full icon set (72-512px), screenshots, and categories. Component: `InstallPrompt.tsx`.
 
 ## External Dependencies
 

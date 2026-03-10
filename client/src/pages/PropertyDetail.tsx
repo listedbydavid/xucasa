@@ -125,7 +125,7 @@ function MobileContactBar({
   const body = encodeURIComponent(`Hi ${contactName.split(" ")[0]},\n\nI'm interested in learning more about the property at ${propertyAddress}.\n\nPlease get back to me at your earliest convenience.\n\nThank you!`);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-card border-t border-border shadow-[0_-4px_20px_rgba(0,0,0,0.1)] px-4 py-3" data-testid="mobile-contact-bar">
+    <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-card border-t border-border shadow-[0_-4px_20px_rgba(0,0,0,0.1)] px-4 py-3 safe-bottom" data-testid="mobile-contact-bar">
       <div className="flex items-center gap-2 max-w-lg mx-auto">
         {contactPhone && (
           <a

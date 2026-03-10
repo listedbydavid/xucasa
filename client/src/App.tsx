@@ -22,6 +22,7 @@ import AuthPage from "@/pages/AuthPage";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsOfService from "@/pages/TermsOfService";
 import { CookieConsent } from "@/components/CookieConsent";
+import { InstallPrompt } from "@/components/InstallPrompt";
 
 function Router() {
   return (
@@ -52,7 +53,7 @@ function Footer() {
   const linkClass = "text-muted-foreground hover:text-foreground transition-colors";
 
   return (
-    <footer className="border-t border-border/40 bg-muted/30 pt-12 pb-6 px-4" data-testid="footer">
+    <footer className="border-t border-border/40 bg-muted/30 pt-12 pb-6 px-4 safe-bottom" data-testid="footer">
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
           <div className="col-span-2 md:col-span-1">
@@ -188,6 +189,7 @@ function App() {
           </main>
           <Footer />
           <CookieConsent />
+          <InstallPrompt />
         </div>
         <Toaster />
       </TooltipProvider>

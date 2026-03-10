@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { Home, Search, User, LogOut, Briefcase, Layers, TrendingUp, Users, Shield, Menu, X, FileText } from "lucide-react";
+import { Home, Search, User, LogOut, Briefcase, Layers, TrendingUp, Users, Shield, Menu, X, FileText, ChevronLeft } from "lucide-react";
 import { useState } from "react";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -49,6 +49,14 @@ export function Navbar() {
     <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60" role="banner">
       <div className="max-w-7xl mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-6">
+          <button
+            className="standalone-back-btn items-center justify-center p-2 text-muted-foreground hover:text-foreground transition-colors rounded-full hover:bg-muted/50"
+            onClick={() => { if (window.history.length > 1) { window.history.back(); } else { window.location.href = "/"; } }}
+            aria-label="Go back"
+            data-testid="button-standalone-back"
+          >
+            <ChevronLeft className="w-5 h-5" aria-hidden="true" />
+          </button>
           <Link href="/" className="flex items-center gap-2 group" aria-label="xucasa home">
             <div className="bg-primary text-white p-1.5 rounded-lg group-hover:scale-105 transition-transform">
               <Home className="w-5 h-5" aria-hidden="true" />
