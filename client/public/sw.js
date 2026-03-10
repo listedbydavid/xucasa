@@ -1,4 +1,4 @@
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 const STATIC_CACHE = `xucasa-static-v${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `xucasa-dynamic-v${CACHE_VERSION}`;
 const OFFLINE_URL = "/offline.html";
