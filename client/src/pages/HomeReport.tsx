@@ -156,9 +156,9 @@ function calcExtraPaymentSavings(balance: number, rate: number, termYears: numbe
   };
 }
 
-function DarkCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function ReportCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`bg-gray-900 border border-gray-800 rounded-2xl p-6 ${className}`}>
+    <div className={`bg-card border border-border rounded-2xl p-6 ${className}`}>
       {children}
     </div>
   );
@@ -570,7 +570,7 @@ export default function HomeReport() {
   }, [estimatedValue, airbnbFancy]);
 
   const inputClass = "w-full px-3 py-2.5 rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 text-sm";
-  const darkInputClass = "w-full px-3 py-2.5 rounded-lg border border-gray-700 bg-gray-800 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm";
+  const darkInputClass = "w-full px-3 py-2.5 rounded-lg border border-border bg-muted text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 text-sm";
 
   return (
     <div className="min-h-screen pb-20">
@@ -714,7 +714,7 @@ export default function HomeReport() {
       </div>
 
       {reportGenerated && (
-        <div className="bg-gray-950 text-white">
+        <div className="bg-background">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
             {isAuthenticated && (
@@ -732,38 +732,38 @@ export default function HomeReport() {
             )}
 
             {/* PROPERTY VALUATION */}
-            <DarkCard>
+            <ReportCard>
               {valuationQuery.isLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                  <span className="ml-3 text-gray-400">Calculating estimate...</span>
+                  <span className="ml-3 text-muted-foreground">Calculating estimate...</span>
                 </div>
               ) : valuationQuery.data ? (
                 <div className="space-y-6" data-testid="section-valuation">
                   <div className="text-center py-4">
-                    <p className="text-sm text-gray-400 mb-1">Estimated Market Value</p>
+                    <p className="text-sm text-muted-foreground mb-1">Estimated Market Value</p>
                     <p className="text-4xl md:text-5xl font-display font-bold text-primary" data-testid="text-estimated-value">
                       {formatCurrency(valuationQuery.data.estimatedMid)}
                     </p>
-                    <p className="text-sm text-gray-400 mt-2">
+                    <p className="text-sm text-muted-foreground mt-2">
                       Range: {formatCurrency(valuationQuery.data.estimatedLow)} — {formatCurrency(valuationQuery.data.estimatedHigh)}
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-muted-foreground/70 mt-1">
                       Based on {valuationQuery.data.compsCount} comparable sales at {formatCurrency(valuationQuery.data.pricePerSqft)}/sq ft
                     </p>
                   </div>
 
                   {valuationQuery.data.comps.length > 0 && (
                     <div>
-                      <p className="text-sm font-medium text-gray-300 mb-3">Comparable Sales</p>
+                      <p className="text-sm font-medium text-foreground/80 mb-3">Comparable Sales</p>
                       <div className="space-y-2">
                         {valuationQuery.data.comps.slice(0, 5).map((comp, i) => (
-                          <div key={i} className="flex items-center justify-between bg-gray-800/50 rounded-lg p-3 text-sm" data-testid={`comp-${i}`}>
+                          <div key={i} className="flex items-center justify-between bg-muted/50 rounded-lg p-3 text-sm" data-testid={`comp-${i}`}>
                             <div>
-                              <p className="font-medium text-white">{comp.title}</p>
-                              <p className="text-xs text-gray-400">{comp.beds}bd / {formatNumber(comp.sqft)} sqft / {comp.distanceMiles.toFixed(1)} mi</p>
+                              <p className="font-medium text-foreground">{comp.title}</p>
+                              <p className="text-xs text-muted-foreground">{comp.beds}bd / {formatNumber(comp.sqft)} sqft / {comp.distanceMiles.toFixed(1)} mi</p>
                             </div>
-                            <p className="font-bold text-white">{formatCurrency(comp.price)}</p>
+                            <p className="font-bold text-foreground">{formatCurrency(comp.price)}</p>
                           </div>
                         ))}
                       </div>
@@ -771,18 +771,18 @@ export default function HomeReport() {
                   )}
                 </div>
               ) : (
-                <p className="text-gray-400 text-center py-8">Unable to calculate valuation for this address.</p>
+                <p className="text-muted-foreground text-center py-8">Unable to calculate valuation for this address.</p>
               )}
-            </DarkCard>
+            </ReportCard>
 
             {/* LOAN CONFIRMATION */}
-            <DarkCard>
+            <ReportCard>
               <div className="text-center" data-testid="section-loan-confirmation">
-                <div className="bg-gray-800 rounded-xl p-5 mb-6">
-                  <p className="text-gray-300 font-medium mb-3">Quick check, here are your estimated loan details:</p>
-                  <p className="text-gray-400">
-                    {loan.loanTerm} year loan at <span className="text-white font-bold">{loan.interestRate}%</span> for{" "}
-                    <span className="text-white font-bold">{formatCurrency(loan.principalBalance || 417192)}</span>
+                <div className="bg-muted rounded-xl p-5 mb-6">
+                  <p className="text-foreground/80 font-medium mb-3">Quick check, here are your estimated loan details:</p>
+                  <p className="text-muted-foreground">
+                    {loan.loanTerm} year loan at <span className="text-foreground font-bold">{loan.interestRate}%</span> for{" "}
+                    <span className="text-foreground font-bold">{formatCurrency(loan.principalBalance || 417192)}</span>
                     {loan.purchaseDate && ` from ${new Date(loan.purchaseDate).toLocaleDateString("en-US", { month: "long", year: "numeric" })}`}
                   </p>
                 </div>
@@ -792,24 +792,24 @@ export default function HomeReport() {
                     <button
                       data-testid="button-loan-confirm"
                       onClick={() => setLoanConfirmed(true)}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-gray-600 text-white hover:bg-gray-800 transition-colors text-sm font-medium"
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-border text-foreground hover:bg-muted transition-colors text-sm font-medium"
                     >
-                      <CheckCircle className="w-4 h-4 text-green-400" />
+                      <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
                       That looks right
                     </button>
                     <button
                       data-testid="button-loan-edit"
                       onClick={() => setEditingLoan(true)}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-gray-600 text-white hover:bg-gray-800 transition-colors text-sm font-medium"
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-border text-foreground hover:bg-muted transition-colors text-sm font-medium"
                     >
-                      <RefreshCw className="w-4 h-4 text-blue-400" />
+                      <RefreshCw className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                       Change these numbers
                     </button>
                   </div>
                 )}
 
                 {loanConfirmed && (
-                  <p className="text-green-400 text-sm flex items-center justify-center gap-2">
+                  <p className="text-green-600 dark:text-green-400 text-sm flex items-center justify-center gap-2">
                     <CheckCircle className="w-4 h-4" /> Loan details confirmed
                   </p>
                 )}
@@ -818,15 +818,15 @@ export default function HomeReport() {
                   <div className="mt-4 space-y-4">
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="text-xs text-gray-400">Principal Balance</label>
+                        <label className="text-xs text-muted-foreground">Principal Balance</label>
                         <input data-testid="input-loan-balance" type="number" value={loan.principalBalance || ""} onChange={(e) => setLoan({ ...loan, principalBalance: parseInt(e.target.value) || 0 })} placeholder="350,000" className={darkInputClass} />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-400">Interest Rate (%)</label>
+                        <label className="text-xs text-muted-foreground">Interest Rate (%)</label>
                         <input data-testid="input-loan-rate" type="number" step="0.125" value={loan.interestRate || ""} onChange={(e) => setLoan({ ...loan, interestRate: parseFloat(e.target.value) || 0 })} placeholder="5.95" className={darkInputClass} />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-400">Loan Term</label>
+                        <label className="text-xs text-muted-foreground">Loan Term</label>
                         <select data-testid="select-loan-term" value={loan.loanTerm} onChange={(e) => setLoan({ ...loan, loanTerm: parseInt(e.target.value) })} className={darkInputClass}>
                           <option value={15}>15 years</option>
                           <option value={20}>20 years</option>
@@ -834,15 +834,15 @@ export default function HomeReport() {
                         </select>
                       </div>
                       <div>
-                        <label className="text-xs text-gray-400">Purchase Price</label>
+                        <label className="text-xs text-muted-foreground">Purchase Price</label>
                         <input data-testid="input-purchase-price" type="number" value={loan.purchasePrice || ""} onChange={(e) => setLoan({ ...loan, purchasePrice: parseInt(e.target.value) || 0 })} placeholder="450,000" className={darkInputClass} />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-400">Purchase Date</label>
+                        <label className="text-xs text-muted-foreground">Purchase Date</label>
                         <input data-testid="input-purchase-date" type="date" value={loan.purchaseDate} onChange={(e) => setLoan({ ...loan, purchaseDate: e.target.value })} className={darkInputClass} />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-400">Monthly Payment</label>
+                        <label className="text-xs text-muted-foreground">Monthly Payment</label>
                         <input data-testid="input-loan-payment" type="number" value={loan.monthlyPayment || ""} onChange={(e) => setLoan({ ...loan, monthlyPayment: parseInt(e.target.value) || 0 })} placeholder="2,500" className={darkInputClass} />
                       </div>
                     </div>
@@ -856,34 +856,34 @@ export default function HomeReport() {
                   </div>
                 )}
               </div>
-            </DarkCard>
+            </ReportCard>
 
             {/* NET WORTH OF HOME */}
-            <DarkCard>
+            <ReportCard>
               <div className="text-center" data-testid="section-net-worth">
-                <p className="text-gray-400 mb-2">That means the net worth of the home to you is</p>
-                <p className={`text-4xl md:text-5xl font-display font-bold ${equity >= 0 ? "text-green-400" : "text-red-400"}`} data-testid="text-net-worth">
+                <p className="text-muted-foreground mb-2">That means the net worth of the home to you is</p>
+                <p className={`text-4xl md:text-5xl font-display font-bold ${equity >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`} data-testid="text-net-worth">
                   {formatCurrency(equity)}
                 </p>
-                <p className="text-sm text-gray-500 mt-3 max-w-md mx-auto">
+                <p className="text-sm text-muted-foreground/70 mt-3 max-w-md mx-auto">
                   If you sold your home today, this is approximately how much you would put in your pocket (does not include selling fees, e.g., agent commissions, title cost, etc.)
                 </p>
               </div>
-            </DarkCard>
+            </ReportCard>
 
             {/* RECENTLY SOLD NEARBY */}
             {recentlySoldQuery.data && recentlySoldQuery.data.length > 0 && (
-              <DarkCard>
+              <ReportCard>
                 <div data-testid="section-recently-sold">
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <p className="text-xs text-primary font-semibold uppercase tracking-wide">Gallery</p>
-                      <p className="text-xl font-bold text-white">Homes Near You in {addressParts.zip || addressParts.city}</p>
-                      <p className="text-sm text-gray-400">Explore to see what the market is like</p>
+                      <p className="text-xl font-bold text-foreground">Homes Near You in {addressParts.zip || addressParts.city}</p>
+                      <p className="text-sm text-muted-foreground">Explore to see what the market is like</p>
                     </div>
                     <button
                       onClick={() => setLocation("/buy")}
-                      className="px-4 py-2 rounded-lg border border-gray-600 text-white text-sm hover:bg-gray-800 transition-colors"
+                      className="px-4 py-2 rounded-lg border border-border text-foreground text-sm hover:bg-muted transition-colors"
                       data-testid="button-view-all-homes"
                     >
                       View all homes
@@ -895,7 +895,7 @@ export default function HomeReport() {
                       {recentlySoldQuery.data.map((prop, i) => (
                         <div
                           key={prop.id}
-                          className="min-w-[260px] max-w-[280px] bg-gray-800 rounded-xl overflow-hidden flex-shrink-0 snap-start cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
+                          className="min-w-[260px] max-w-[280px] bg-muted rounded-xl overflow-hidden flex-shrink-0 snap-start cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
                           onClick={() => setLocation(`/property/${prop.id}`)}
                           data-testid={`card-sold-${i}`}
                         >
@@ -907,91 +907,91 @@ export default function HomeReport() {
                             </div>
                           </div>
                           <div className="p-3">
-                            <p className="text-lg font-bold text-white">{formatCurrency(prop.price)}</p>
-                            <p className="text-xs text-gray-400">
+                            <p className="text-lg font-bold text-foreground">{formatCurrency(prop.price)}</p>
+                            <p className="text-xs text-muted-foreground">
                               {prop.beds} beds {prop.baths} baths {formatNumber(prop.sqft)} sqft
                             </p>
-                            <p className="text-xs text-gray-500 mt-1 truncate">{prop.address}, {prop.city}</p>
+                            <p className="text-xs text-muted-foreground/70 mt-1 truncate">{prop.address}, {prop.city}</p>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
                 </div>
-              </DarkCard>
+              </ReportCard>
             )}
 
             {/* WHAT'S IMPORTANT NOW */}
-            <DarkCard>
+            <ReportCard>
               <div data-testid="section-whats-important">
-                <h3 className="text-xl font-bold text-white text-center mb-6">What's important now</h3>
+                <h3 className="text-xl font-bold text-foreground text-center mb-6">What's important now</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="bg-gray-800 rounded-xl p-5 text-center">
-                    <div className="w-14 h-14 mx-auto mb-3 bg-gray-700 rounded-full flex items-center justify-center">
-                      <Building2 className="w-7 h-7 text-gray-300" />
+                  <div className="bg-muted rounded-xl p-5 text-center">
+                    <div className="w-14 h-14 mx-auto mb-3 bg-muted/80 rounded-full flex items-center justify-center">
+                      <Building2 className="w-7 h-7 text-foreground/80" />
                     </div>
-                    <p className="text-sm text-gray-300">
-                      Thinking of selling? You have <span className="text-white font-bold">{valuationQuery.data?.compsCount || 3}</span> strong selling signals
+                    <p className="text-sm text-foreground/80">
+                      Thinking of selling? You have <span className="text-foreground font-bold">{valuationQuery.data?.compsCount || 3}</span> strong selling signals
                     </p>
                     <p className="text-primary text-sm font-medium mt-2 cursor-pointer hover:underline" data-testid="link-selling-signals">Get more details</p>
                   </div>
-                  <div className="bg-gray-800 rounded-xl p-5 text-center">
-                    <div className="w-14 h-14 mx-auto mb-3 bg-gray-700 rounded-full flex items-center justify-center">
-                      <Home className="w-7 h-7 text-gray-300" />
+                  <div className="bg-muted rounded-xl p-5 text-center">
+                    <div className="w-14 h-14 mx-auto mb-3 bg-muted/80 rounded-full flex items-center justify-center">
+                      <Home className="w-7 h-7 text-foreground/80" />
                     </div>
-                    <p className="text-sm text-gray-300">
-                      You might have up to <span className="text-green-400 font-bold">{formatCompact(purchasingPower.newHome)}</span> in purchasing power for a new home
+                    <p className="text-sm text-foreground/80">
+                      You might have up to <span className="text-green-600 dark:text-green-400 font-bold">{formatCompact(purchasingPower.newHome)}</span> in purchasing power for a new home
                     </p>
                     <p className="text-primary text-sm font-medium mt-2 cursor-pointer hover:underline" data-testid="link-purchasing-power">Get more details</p>
                   </div>
-                  <div className="bg-gray-800 rounded-xl p-5 text-center">
-                    <div className="w-14 h-14 mx-auto mb-3 bg-gray-700 rounded-full flex items-center justify-center">
-                      <DollarSign className="w-7 h-7 text-gray-300" />
+                  <div className="bg-muted rounded-xl p-5 text-center">
+                    <div className="w-14 h-14 mx-auto mb-3 bg-muted/80 rounded-full flex items-center justify-center">
+                      <DollarSign className="w-7 h-7 text-foreground/80" />
                     </div>
-                    <p className="text-sm text-gray-300">
-                      You could use about <span className="text-green-400 font-bold">{formatCompact(Math.round(equity * 0.3))}</span> of equity to feel more ready for a storm
+                    <p className="text-sm text-foreground/80">
+                      You could use about <span className="text-green-600 dark:text-green-400 font-bold">{formatCompact(Math.round(equity * 0.3))}</span> of equity to feel more ready for a storm
                     </p>
                     <p className="text-primary text-sm font-medium mt-2 cursor-pointer hover:underline" data-testid="link-equity-cushion">Get more details</p>
                   </div>
                 </div>
               </div>
-            </DarkCard>
+            </ReportCard>
 
             {/* WHAT YOU'VE PAID SO FAR */}
-            <DarkCard>
+            <ReportCard>
               <div data-testid="section-paid-so-far">
-                <h3 className="text-xl font-bold text-white text-center mb-6">What you've paid so far</h3>
+                <h3 className="text-xl font-bold text-foreground text-center mb-6">What you've paid so far</h3>
                 <div className="flex items-center justify-center gap-8 flex-wrap">
                   <div className="text-center">
-                    <p className="text-xs text-gray-400 mb-1">Towards Principal</p>
-                    <p className="text-2xl font-bold text-green-400" data-testid="text-principal-paid">{formatCurrency(paidSoFar.principalPaid)}</p>
-                    <p className="text-xs text-gray-500 mt-1">How much of your loan<br />you have repaid.</p>
+                    <p className="text-xs text-muted-foreground mb-1">Towards Principal</p>
+                    <p className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-principal-paid">{formatCurrency(paidSoFar.principalPaid)}</p>
+                    <p className="text-xs text-muted-foreground/70 mt-1">How much of your loan<br />you have repaid.</p>
                   </div>
                   <PieChart principal={paidSoFar.principalPaid} interest={paidSoFar.interestPaid} />
                   <div className="text-center">
-                    <p className="text-xs text-gray-400 mb-1">Towards Interest</p>
-                    <p className="text-2xl font-bold text-red-400" data-testid="text-interest-paid">{formatCurrency(paidSoFar.interestPaid)}</p>
-                    <p className="text-xs text-gray-500 mt-1">What the lender charges<br />you for your loan.</p>
+                    <p className="text-xs text-muted-foreground mb-1">Towards Interest</p>
+                    <p className="text-2xl font-bold text-red-600 dark:text-red-400" data-testid="text-interest-paid">{formatCurrency(paidSoFar.interestPaid)}</p>
+                    <p className="text-xs text-muted-foreground/70 mt-1">What the lender charges<br />you for your loan.</p>
                   </div>
                 </div>
                 <div className="mt-6 text-center">
-                  <h4 className="text-lg font-semibold text-white mb-1">Interest Adds Up</h4>
-                  <p className="text-sm text-gray-400">
-                    Over your {loan.loanTerm} year loan you'll pay <span className="text-red-400 font-bold">{formatCurrency(totalInterest)}</span> in interest. There are ways to get ahead and save some of that interest.
+                  <h4 className="text-lg font-semibold text-foreground mb-1">Interest Adds Up</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Over your {loan.loanTerm} year loan you'll pay <span className="text-red-600 dark:text-red-400 font-bold">{formatCurrency(totalInterest)}</span> in interest. There are ways to get ahead and save some of that interest.
                   </p>
                 </div>
               </div>
-            </DarkCard>
+            </ReportCard>
 
             {/* EXTRA PAYMENT TIP */}
-            <DarkCard>
+            <ReportCard>
               <div className="text-center" data-testid="section-extra-payment">
-                <p className="text-gray-300 text-lg">
+                <p className="text-foreground/80 text-lg">
                   Tip: If you pay just{" "}
                   <select
                     value={extraPayment}
                     onChange={(e) => setExtraPayment(parseInt(e.target.value))}
-                    className="inline-block bg-gray-800 border border-gray-600 rounded px-2 py-1 text-primary font-bold text-lg mx-1"
+                    className="inline-block bg-muted border border-border rounded px-2 py-1 text-primary font-bold text-lg mx-1"
                     data-testid="select-extra-payment"
                   >
                     <option value={50}>$50</option>
@@ -1002,34 +1002,34 @@ export default function HomeReport() {
                   </select>{" "}
                   more each month, you could save
                 </p>
-                <p className="text-3xl font-bold text-green-400 mt-2" data-testid="text-extra-savings">{formatCurrency(extraSavings.savedInterest)}</p>
-                <p className="text-sm text-gray-400 mt-2">
+                <p className="text-3xl font-bold text-green-600 dark:text-green-400 mt-2" data-testid="text-extra-savings">{formatCurrency(extraSavings.savedInterest)}</p>
+                <p className="text-sm text-muted-foreground mt-2">
                   in interest over the rest of your loan. You'd also be done with the loan and no longer making payments{" "}
-                  <span className="text-green-400 font-medium">{Math.round(extraSavings.monthsSaved / 12)} years earlier</span>!
+                  <span className="text-green-600 dark:text-green-400 font-medium">{Math.round(extraSavings.monthsSaved / 12)} years earlier</span>!
                 </p>
                 <div className="flex items-center justify-center gap-3 mt-4 flex-wrap">
-                  <button className="px-4 py-2 rounded-lg border border-gray-600 text-white text-sm hover:bg-gray-800 transition-colors" data-testid="button-learn-more">
+                  <button className="px-4 py-2 rounded-lg border border-border text-foreground text-sm hover:bg-muted transition-colors" data-testid="button-learn-more">
                     Learn more
                   </button>
-                  <button className="px-4 py-2 rounded-lg border border-gray-600 text-white text-sm hover:bg-gray-800 transition-colors" data-testid="button-already-paid">
+                  <button className="px-4 py-2 rounded-lg border border-border text-foreground text-sm hover:bg-muted transition-colors" data-testid="button-already-paid">
                     Already paid extra?
                   </button>
                 </div>
               </div>
-            </DarkCard>
+            </ReportCard>
 
             {/* REFINANCE COMPARISON */}
-            <DarkCard>
+            <ReportCard>
               <div data-testid="section-refinance">
                 <h3 className="text-xs text-primary font-bold uppercase tracking-widest text-center mb-2">Rates Based On National Trends</h3>
-                <h4 className="text-xl font-bold text-white text-center mb-2">What could a refi save you in interest?</h4>
-                <p className="text-sm text-gray-400 text-center mb-6">
-                  It depends: How many <span className="text-white font-bold">more years</span> will you keep this home?
+                <h4 className="text-xl font-bold text-foreground text-center mb-2">What could a refi save you in interest?</h4>
+                <p className="text-sm text-muted-foreground text-center mb-6">
+                  It depends: How many <span className="text-foreground font-bold">more years</span> will you keep this home?
                 </p>
 
                 <div className="flex items-center justify-center gap-4 mb-6">
-                  <div className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-center">
-                    <p className="text-2xl font-bold text-white">{refiYears}</p>
+                  <div className="bg-muted border border-border rounded-lg px-4 py-2 text-center">
+                    <p className="text-2xl font-bold text-foreground">{refiYears}</p>
                   </div>
                 </div>
                 <div className="px-4 mb-8">
@@ -1039,7 +1039,7 @@ export default function HomeReport() {
                     className="w-full accent-primary"
                     data-testid="slider-refi-years"
                   />
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <div className="flex justify-between text-xs text-muted-foreground/70 mt-1">
                     <span>1 year</span>
                     <span>30 years</span>
                   </div>
@@ -1047,18 +1047,18 @@ export default function HomeReport() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {refiOptions.map((opt, i) => (
-                    <div key={i} className={`bg-gray-800 border ${i === 2 ? 'border-primary/50' : 'border-gray-700'} rounded-xl p-4`} data-testid={`card-refi-${i}`}>
-                      <h5 className="text-sm font-bold text-white text-center mb-2">{opt.name}</h5>
-                      <p className={`text-xl font-bold text-center ${opt.savings > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    <div key={i} className={`bg-muted border ${i === 2 ? 'border-primary/50' : 'border-border'} rounded-xl p-4`} data-testid={`card-refi-${i}`}>
+                      <h5 className="text-sm font-bold text-foreground text-center mb-2">{opt.name}</h5>
+                      <p className={`text-xl font-bold text-center ${opt.savings > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {opt.savings > 0 ? '' : '-'}{formatCurrency(Math.abs(opt.savings))}
                       </p>
-                      {opt.savings > 0 && <p className="text-xs text-green-400 text-center">Saved Over {refiYears} Years</p>}
-                      <div className="mt-3 border-t border-gray-700 pt-3">
-                        <div className="flex justify-between text-xs text-gray-400 mb-1">
+                      {opt.savings > 0 && <p className="text-xs text-green-600 dark:text-green-400 text-center">Saved Over {refiYears} Years</p>}
+                      <div className="mt-3 border-t border-border pt-3">
+                        <div className="flex justify-between text-xs text-muted-foreground mb-1">
                           <span>RATE</span>
                           <span>APR</span>
                         </div>
-                        <div className="flex justify-between text-sm text-white font-medium">
+                        <div className="flex justify-between text-sm text-foreground font-medium">
                           <span>{opt.rate}%</span>
                           <span>{opt.apr}%</span>
                         </div>
@@ -1066,19 +1066,19 @@ export default function HomeReport() {
                       <div className="mt-3 space-y-1">
                         {opt.pros.map((p, j) => (
                           <p key={j} className="text-xs flex items-center gap-1">
-                            <CheckCircle className="w-3 h-3 text-green-400" />
-                            <span className="text-gray-300">{p}</span>
+                            <CheckCircle className="w-3 h-3 text-green-600 dark:text-green-400" />
+                            <span className="text-foreground/80">{p}</span>
                           </p>
                         ))}
                         {opt.cons.map((c, j) => (
                           <p key={j} className="text-xs flex items-center gap-1">
-                            {opt.risky ? <AlertTriangle className="w-3 h-3 text-yellow-400" /> : <AlertTriangle className="w-3 h-3 text-red-400" />}
-                            <span className="text-gray-300">{c}</span>
+                            {opt.risky ? <AlertTriangle className="w-3 h-3 text-yellow-600 dark:text-yellow-400" /> : <AlertTriangle className="w-3 h-3 text-red-600 dark:text-red-400" />}
+                            <span className="text-foreground/80">{c}</span>
                           </p>
                         ))}
                         <p className="text-xs flex items-center gap-1">
-                          <Info className="w-3 h-3 text-gray-500" />
-                          <span className="text-gray-400">Rate is estimated</span>
+                          <Info className="w-3 h-3 text-muted-foreground/70" />
+                          <span className="text-muted-foreground">Rate is estimated</span>
                         </p>
                       </div>
                       <button className="w-full mt-3 py-2 rounded-lg border border-primary text-primary text-sm font-medium hover:bg-primary/10 transition-colors" data-testid={`button-get-rate-${i}`}>
@@ -1088,12 +1088,12 @@ export default function HomeReport() {
                   ))}
                 </div>
               </div>
-            </DarkCard>
+            </ReportCard>
 
             {/* PURCHASING POWER */}
-            <DarkCard>
+            <ReportCard>
               <div data-testid="section-purchasing-power">
-                <h3 className="text-xl font-bold text-white text-center mb-6">If you bought another home, how much could you afford?</h3>
+                <h3 className="text-xl font-bold text-foreground text-center mb-6">If you bought another home, how much could you afford?</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {[
                     { icon: Home, label: "Purchase a new home", value: purchasingPower.newHome },
@@ -1101,26 +1101,26 @@ export default function HomeReport() {
                     { icon: Key, label: "Rent your home & buy another", value: purchasingPower.rentAndBuy },
                     { icon: Banknote, label: "Sell & pocket the cash", value: purchasingPower.sellAndPocket },
                   ].map((item, i) => (
-                    <div key={i} className="bg-gray-800 rounded-xl p-4 flex items-center justify-between" data-testid={`card-power-${i}`}>
+                    <div key={i} className="bg-muted rounded-xl p-4 flex items-center justify-between" data-testid={`card-power-${i}`}>
                       <div className="flex items-center gap-3">
-                        <item.icon className="w-6 h-6 text-gray-400" />
-                        <p className="text-sm text-white font-medium">{item.label}</p>
+                        <item.icon className="w-6 h-6 text-muted-foreground" />
+                        <p className="text-sm text-foreground font-medium">{item.label}</p>
                       </div>
-                      <p className="text-lg font-bold text-green-400">{formatCompact(item.value)}</p>
+                      <p className="text-lg font-bold text-green-600 dark:text-green-400">{formatCompact(item.value)}</p>
                     </div>
                   ))}
                 </div>
               </div>
-            </DarkCard>
+            </ReportCard>
 
             {/* CONTACT Q&A */}
-            <DarkCard>
+            <ReportCard>
               <div className="flex items-start gap-3" data-testid="section-contact-qa">
                 <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
                   <HelpCircle className="w-5 h-5 text-primary" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-white font-medium mb-2">Do you have any questions?</p>
+                  <p className="text-foreground font-medium mb-2">Do you have any questions?</p>
                   <input
                     type="text"
                     placeholder="What option is best for me?"
@@ -1143,34 +1143,34 @@ export default function HomeReport() {
                   </button>
                 </div>
               </div>
-            </DarkCard>
+            </ReportCard>
 
             {/* HOME EQUITY */}
-            <DarkCard>
+            <ReportCard>
               <div className="text-center" data-testid="section-home-equity">
-                <p className="text-3xl font-bold text-green-400">{formatCompact(Math.max(0, equity))}</p>
-                <p className="text-xs text-gray-400 uppercase tracking-widest mt-1 mb-3">Your Home Equity</p>
-                <p className="text-gray-300">You can borrow against your equity to put it to use.</p>
+                <p className="text-3xl font-bold text-green-600 dark:text-green-400">{formatCompact(Math.max(0, equity))}</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1 mb-3">Your Home Equity</p>
+                <p className="text-foreground/80">You can borrow against your equity to put it to use.</p>
                 <p className="text-primary text-sm mt-1 cursor-pointer hover:underline">How does using home equity work?</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
-                <div className="bg-gradient-to-br from-green-900/40 to-green-800/20 border border-green-700/30 rounded-xl p-5">
+                <div className="bg-gradient-to-br from-green-100 to-green-50 dark:from-green-900/40 dark:to-green-800/20 border border-green-300 dark:border-green-700/30 rounded-xl p-5">
                   <div className="flex items-center gap-2 mb-2">
-                    <Banknote className="w-5 h-5 text-green-400" />
-                    <p className="text-green-400 font-bold text-sm">Tackle high-interest debt</p>
+                    <Banknote className="w-5 h-5 text-green-600 dark:text-green-400" />
+                    <p className="text-green-600 dark:text-green-400 font-bold text-sm">Tackle high-interest debt</p>
                   </div>
-                  <p className="text-xs text-gray-400 mb-3">Take advantage of a lower rate to save on interest and potentially pay less each month.</p>
+                  <p className="text-xs text-muted-foreground mb-3">Take advantage of a lower rate to save on interest and potentially pay less each month.</p>
                   <button className="w-full py-2 bg-gradient-to-r from-teal-600 to-teal-500 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-1" data-testid="button-tackle-debt">
                     Play with some numbers <ArrowRight className="w-3 h-3" />
                   </button>
                 </div>
-                <div className="bg-gradient-to-br from-green-900/40 to-green-800/20 border border-green-700/30 rounded-xl p-5">
+                <div className="bg-gradient-to-br from-green-100 to-green-50 dark:from-green-900/40 dark:to-green-800/20 border border-green-300 dark:border-green-700/30 rounded-xl p-5">
                   <div className="flex items-center gap-2 mb-2">
-                    <Hammer className="w-5 h-5 text-green-400" />
-                    <p className="text-green-400 font-bold text-sm">Make home improvements</p>
+                    <Hammer className="w-5 h-5 text-green-600 dark:text-green-400" />
+                    <p className="text-green-600 dark:text-green-400 font-bold text-sm">Make home improvements</p>
                   </div>
-                  <p className="text-xs text-gray-400 mb-3">Boost your home's value by making upgrades or adding more livable space.</p>
+                  <p className="text-xs text-muted-foreground mb-3">Boost your home's value by making upgrades or adding more livable space.</p>
                   <button className="w-full py-2 bg-gradient-to-r from-teal-600 to-teal-500 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-1" data-testid="button-improvements">
                     More details <ArrowRight className="w-3 h-3" />
                   </button>
@@ -1178,43 +1178,43 @@ export default function HomeReport() {
               </div>
 
               <div className="mt-4 text-center">
-                <button className="px-5 py-2 rounded-lg border border-gray-600 text-white text-sm hover:bg-gray-800 transition-colors" data-testid="button-explore-equity">
+                <button className="px-5 py-2 rounded-lg border border-border text-foreground text-sm hover:bg-muted transition-colors" data-testid="button-explore-equity">
                   Explore other options for using equity
                 </button>
               </div>
-            </DarkCard>
+            </ReportCard>
 
             {/* AIRBNB RENTAL ESTIMATE */}
-            <DarkCard>
+            <ReportCard>
               <div data-testid="section-airbnb">
-                <h3 className="text-xl font-bold text-white text-center mb-2">
+                <h3 className="text-xl font-bold text-foreground text-center mb-2">
                   If you rented your home on Airbnb, how much could you potentially earn?
                 </h3>
-                <p className="text-sm text-gray-400 text-center mb-6">
-                  Showing results for: <span className="text-white font-medium">{fullAddress || `${addressParts.streetNumber} ${addressParts.streetName} ${addressParts.city}, ${addressParts.state} ${addressParts.zip}`}</span>
+                <p className="text-sm text-muted-foreground text-center mb-6">
+                  Showing results for: <span className="text-foreground font-medium">{fullAddress || `${addressParts.streetNumber} ${addressParts.streetName} ${addressParts.city}, ${addressParts.state} ${addressParts.zip}`}</span>
                 </p>
 
                 <div className="grid grid-cols-3 gap-4 mb-6">
-                  <div className="text-center bg-gray-800 rounded-xl p-4">
-                    <p className="text-xs text-gray-400 uppercase mb-1">Monthly Revenue</p>
-                    <p className="text-2xl font-bold text-green-400">{formatCurrency(airbnbEstimate.monthly)}</p>
+                  <div className="text-center bg-muted rounded-xl p-4">
+                    <p className="text-xs text-muted-foreground uppercase mb-1">Monthly Revenue</p>
+                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(airbnbEstimate.monthly)}</p>
                   </div>
-                  <div className="text-center bg-gray-800 rounded-xl p-4">
-                    <p className="text-xs text-gray-400 uppercase mb-1">Nightly Rate</p>
-                    <p className="text-2xl font-bold text-white">{formatCurrency(airbnbEstimate.nightly)}</p>
+                  <div className="text-center bg-muted rounded-xl p-4">
+                    <p className="text-xs text-muted-foreground uppercase mb-1">Nightly Rate</p>
+                    <p className="text-2xl font-bold text-foreground">{formatCurrency(airbnbEstimate.nightly)}</p>
                   </div>
-                  <div className="text-center bg-gray-800 rounded-xl p-4">
-                    <p className="text-xs text-gray-400 uppercase mb-1"># of Nights</p>
-                    <p className="text-2xl font-bold text-white">{airbnbEstimate.nightsPerMonth}/mo</p>
+                  <div className="text-center bg-muted rounded-xl p-4">
+                    <p className="text-xs text-muted-foreground uppercase mb-1"># of Nights</p>
+                    <p className="text-2xl font-bold text-foreground">{airbnbEstimate.nightsPerMonth}/mo</p>
                   </div>
                 </div>
 
-                <p className="text-xs text-gray-500 text-center mb-4">Estimated based on similar rentals nearby</p>
+                <p className="text-xs text-muted-foreground/70 text-center mb-4">Estimated based on similar rentals nearby</p>
 
                 <div className="px-4">
-                  <p className="text-sm text-gray-400 text-center mb-2">How nice would you make it?</p>
+                  <p className="text-sm text-muted-foreground text-center mb-2">How nice would you make it?</p>
                   <div className="relative">
-                    <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-gray-800 border border-gray-600 rounded px-2 py-0.5 text-xs text-white" style={{ left: `${airbnbFancy}%` }}>
+                    <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-muted border border-border rounded px-2 py-0.5 text-xs text-foreground" style={{ left: `${airbnbFancy}%` }}>
                       {formatCurrency(airbnbEstimate.nightly)}/night
                     </div>
                     <input
@@ -1223,35 +1223,35 @@ export default function HomeReport() {
                       className="w-full accent-pink-500"
                       data-testid="slider-airbnb-fancy"
                     />
-                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <div className="flex justify-between text-xs text-muted-foreground/70 mt-1">
                       <span>basic</span>
                       <span>fancy</span>
                     </div>
                   </div>
                 </div>
               </div>
-            </DarkCard>
+            </ReportCard>
 
             {/* ZONING & BUILDING */}
-            <DarkCard>
+            <ReportCard>
               <div data-testid="section-zoning">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
                     <Layers className="w-5 h-5" />
                   </div>
-                  <h3 className="text-lg font-bold text-white">Zoning & Building Potential</h3>
+                  <h3 className="text-lg font-bold text-foreground">Zoning & Building Potential</h3>
                 </div>
                 {zoningQuery.isLoading ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                    <span className="ml-2 text-gray-400">Fetching zoning data...</span>
+                    <span className="ml-2 text-muted-foreground">Fetching zoning data...</span>
                   </div>
                 ) : zoningQuery.data ? (
                   <div className="space-y-4">
                     {zoningQuery.data.landUse && (
-                      <div className="bg-gray-800 rounded-lg p-4">
-                        <p className="text-sm text-gray-400 mb-1">Land Use Classification</p>
-                        <p className="font-bold text-white text-lg" data-testid="text-land-use">{zoningQuery.data.landUse.label}</p>
+                      <div className="bg-muted rounded-lg p-4">
+                        <p className="text-sm text-muted-foreground mb-1">Land Use Classification</p>
+                        <p className="font-bold text-foreground text-lg" data-testid="text-land-use">{zoningQuery.data.landUse.label}</p>
                         {zoningQuery.data.landUse.breakdown.length > 0 && (
                           <div className="mt-3 space-y-1">
                             {zoningQuery.data.landUse.breakdown.map((item) => {
@@ -1259,10 +1259,10 @@ export default function HomeReport() {
                               const pct = total > 0 ? Math.round((item.count / total) * 100) : 0;
                               return (
                                 <div key={item.type} className="flex items-center gap-2">
-                                  <div className="w-full max-w-[200px] h-2 bg-gray-700 rounded-full overflow-hidden">
+                                  <div className="w-full max-w-[200px] h-2 bg-muted/80 rounded-full overflow-hidden">
                                     <div className="h-full bg-primary/60 rounded-full" style={{ width: `${pct}%` }} />
                                   </div>
-                                  <span className="text-xs text-gray-400 whitespace-nowrap">{item.label} ({pct}%)</span>
+                                  <span className="text-xs text-muted-foreground whitespace-nowrap">{item.label} ({pct}%)</span>
                                 </div>
                               );
                             })}
@@ -1274,24 +1274,24 @@ export default function HomeReport() {
                     {zoningQuery.data.buildingContext && (
                       <div className="grid grid-cols-3 gap-3">
                         {zoningQuery.data.buildingContext.typicalLevels && (
-                          <div className="bg-gray-800 rounded-lg p-3 text-center">
+                          <div className="bg-muted rounded-lg p-3 text-center">
                             <Building2 className="w-5 h-5 text-primary mx-auto mb-1" />
-                            <p className="text-lg font-bold text-white">{zoningQuery.data.buildingContext.typicalLevels}</p>
-                            <p className="text-xs text-gray-400">Typical Stories</p>
+                            <p className="text-lg font-bold text-foreground">{zoningQuery.data.buildingContext.typicalLevels}</p>
+                            <p className="text-xs text-muted-foreground">Typical Stories</p>
                           </div>
                         )}
                         {zoningQuery.data.buildingContext.maxLevels && (
-                          <div className="bg-gray-800 rounded-lg p-3 text-center">
+                          <div className="bg-muted rounded-lg p-3 text-center">
                             <Building2 className="w-5 h-5 text-primary mx-auto mb-1" />
-                            <p className="text-lg font-bold text-white">{zoningQuery.data.buildingContext.maxLevels}</p>
-                            <p className="text-xs text-gray-400">Max Stories</p>
+                            <p className="text-lg font-bold text-foreground">{zoningQuery.data.buildingContext.maxLevels}</p>
+                            <p className="text-xs text-muted-foreground">Max Stories</p>
                           </div>
                         )}
                         {zoningQuery.data.elevation && (
-                          <div className="bg-gray-800 rounded-lg p-3 text-center">
+                          <div className="bg-muted rounded-lg p-3 text-center">
                             <TrendingUp className="w-5 h-5 text-primary mx-auto mb-1" />
-                            <p className="text-lg font-bold text-white">{zoningQuery.data.elevation.feet} ft</p>
-                            <p className="text-xs text-gray-400">Elevation</p>
+                            <p className="text-lg font-bold text-foreground">{zoningQuery.data.elevation.feet} ft</p>
+                            <p className="text-xs text-muted-foreground">Elevation</p>
                           </div>
                         )}
                       </div>
@@ -1302,8 +1302,8 @@ export default function HomeReport() {
                         <div className="flex items-start gap-3">
                           <Info className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
                           <div>
-                            <p className="font-medium text-white text-sm">ADU Potential</p>
-                            <p className="text-sm text-gray-400 mt-1">
+                            <p className="font-medium text-foreground text-sm">ADU Potential</p>
+                            <p className="text-sm text-muted-foreground mt-1">
                               With a {formatNumber(details.lotSize)} sq ft lot, this property may qualify for an ADU under California law.
                             </p>
                           </div>
@@ -1312,24 +1312,24 @@ export default function HomeReport() {
                     )}
                   </div>
                 ) : (
-                  <p className="text-gray-400 text-center py-4">Zoning data unavailable.</p>
+                  <p className="text-muted-foreground text-center py-4">Zoning data unavailable.</p>
                 )}
               </div>
-            </DarkCard>
+            </ReportCard>
 
             {/* NEIGHBORHOOD INSIGHTS */}
-            <DarkCard>
+            <ReportCard>
               <div data-testid="section-neighborhood">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
                     <MapPin className="w-5 h-5" />
                   </div>
-                  <h3 className="text-lg font-bold text-white">Neighborhood Insights</h3>
+                  <h3 className="text-lg font-bold text-foreground">Neighborhood Insights</h3>
                 </div>
                 {publicRecordsQuery.isLoading ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                    <span className="ml-2 text-gray-400">Loading neighborhood data...</span>
+                    <span className="ml-2 text-muted-foreground">Loading neighborhood data...</span>
                   </div>
                 ) : publicRecordsQuery.data ? (
                   <div className="space-y-4">
@@ -1341,10 +1341,10 @@ export default function HomeReport() {
                           { label: "Population", value: formatNumber(publicRecordsQuery.data.neighborhoodStats.totalPopulation), icon: Building2 },
                           { label: "Owner Occupied", value: `${publicRecordsQuery.data.neighborhoodStats.ownerOccupiedPct}%`, icon: Home },
                         ].map((stat, i) => (
-                          <div key={i} className="bg-gray-800 rounded-lg p-3 text-center">
+                          <div key={i} className="bg-muted rounded-lg p-3 text-center">
                             <stat.icon className="w-4 h-4 text-primary mx-auto mb-1" />
-                            <p className="text-lg font-bold text-white">{stat.value}</p>
-                            <p className="text-xs text-gray-400">{stat.label}</p>
+                            <p className="text-lg font-bold text-foreground">{stat.value}</p>
+                            <p className="text-xs text-muted-foreground">{stat.label}</p>
                           </div>
                         ))}
                       </div>
@@ -1353,25 +1353,25 @@ export default function HomeReport() {
                     {publicRecordsQuery.data.floodInfo && (
                       <div className={`rounded-lg p-4 flex items-start gap-3 ${
                         publicRecordsQuery.data.floodInfo.sfha
-                          ? "bg-red-900/20 border border-red-700/30"
-                          : "bg-green-900/20 border border-green-700/30"
+                          ? "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/30"
+                          : "bg-green-900/20 border border-green-300 dark:border-green-700/30"
                       }`}>
                         <Droplets className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
-                          publicRecordsQuery.data.floodInfo.sfha ? "text-red-400" : "text-green-400"
+                          publicRecordsQuery.data.floodInfo.sfha ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
                         }`} />
                         <div>
-                          <p className="font-medium text-white text-sm">
+                          <p className="font-medium text-foreground text-sm">
                             Flood Zone: {publicRecordsQuery.data.floodInfo.zone}
                             {publicRecordsQuery.data.floodInfo.sfha && " (Special Flood Hazard Area)"}
                           </p>
-                          <p className="text-sm text-gray-400 mt-1">{publicRecordsQuery.data.floodInfo.description}</p>
+                          <p className="text-sm text-muted-foreground mt-1">{publicRecordsQuery.data.floodInfo.description}</p>
                         </div>
                       </div>
                     )}
 
                     {publicRecordsQuery.data.nearbyPlaces && (
                       <div>
-                        <p className="text-sm font-medium text-gray-300 mb-3">Nearby Amenities</p>
+                        <p className="text-sm font-medium text-foreground/80 mb-3">Nearby Amenities</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {[
                             { key: "schools", icon: GraduationCap, label: "Schools" },
@@ -1382,14 +1382,14 @@ export default function HomeReport() {
                             const items = (publicRecordsQuery.data?.nearbyPlaces as any)?.[key] || [];
                             if (items.length === 0) return null;
                             return (
-                              <div key={key} className="bg-gray-800 rounded-lg p-3" data-testid={`amenity-${key}`}>
+                              <div key={key} className="bg-muted rounded-lg p-3" data-testid={`amenity-${key}`}>
                                 <div className="flex items-center gap-2 mb-2">
                                   <AmenityIcon className="w-4 h-4 text-primary" />
-                                  <span className="text-sm font-medium text-white">{label}</span>
+                                  <span className="text-sm font-medium text-foreground">{label}</span>
                                 </div>
                                 <ul className="space-y-1">
                                   {items.slice(0, 3).map((item: any, i: number) => (
-                                    <li key={i} className="text-xs text-gray-400">
+                                    <li key={i} className="text-xs text-muted-foreground">
                                       {item.name || item.type || label} — {item.distance ? `${(item.distance / 1000).toFixed(1)} km` : "nearby"}
                                     </li>
                                   ))}
@@ -1402,16 +1402,16 @@ export default function HomeReport() {
                     )}
                   </div>
                 ) : (
-                  <p className="text-gray-400 text-center py-4">Neighborhood data unavailable.</p>
+                  <p className="text-muted-foreground text-center py-4">Neighborhood data unavailable.</p>
                 )}
               </div>
-            </DarkCard>
+            </ReportCard>
 
             {!isAuthenticated && (
-              <DarkCard>
+              <ReportCard>
                 <div className="text-center">
-                  <h3 className="font-display font-bold text-lg text-white mb-2">Save your home report</h3>
-                  <p className="text-gray-400 text-sm mb-4">Sign in to save your home details, track equity over time, and get personalized insights.</p>
+                  <h3 className="font-display font-bold text-lg text-foreground mb-2">Save your home report</h3>
+                  <p className="text-muted-foreground text-sm mb-4">Sign in to save your home details, track equity over time, and get personalized insights.</p>
                   <button
                     data-testid="button-report-signin"
                     onClick={() => setLocation("/auth")}
@@ -1420,7 +1420,7 @@ export default function HomeReport() {
                     Sign In to Save
                   </button>
                 </div>
-              </DarkCard>
+              </ReportCard>
             )}
           </div>
         </div>
