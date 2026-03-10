@@ -135,25 +135,27 @@ export default function Home() {
             alt="Modern luxury home with large windows and landscaped yard"
             className="w-full h-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-background" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/45 to-background" />
         </div>
 
         <div className="relative z-10 w-full max-w-4xl px-4 flex flex-col items-center animate-in pt-8">
           <h1
             data-testid="text-hero-headline"
-            className="text-4xl md:text-6xl lg:text-7xl font-display font-bold text-white text-center mb-3 tracking-tight drop-shadow-lg transition-all duration-300"
+            className="text-4xl md:text-6xl lg:text-7xl font-display font-bold text-white text-center mb-3 tracking-tight transition-all duration-300"
+            style={{ textShadow: "0 2px 12px rgba(0,0,0,0.7), 0 1px 3px rgba(0,0,0,0.5)" }}
           >
             {headlineByTab[activeTab]}
           </h1>
           <p
             data-testid="text-hero-subtitle"
-            className="text-lg md:text-xl text-white/80 text-center mb-8 max-w-2xl drop-shadow transition-all duration-300"
+            className="text-lg md:text-xl text-white text-center mb-8 max-w-2xl transition-all duration-300"
+            style={{ textShadow: "0 1px 8px rgba(0,0,0,0.6), 0 1px 2px rgba(0,0,0,0.4)" }}
           >
             {subtitleByTab[activeTab]}
           </p>
 
           <div className="w-full max-w-2xl">
-            <div className="flex gap-0 bg-white/10 backdrop-blur-md rounded-t-2xl border border-white/20 border-b-0 overflow-hidden">
+            <div className="flex gap-0 bg-black/40 backdrop-blur-lg rounded-t-2xl border border-white/25 border-b-0 overflow-hidden">
               {heroTabs.map((tab) => (
                 <button
                   key={tab.id}
@@ -162,8 +164,9 @@ export default function Home() {
                   className={`flex-1 flex items-center justify-center gap-2 py-3.5 px-4 font-semibold text-sm md:text-base transition-all duration-200 ${
                     activeTab === tab.id
                       ? "bg-background text-foreground shadow-sm"
-                      : "text-white/90 hover:bg-white/10"
+                      : "text-white hover:bg-white/15"
                   }`}
+                  style={activeTab !== tab.id ? { textShadow: "0 1px 4px rgba(0,0,0,0.5)" } : undefined}
                 >
                   <tab.icon className="w-4 h-4" />
                   {tab.label}
