@@ -1,10 +1,11 @@
 import { useState, useRef, useCallback } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { Autocomplete } from "@react-google-maps/api";
 import { useGoogleMaps } from "@/hooks/use-google-maps";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
+import { useProperties } from "@/hooks/use-properties";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,7 +23,8 @@ import {
   MapPin, Home, TrendingUp, Clock, Target, User, CheckCircle2,
   ChevronRight, ChevronLeft, BedDouble, Bath, Maximize2, Ruler,
   Star, ArrowRight, Building2, Calendar, DollarSign, Eye,
-  Users, ShieldCheck, Sparkles, Send,
+  Users, ShieldCheck, Sparkles, Send, Heart, Lock, Zap,
+  BarChart3, Shield, HandshakeIcon,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -110,6 +112,195 @@ function BuyerDemandSection({ onNavigateToBuyers }: { onNavigateToBuyers: () => 
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+const FALLBACK_IMG = "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&h=500&fit=crop";
+
+function ValueProposition() {
+  return (
+    <div className="space-y-6" data-testid="section-value-proposition">
+      <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-6 sm:p-8 text-white relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-72 h-72 bg-primary/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4" />
+        <div className="absolute bottom-0 left-0 w-56 h-56 bg-blue-500/10 rounded-full blur-2xl translate-y-1/3 -translate-x-1/4" />
+
+        <div className="relative">
+          <div className="flex items-center gap-2 mb-3">
+            <Zap className="w-5 h-5 text-amber-400" />
+            <span className="text-amber-400 text-sm font-semibold uppercase tracking-wide">Why Sell with xucasa</span>
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-bold mb-3">Your home deserves more than just a listing</h2>
+          <p className="text-slate-300 text-sm sm:text-base mb-6 max-w-xl">
+            xucasa connects you directly with pre-approved buyers, gives you an instant home valuation, and matches you with top-rated local agents — all for free.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[
+              { icon: BarChart3, title: "Instant Valuation", desc: "Get a data-driven estimate based on real comparable sales in your area", color: "text-emerald-400" },
+              { icon: Shield, title: "Vetted Local Agents", desc: "We match you with experienced agents who know your neighborhood inside out", color: "text-blue-400" },
+              { icon: HandshakeIcon, title: "Direct Buyer Access", desc: "Skip the waiting — our pre-approved buyers are actively searching for homes like yours", color: "text-amber-400" },
+            ].map(({ icon: Icon, title, desc, color }) => (
+              <div key={title} className="bg-white/5 border border-white/10 rounded-xl p-4">
+                <Icon className={`w-6 h-6 ${color} mb-2`} />
+                <p className="font-semibold text-sm mb-1">{title}</p>
+                <p className="text-xs text-slate-400">{desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4 mt-6 pt-5 border-t border-white/10">
+            {[
+              { value: "2,500+", label: "Homes sold" },
+              { value: "$0", label: "Upfront cost" },
+              { value: "48hrs", label: "Avg. buyer response" },
+              { value: "98%", label: "Client satisfaction" },
+            ].map(stat => (
+              <div key={stat.label} className="text-center flex-1 min-w-[80px]">
+                <p className="text-lg sm:text-xl font-bold text-white">{stat.value}</p>
+                <p className="text-xs text-slate-400">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeaturedListings({ navigate }: { navigate: (path: string) => void }) {
+  const { data: featuredData, isLoading } = useProperties({ limit: 20, offset: 0, sort: "newest" });
+  const allActive = featuredData?.properties?.filter(p => p.status === "active") || [];
+
+  const featuredListings = allActive.filter(p => !p.isOffMarket && p.source === "idx").slice(0, 6);
+  const privateListings = allActive.filter(p => p.agentId && (p.isOffMarket || p.source === "manual")).slice(0, 6);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {[1, 2, 3, 4, 5, 6].map(i => (
+            <div key={i} className="rounded-xl bg-muted/50 animate-pulse h-48" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8" data-testid="section-featured-listings">
+      {featuredListings.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles className="w-4 h-4 text-primary" />
+                <h3 className="text-lg font-bold">Featured on xucasa</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">Active listings getting attention from buyers right now</p>
+            </div>
+            <Link href="/search" data-testid="link-view-all-listings">
+              <span className="text-sm text-primary font-medium hover:underline flex items-center gap-1">View all <ArrowRight className="w-3.5 h-3.5" /></span>
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {featuredListings.map(prop => (
+              <button
+                key={prop.id}
+                data-testid={`card-featured-listing-${prop.id}`}
+                onClick={() => navigate(`/property/${prop.id}`)}
+                className="text-left rounded-xl overflow-hidden border bg-background hover:shadow-lg transition-all group"
+              >
+                <div className="relative aspect-[4/3]">
+                  <img
+                    src={prop.imageUrl || FALLBACK_IMG}
+                    alt={prop.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    onError={e => { (e.target as HTMLImageElement).src = FALLBACK_IMG; }}
+                  />
+                  <div className="absolute top-2 left-2">
+                    <Badge className="bg-green-600 text-white text-[10px] border-0">Active</Badge>
+                  </div>
+                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent p-2 pt-6">
+                    <p className="text-white font-bold text-sm">${prop.price.toLocaleString()}</p>
+                  </div>
+                </div>
+                <div className="p-2.5">
+                  <p className="text-xs font-medium line-clamp-1">{prop.title}</p>
+                  <div className="flex items-center gap-2 mt-1 text-[11px] text-muted-foreground">
+                    {prop.beds && <span>{prop.beds} bd</span>}
+                    {prop.baths && <span>{prop.baths} ba</span>}
+                    {prop.sqft && <span>{prop.sqft.toLocaleString()} sqft</span>}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {privateListings.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Lock className="w-4 h-4 text-amber-600" />
+                <h3 className="text-lg font-bold">Privately Listed on xucasa</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">Exclusive homes listed by agents directly on our platform</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {privateListings.map(prop => (
+              <button
+                key={prop.id}
+                data-testid={`card-private-listing-${prop.id}`}
+                onClick={() => navigate(`/property/${prop.id}`)}
+                className="text-left rounded-xl overflow-hidden border bg-background hover:shadow-lg transition-all group"
+              >
+                <div className="relative aspect-[4/3]">
+                  <img
+                    src={prop.imageUrl || FALLBACK_IMG}
+                    alt={prop.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    onError={e => { (e.target as HTMLImageElement).src = FALLBACK_IMG; }}
+                  />
+                  <div className="absolute top-2 left-2 flex gap-1">
+                    <Badge className="bg-amber-600 text-white text-[10px] border-0 gap-1">
+                      <Lock className="w-2.5 h-2.5" /> Private
+                    </Badge>
+                  </div>
+                  {prop.agent && (
+                    <div className="absolute top-2 right-2">
+                      <Badge variant="secondary" className="bg-black/60 text-white text-[10px] border-0">Agent Listed</Badge>
+                    </div>
+                  )}
+                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent p-2 pt-6">
+                    <p className="text-white font-bold text-sm">${prop.price.toLocaleString()}</p>
+                  </div>
+                </div>
+                <div className="p-2.5">
+                  <p className="text-xs font-medium line-clamp-1">{prop.title}</p>
+                  <div className="flex items-center gap-2 mt-1 text-[11px] text-muted-foreground">
+                    {prop.beds && <span>{prop.beds} bd</span>}
+                    {prop.baths && <span>{prop.baths} ba</span>}
+                    {prop.sqft && <span>{prop.sqft.toLocaleString()} sqft</span>}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {featuredListings.length === 0 && privateListings.length === 0 && (
+        <Card className="shadow-sm text-center py-8">
+          <CardContent>
+            <Building2 className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">Listings coming soon. Be the first to list your home on xucasa!</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -492,6 +683,24 @@ export default function Sell() {
               </CardContent>
             </Card>
 
+            <Button
+              data-testid="button-step1-next"
+              size="lg"
+              className="w-full gap-2"
+              onClick={() => {
+                if (!form.fullAddress && !addressInputRef.current?.value) {
+                  toast({ title: "Address required", description: "Please enter your home's address.", variant: "destructive" });
+                  return;
+                }
+                if (addressInputRef.current?.value && !form.fullAddress) {
+                  set("fullAddress", addressInputRef.current.value);
+                }
+                setStep(2);
+              }}
+            >
+              Get My Estimate <ChevronRight className="w-4 h-4" />
+            </Button>
+
             {/* What you get */}
             <div className="grid grid-cols-3 gap-4">
               {[
@@ -511,25 +720,11 @@ export default function Sell() {
               ))}
             </div>
 
-            <Button
-              data-testid="button-step1-next"
-              size="lg"
-              className="w-full gap-2"
-              onClick={() => {
-                if (!form.fullAddress && !addressInputRef.current?.value) {
-                  toast({ title: "Address required", description: "Please enter your home's address.", variant: "destructive" });
-                  return;
-                }
-                if (addressInputRef.current?.value && !form.fullAddress) {
-                  set("fullAddress", addressInputRef.current.value);
-                }
-                setStep(2);
-              }}
-            >
-              Get My Estimate <ChevronRight className="w-4 h-4" />
-            </Button>
+            <ValueProposition />
 
             <BuyerDemandSection onNavigateToBuyers={() => navigate("/buyers")} />
+
+            <FeaturedListings navigate={navigate} />
           </div>
         )}
 
