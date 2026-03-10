@@ -295,6 +295,66 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/recently-sold", async (req, res) => {
+    try {
+      const lat = parseFloat(req.query.lat as string);
+      const lng = parseFloat(req.query.lng as string);
+      const radius = parseFloat(req.query.radius as string) || 5;
+      const limitParam = parseInt(req.query.limit as string) || 9;
+
+      if (isNaN(lat) || isNaN(lng)) {
+        return res.status(400).json({ message: "lat and lng are required" });
+      }
+
+      const radiusMiles = Math.min(Math.max(radius, 0.5), 25);
+      const resultLimit = Math.min(Math.max(limitParam, 1), 20);
+
+      const results = await db
+        .select()
+        .from(properties)
+        .where(
+          sql`${properties.lat} IS NOT NULL
+            AND ${properties.lng} IS NOT NULL
+            AND ${properties.price} IS NOT NULL
+            AND ${properties.price} > 10000
+            AND ${properties.imageUrl} IS NOT NULL
+            AND (
+              3959 * acos(
+                cos(radians(${lat})) * cos(radians(CAST(${properties.lat} AS double precision)))
+                * cos(radians(CAST(${properties.lng} AS double precision)) - radians(${lng}))
+                + sin(radians(${lat})) * sin(radians(CAST(${properties.lat} AS double precision)))
+              )
+            ) < ${radiusMiles}`
+        )
+        .orderBy(sql`3959 * acos(
+          cos(radians(${lat})) * cos(radians(CAST(${properties.lat} AS double precision)))
+          * cos(radians(CAST(${properties.lng} AS double precision)) - radians(${lng}))
+          + sin(radians(${lat})) * sin(radians(CAST(${properties.lat} AS double precision)))
+        )`)
+        .limit(resultLimit);
+
+      const nearby = results.map((p) => ({
+        id: p.id,
+        address: [p.addressStreetNumber, p.addressStreetName].filter(Boolean).join(" ") || p.location,
+        city: p.addressCity || "",
+        state: p.addressState || "",
+        zip: p.addressZip || "",
+        price: p.price,
+        beds: p.beds,
+        baths: p.baths,
+        sqft: p.sqft,
+        imageUrl: p.imageUrl || (p.photos && p.photos.length > 0 ? p.photos[0] : null),
+        propertyType: p.propertyType,
+        status: p.status,
+      }));
+
+      res.json(nearby);
+    } catch (err) {
+      console.error("Recently sold error:", err);
+      res.status(500).json({ message: "Failed to fetch recently sold properties" });
+    }
+  });
+
   // Public Records API — fetches from Census, FEMA, OpenStreetMap
   app.get("/api/properties/:id/public-records", async (req, res) => {
     try {
