@@ -376,6 +376,50 @@ export const propertyReviewsRelations = relations(propertyReviews, ({ one }) => 
   user: one(users, { fields: [propertyReviews.userId], references: [users.id] }),
 }));
 
+// Agent CRM - Contacts & Tags
+export const agentContacts = pgTable("agent_contacts", {
+  id: serial("id").primaryKey(),
+  agentId: varchar("agent_id").references(() => users.id).notNull(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name"),
+  email: text("email"),
+  phone: text("phone"),
+  mailingAddress: text("mailing_address"),
+  notes: text("notes"),
+  source: text("source").default("manual").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const contactTags = pgTable("contact_tags", {
+  id: serial("id").primaryKey(),
+  agentId: varchar("agent_id").references(() => users.id).notNull(),
+  name: text("name").notNull(),
+  color: text("color").default("blue").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const contactTagAssignments = pgTable("contact_tag_assignments", {
+  id: serial("id").primaryKey(),
+  contactId: integer("contact_id").references(() => agentContacts.id, { onDelete: "cascade" }).notNull(),
+  tagId: integer("tag_id").references(() => contactTags.id, { onDelete: "cascade" }).notNull(),
+});
+
+export const agentContactsRelations = relations(agentContacts, ({ one, many }) => ({
+  agent: one(users, { fields: [agentContacts.agentId], references: [users.id] }),
+  tagAssignments: many(contactTagAssignments),
+}));
+
+export const contactTagsRelations = relations(contactTags, ({ one, many }) => ({
+  agent: one(users, { fields: [contactTags.agentId], references: [users.id] }),
+  assignments: many(contactTagAssignments),
+}));
+
+export const contactTagAssignmentsRelations = relations(contactTagAssignments, ({ one }) => ({
+  contact: one(agentContacts, { fields: [contactTagAssignments.contactId], references: [agentContacts.id] }),
+  tag: one(contactTags, { fields: [contactTagAssignments.tagId], references: [contactTags.id] }),
+}));
+
 // Insert Schemas
 export const insertPropertySchema = createInsertSchema(properties).omit({ id: true, createdAt: true });
 export const insertSellLeadSchema = createInsertSchema(sellLeads).omit({ id: true, createdAt: true });
@@ -391,6 +435,9 @@ export const insertClientAgentLinkSchema = createInsertSchema(clientAgentLinks).
 export const insertPropertyOfferSchema = createInsertSchema(propertyOffers).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSwipeNotificationSchema = createInsertSchema(swipeNotifications).omit({ id: true, createdAt: true });
 export const insertPropertyReviewSchema = createInsertSchema(propertyReviews).omit({ id: true, createdAt: true });
+export const insertAgentContactSchema = createInsertSchema(agentContacts).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertContactTagSchema = createInsertSchema(contactTags).omit({ id: true, createdAt: true });
+export const insertContactTagAssignmentSchema = createInsertSchema(contactTagAssignments).omit({ id: true });
 
 // Types
 export type Property = typeof properties.$inferSelect;
@@ -421,6 +468,12 @@ export type SwipeNotification = typeof swipeNotifications.$inferSelect;
 export type InsertSwipeNotification = z.infer<typeof insertSwipeNotificationSchema>;
 export type PropertyReview = typeof propertyReviews.$inferSelect;
 export type InsertPropertyReview = z.infer<typeof insertPropertyReviewSchema>;
+export type AgentContact = typeof agentContacts.$inferSelect;
+export type InsertAgentContact = z.infer<typeof insertAgentContactSchema>;
+export type ContactTag = typeof contactTags.$inferSelect;
+export type InsertContactTag = z.infer<typeof insertContactTagSchema>;
+export type ContactTagAssignment = typeof contactTagAssignments.$inferSelect;
+export type InsertContactTagAssignment = z.infer<typeof insertContactTagAssignmentSchema>;
 
 // Request Types
 export type CreatePropertyRequest = InsertProperty;

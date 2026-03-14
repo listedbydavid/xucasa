@@ -38,6 +38,14 @@ import {
   type InsertSwipeNotification,
   type PropertyReview,
   type InsertPropertyReview,
+  agentContacts,
+  contactTags,
+  contactTagAssignments,
+  type AgentContact,
+  type InsertAgentContact,
+  type ContactTag,
+  type InsertContactTag,
+  type ContactTagAssignment,
   users,
 } from "@shared/schema";
 import { eq, and, desc, sql, gte, count } from "drizzle-orm";
@@ -167,6 +175,25 @@ export interface IStorage {
     compsCount: number;
     comps: { id: number; title: string; price: number; beds: number; sqft: number; location: string; distanceMiles?: number }[];
   }>;
+
+  // Agent CRM - Contacts
+  getAgentContacts(agentId: string, tagId?: number): Promise<(AgentContact & { tags: ContactTag[] })[]>;
+  getAgentContact(id: number, agentId: string): Promise<(AgentContact & { tags: ContactTag[] }) | undefined>;
+  createAgentContact(contact: InsertAgentContact): Promise<AgentContact>;
+  createAgentContactsBulk(contacts: InsertAgentContact[]): Promise<AgentContact[]>;
+  updateAgentContact(id: number, agentId: string, updates: Partial<InsertAgentContact>): Promise<AgentContact>;
+  deleteAgentContact(id: number, agentId: string): Promise<void>;
+
+  // Agent CRM - Tags
+  getContactTags(agentId: string): Promise<ContactTag[]>;
+  createContactTag(tag: InsertContactTag): Promise<ContactTag>;
+  updateContactTag(id: number, agentId: string, updates: Partial<InsertContactTag>): Promise<ContactTag>;
+  deleteContactTag(id: number, agentId: string): Promise<void>;
+
+  // Agent CRM - Tag Assignments
+  assignTagToContact(contactId: number, tagId: number): Promise<ContactTagAssignment>;
+  removeTagFromContact(contactId: number, tagId: number): Promise<void>;
+  assignTagToContacts(contactIds: number[], tagId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -914,6 +941,130 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(propertyReviews.userId, userId), eq(propertyReviews.propertyId, propertyId)))
       .limit(1);
     return rows[0];
+  }
+
+  // === Agent CRM - Contacts ===
+  async getAgentContacts(agentId: string, tagId?: number): Promise<(AgentContact & { tags: ContactTag[] })[]> {
+    let rows: AgentContact[];
+    if (tagId) {
+      const matched = await db
+        .select({ contact: agentContacts })
+        .from(agentContacts)
+        .innerJoin(contactTagAssignments, eq(contactTagAssignments.contactId, agentContacts.id))
+        .where(and(eq(agentContacts.agentId, agentId), eq(contactTagAssignments.tagId, tagId)))
+        .orderBy(desc(agentContacts.createdAt));
+      rows = matched.map(r => r.contact);
+    } else {
+      rows = await db
+        .select()
+        .from(agentContacts)
+        .where(eq(agentContacts.agentId, agentId))
+        .orderBy(desc(agentContacts.createdAt));
+    }
+
+    const allAssignments = rows.length > 0
+      ? await db
+          .select({ assignment: contactTagAssignments, tag: contactTags })
+          .from(contactTagAssignments)
+          .innerJoin(contactTags, eq(contactTagAssignments.tagId, contactTags.id))
+          .where(sql`${contactTagAssignments.contactId} IN (${sql.join(rows.map(r => sql`${r.id}`), sql`, `)})`)
+      : [];
+
+    const tagsByContact = new Map<number, ContactTag[]>();
+    for (const row of allAssignments) {
+      const existing = tagsByContact.get(row.assignment.contactId) || [];
+      existing.push(row.tag);
+      tagsByContact.set(row.assignment.contactId, existing);
+    }
+
+    return rows.map(c => ({ ...c, tags: tagsByContact.get(c.id) || [] }));
+  }
+
+  async getAgentContact(id: number, agentId: string): Promise<(AgentContact & { tags: ContactTag[] }) | undefined> {
+    const rows = await db.select().from(agentContacts)
+      .where(and(eq(agentContacts.id, id), eq(agentContacts.agentId, agentId)));
+    if (rows.length === 0) return undefined;
+    const contact = rows[0];
+
+    const tagRows = await db
+      .select({ tag: contactTags })
+      .from(contactTagAssignments)
+      .innerJoin(contactTags, eq(contactTagAssignments.tagId, contactTags.id))
+      .where(eq(contactTagAssignments.contactId, id));
+
+    return { ...contact, tags: tagRows.map(r => r.tag) };
+  }
+
+  async createAgentContact(contact: InsertAgentContact): Promise<AgentContact> {
+    const [created] = await db.insert(agentContacts).values(contact).returning();
+    return created;
+  }
+
+  async createAgentContactsBulk(contacts: InsertAgentContact[]): Promise<AgentContact[]> {
+    if (contacts.length === 0) return [];
+    const created = await db.insert(agentContacts).values(contacts).returning();
+    return created;
+  }
+
+  async updateAgentContact(id: number, agentId: string, updates: Partial<InsertAgentContact>): Promise<AgentContact> {
+    const [updated] = await db
+      .update(agentContacts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(agentContacts.id, id), eq(agentContacts.agentId, agentId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteAgentContact(id: number, agentId: string): Promise<void> {
+    await db.delete(agentContacts)
+      .where(and(eq(agentContacts.id, id), eq(agentContacts.agentId, agentId)));
+  }
+
+  // === Agent CRM - Tags ===
+  async getContactTags(agentId: string): Promise<ContactTag[]> {
+    return await db.select().from(contactTags)
+      .where(eq(contactTags.agentId, agentId))
+      .orderBy(contactTags.name);
+  }
+
+  async createContactTag(tag: InsertContactTag): Promise<ContactTag> {
+    const [created] = await db.insert(contactTags).values(tag).returning();
+    return created;
+  }
+
+  async updateContactTag(id: number, agentId: string, updates: Partial<InsertContactTag>): Promise<ContactTag> {
+    const [updated] = await db
+      .update(contactTags)
+      .set(updates)
+      .where(and(eq(contactTags.id, id), eq(contactTags.agentId, agentId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteContactTag(id: number, agentId: string): Promise<void> {
+    await db.delete(contactTags)
+      .where(and(eq(contactTags.id, id), eq(contactTags.agentId, agentId)));
+  }
+
+  // === Agent CRM - Tag Assignments ===
+  async assignTagToContact(contactId: number, tagId: number): Promise<ContactTagAssignment> {
+    const existing = await db.select().from(contactTagAssignments)
+      .where(and(eq(contactTagAssignments.contactId, contactId), eq(contactTagAssignments.tagId, tagId)))
+      .limit(1);
+    if (existing.length > 0) return existing[0];
+    const [created] = await db.insert(contactTagAssignments).values({ contactId, tagId }).returning();
+    return created;
+  }
+
+  async removeTagFromContact(contactId: number, tagId: number): Promise<void> {
+    await db.delete(contactTagAssignments)
+      .where(and(eq(contactTagAssignments.contactId, contactId), eq(contactTagAssignments.tagId, tagId)));
+  }
+
+  async assignTagToContacts(contactIds: number[], tagId: number): Promise<void> {
+    if (contactIds.length === 0) return;
+    const values = contactIds.map(contactId => ({ contactId, tagId }));
+    await db.insert(contactTagAssignments).values(values).onConflictDoNothing();
   }
 }
 

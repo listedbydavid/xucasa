@@ -1161,6 +1161,223 @@ export async function registerRoutes(
     }
   });
 
+  // ── Agent CRM - Contacts ──────────────────────────────────────────────────────
+
+  app.get("/api/agent/contacts", isAuthenticated, async (req: any, res) => {
+    try {
+      const agentId = req.user!.claims.sub;
+      const tagId = req.query.tagId ? Number(req.query.tagId) : undefined;
+      const contacts = await storage.getAgentContacts(agentId, tagId);
+      res.json(contacts);
+    } catch (err: any) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/agent/contacts", isAuthenticated, async (req: any, res) => {
+    try {
+      const agentId = req.user!.claims.sub;
+      const { firstName, lastName, email, phone, mailingAddress, notes, source, tagIds } = req.body;
+      if (!firstName) return res.status(400).json({ message: "First name is required" });
+      const contact = await storage.createAgentContact({
+        agentId, firstName, lastName, email, phone, mailingAddress, notes,
+        source: source || "manual",
+      });
+      if (tagIds && Array.isArray(tagIds) && tagIds.length > 0) {
+        const ownedTags = await storage.getContactTags(agentId);
+        const ownedIds = new Set(ownedTags.map(t => t.id));
+        for (const tagId of tagIds) {
+          if (ownedIds.has(tagId)) {
+            await storage.assignTagToContact(contact.id, tagId);
+          }
+        }
+      }
+      const full = await storage.getAgentContact(contact.id, agentId);
+      res.status(201).json(full);
+    } catch (err: any) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/agent/contacts/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const agentId = req.user!.claims.sub;
+      const id = Number(req.params.id);
+      const { firstName, lastName, email, phone, mailingAddress, notes } = req.body;
+      const updated = await storage.updateAgentContact(id, agentId, {
+        firstName, lastName, email, phone, mailingAddress, notes,
+      });
+      if (!updated) return res.status(404).json({ message: "Contact not found" });
+      const full = await storage.getAgentContact(id, agentId);
+      res.json(full);
+    } catch (err: any) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/agent/contacts/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const agentId = req.user!.claims.sub;
+      await storage.deleteAgentContact(Number(req.params.id), agentId);
+      res.status(204).end();
+    } catch (err: any) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/agent/contacts/import-csv", isAuthenticated, async (req: any, res) => {
+    try {
+      const agentId = req.user!.claims.sub;
+      const { contacts, tagIds } = req.body;
+      if (!Array.isArray(contacts) || contacts.length === 0) {
+        return res.status(400).json({ message: "No contacts provided" });
+      }
+      if (contacts.length > 1000) {
+        return res.status(400).json({ message: "Maximum 1000 contacts per import" });
+      }
+
+      const toInsert = contacts.map((c: any) => ({
+        agentId,
+        firstName: c.firstName || "Unknown",
+        lastName: c.lastName || null,
+        email: c.email || null,
+        phone: c.phone || null,
+        mailingAddress: c.mailingAddress || null,
+        notes: c.notes || null,
+        source: "csv_import" as const,
+      }));
+
+      const created = await storage.createAgentContactsBulk(toInsert);
+
+      if (tagIds && Array.isArray(tagIds) && tagIds.length > 0) {
+        const ownedTags = await storage.getContactTags(agentId);
+        const ownedIds = new Set(ownedTags.map(t => t.id));
+        const validTagIds = tagIds.filter((id: number) => ownedIds.has(id));
+        const createdIds = created.map(c => c.id);
+        for (const tagId of validTagIds) {
+          await storage.assignTagToContacts(createdIds, tagId);
+        }
+      }
+
+      res.status(201).json({ imported: created.length });
+    } catch (err: any) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/agent/contacts/import-phone", isAuthenticated, async (req: any, res) => {
+    try {
+      const agentId = req.user!.claims.sub;
+      const { contacts, tagIds } = req.body;
+      if (!Array.isArray(contacts) || contacts.length === 0) {
+        return res.status(400).json({ message: "No contacts provided" });
+      }
+
+      const toInsert = contacts.map((c: any) => ({
+        agentId,
+        firstName: c.firstName || c.name?.split(" ")[0] || "Unknown",
+        lastName: c.lastName || c.name?.split(" ").slice(1).join(" ") || null,
+        email: c.email || null,
+        phone: c.phone || null,
+        source: "phone_import" as const,
+      }));
+
+      const created = await storage.createAgentContactsBulk(toInsert);
+
+      if (tagIds && Array.isArray(tagIds) && tagIds.length > 0) {
+        const ownedTags = await storage.getContactTags(agentId);
+        const ownedIds = new Set(ownedTags.map(t => t.id));
+        const validTagIds = tagIds.filter((id: number) => ownedIds.has(id));
+        for (const tagId of validTagIds) {
+          await storage.assignTagToContacts(created.map(c => c.id), tagId);
+        }
+      }
+
+      res.status(201).json({ imported: created.length });
+    } catch (err: any) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ── Agent CRM - Tags ────────────────────────────────────────────────────────
+
+  app.get("/api/agent/tags", isAuthenticated, async (req: any, res) => {
+    try {
+      const agentId = req.user!.claims.sub;
+      const tags = await storage.getContactTags(agentId);
+      res.json(tags);
+    } catch (err: any) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/agent/tags", isAuthenticated, async (req: any, res) => {
+    try {
+      const agentId = req.user!.claims.sub;
+      const { name, color } = req.body;
+      if (!name) return res.status(400).json({ message: "Tag name is required" });
+      const tag = await storage.createContactTag({ agentId, name, color: color || "blue" });
+      res.status(201).json(tag);
+    } catch (err: any) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/agent/tags/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const agentId = req.user!.claims.sub;
+      const { name, color } = req.body;
+      const updated = await storage.updateContactTag(Number(req.params.id), agentId, { name, color });
+      if (!updated) return res.status(404).json({ message: "Tag not found" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/agent/tags/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const agentId = req.user!.claims.sub;
+      await storage.deleteContactTag(Number(req.params.id), agentId);
+      res.status(204).end();
+    } catch (err: any) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ── Agent CRM - Tag Assignments ──────────────────────────────────────────────
+
+  app.post("/api/agent/contacts/:id/tags", isAuthenticated, async (req: any, res) => {
+    try {
+      const agentId = req.user!.claims.sub;
+      const contactId = Number(req.params.id);
+      const { tagId } = req.body;
+      if (!tagId) return res.status(400).json({ message: "tagId is required" });
+      const contact = await storage.getAgentContact(contactId, agentId);
+      if (!contact) return res.status(404).json({ message: "Contact not found" });
+      const tags = await storage.getContactTags(agentId);
+      if (!tags.find(t => t.id === tagId)) return res.status(403).json({ message: "Tag not owned by you" });
+      const assignment = await storage.assignTagToContact(contactId, tagId);
+      res.status(201).json(assignment);
+    } catch (err: any) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/agent/contacts/:id/tags/:tagId", isAuthenticated, async (req: any, res) => {
+    try {
+      const agentId = req.user!.claims.sub;
+      const contactId = Number(req.params.id);
+      const tagId = Number(req.params.tagId);
+      const contact = await storage.getAgentContact(contactId, agentId);
+      if (!contact) return res.status(404).json({ message: "Contact not found" });
+      await storage.removeTagFromContact(contactId, tagId);
+      res.status(204).end();
+    } catch (err: any) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // ── Open Houses ───────────────────────────────────────────────────────────────
 
   app.get("/api/open-houses", async (_req, res) => {

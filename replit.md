@@ -37,7 +37,7 @@ Preferred communication style: Simple, everyday language.
 
 - **Database**: PostgreSQL.
 - **ORM**: Drizzle ORM (`drizzle-orm/node-postgres`) with `drizzle-kit` for migrations.
-- **Schema**: Includes tables for users, sessions, properties, saved properties/searches, search history, user homes, buyer profiles, buyer matches, seller pitches, swipe notifications, property offers, and property reviews.
+- **Schema**: Includes tables for users, sessions, properties, saved properties/searches, search history, user homes, buyer profiles, buyer matches, seller pitches, swipe notifications, property offers, property reviews, agent_contacts, contact_tags, and contact_tag_assignments.
 
 ### Authentication
 
@@ -56,6 +56,7 @@ Preferred communication style: Simple, everyday language.
 - **Buyer Profile Management**: Shared modal for creating/editing buyer profiles.
 - **Agent Beacon Report**: Generates branded PDF reports for agents, matching buyers to prospective listings.
 - **Open House Route Planner**: Component for planning multi-stop routes to selected open houses using Google/Apple Maps.
+- **Agent CRM (Contacts)**: Full contact management system in the Agent Dashboard "Contacts" tab. Features: contact list with search and tag filtering, add/edit contact modal, tag management (create, edit, delete tags with color coding), CSV import wizard (4-step: upload → field mapping with auto-guess → tag assignment → confirm), phone contacts import via browser Contact Picker API, and tag assignment/removal on contacts. All endpoints enforce tenant isolation (ownership checks). Tables: `agent_contacts`, `contact_tags`, `contact_tag_assignments`. Component: `AgentContacts.tsx`. API routes under `/api/agent/contacts` and `/api/agent/tags`.
 - **Home Report**: Comprehensive Homebot-inspired property analysis tool. Features: Google autocomplete address input with MLS auto-fill, preview examples below Generate button, and a dark-themed report with sections for: Property Valuation (comps), Loan Confirmation ("That looks right" / "Change these numbers"), Net Worth/Equity, Recently Sold Nearby (from DB with property cards), "What's Important Now" (3 insight cards), Principal vs Interest Pie Chart, Extra Payment Savings Calculator, Refinance Comparison (30yr/15yr/5-1 ARM with years slider), Purchasing Power (4 scenarios), Home Equity with action cards, Airbnb Rental Estimate with nightly rate slider, Zoning & Building Potential, and Neighborhood Insights. API: `/api/recently-sold` returns nearby properties by lat/lng.
 - **Sell Page Auto-Populate**: When a seller enters their address on the Sell page, `/api/property-lookup` searches the properties database by address components. If a matching MLS record is found, beds, baths, sqft, lot size, HOA, and property type are auto-filled into the form. A green banner confirms auto-fill on Step 2.
 - **Reverse Offer / Swipe Interest System**: Facilitates buyer interest expression and reverse offer creation, with notifications for agents and admins based on representation status.

@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
-import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar, Send, Eye } from "lucide-react";
+import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar, Send, Eye, ContactRound } from "lucide-react";
 import { ReverseOfferForm } from "@/components/ReverseOfferForm";
 import { IdxSyncPanel } from "@/components/IdxSyncPanel";
 import type { PropertyResponse, CreatePropertyRequest } from "@shared/schema";
@@ -13,8 +13,9 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { BeaconTab } from "@/components/BeaconReport";
 import { OpenHouseRoutePlanner } from "@/components/OpenHouseRoutePlanner";
+import { AgentContactsSection } from "@/components/AgentContacts";
 
-type AgentTab = "listings" | "clients" | "openhouses" | "beacon" | "idx" | "buyerinterest";
+type AgentTab = "listings" | "clients" | "contacts" | "openhouses" | "beacon" | "idx" | "buyerinterest";
 
 const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
@@ -86,6 +87,7 @@ export default function AgentDashboard() {
           {([
             { id: "listings",   label: "My Listings",  icon: Home },
             { id: "clients",    label: "Clients",       icon: Users },
+            { id: "contacts",   label: "Contacts",      icon: ContactRound },
             { id: "openhouses", label: "Open Houses",   icon: CalendarDays },
             { id: "beacon",     label: "Beacon",        icon: Radar },
             { id: "buyerinterest", label: "Buyer Interest", icon: Heart },
@@ -179,6 +181,9 @@ export default function AgentDashboard() {
 
         {/* Clients Tab */}
         {activeTab === "clients" && <AgentClientsSection />}
+
+        {/* Contacts CRM Tab */}
+        {activeTab === "contacts" && <AgentContactsSection />}
 
         {/* Open Houses Tab */}
         {activeTab === "openhouses" && <AgentOpenHousesSection agentProperties={myProperties} />}
