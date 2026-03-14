@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
-import { Mail, MapPin } from "lucide-react";
+import { Mail } from "lucide-react";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   constructor(props: { children: ReactNode }) {
@@ -84,121 +84,40 @@ function Footer() {
   const linkClass = "text-muted-foreground hover:text-foreground transition-colors";
 
   return (
-    <footer className="border-t border-border/40 bg-muted/30 pt-12 pb-6 px-4 safe-bottom" data-testid="footer">
+    <footer className="border-t border-border/40 bg-muted/30 py-4 px-4 safe-bottom mt-auto" data-testid="footer">
       <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
-          <div className="col-span-2 md:col-span-1">
-            <Link href="/" className="flex items-center gap-2 mb-4" data-testid="footer-logo">
-              <img src="/icons/icon-192.png" alt="" className="w-7 h-7 rounded-md" aria-hidden="true" />
-              <span className="font-display font-bold text-lg tracking-tight text-foreground">
-                xucasa
-              </span>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-4">
+            <Link href="/" className="flex items-center gap-1.5" data-testid="footer-logo">
+              <img src="/icons/icon-192.png" alt="" className="w-5 h-5 rounded-sm" aria-hidden="true" />
+              <span className="font-display font-bold text-sm tracking-tight text-foreground">xucasa</span>
             </Link>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-              Your trusted partner in finding the perfect home. Modern real estate, simplified.
-            </p>
-            <div className="flex flex-col gap-2 text-sm">
-              <a href="mailto:david@xucasa.com" className={`flex items-center gap-2 ${linkClass}`} data-testid="footer-email">
-                <Mail className="w-4 h-4 shrink-0" aria-hidden="true" />
-                david@xucasa.com
-              </a>
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <MapPin className="w-4 h-4 shrink-0" aria-hidden="true" />
-                <span>San Diego, CA</span>
-              </div>
-            </div>
+            <span className="text-xs text-muted-foreground hidden sm:inline" data-testid="footer-copyright">&copy; {currentYear} xucasa</span>
           </div>
 
-          <div>
-            <h3 className="font-semibold text-sm text-foreground mb-4">Resources</h3>
-            <ul className="space-y-2.5 text-sm">
-              <li>
-                <Link href="/search" className={linkClass} data-testid="footer-link-search">
-                  Search Homes
-                </Link>
-              </li>
-              <li>
-                <Link href="/sell" className={linkClass} data-testid="footer-link-sell">
-                  Sell Your Home
-                </Link>
-              </li>
-              <li>
-                <Link href="/home-report" className={linkClass} data-testid="footer-link-home-report">
-                  Home Report
-                </Link>
-              </li>
-              <li>
-                <Link href="/buyers" className={linkClass} data-testid="footer-link-buyers">
-                  Buyer Profiles
-                </Link>
-              </li>
-              <li>
-                <Link href="/swipe" className={linkClass} data-testid="footer-link-swipe">
-                  Property Feed
-                </Link>
-              </li>
-            </ul>
-          </div>
+          <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs">
+            <Link href="/search" className={linkClass} data-testid="footer-link-search">Search</Link>
+            <Link href="/sell" className={linkClass} data-testid="footer-link-sell">Sell</Link>
+            <Link href="/home-report" className={linkClass} data-testid="footer-link-home-report">Home Report</Link>
+            <Link href="/buyers" className={linkClass} data-testid="footer-link-buyers">Buyers</Link>
+            <Link href="/agent" className={linkClass} data-testid="footer-link-agents">Agents</Link>
+            <Link href="/terms" className={linkClass} data-testid="footer-link-terms">Terms</Link>
+            <Link href="/privacy" className={linkClass} data-testid="footer-link-privacy">Privacy</Link>
+            {isAdmin && (
+              <Link href="/admin" className={linkClass} data-testid="link-admin">Admin</Link>
+            )}
+          </nav>
 
-          <div>
-            <h3 className="font-semibold text-sm text-foreground mb-4">Company</h3>
-            <ul className="space-y-2.5 text-sm">
-              <li>
-                <Link href="/" className={linkClass} data-testid="footer-link-about">
-                  About Us
-                </Link>
-              </li>
-              <li>
-                <Link href="/agent" className={linkClass} data-testid="footer-link-agents">
-                  For Agents
-                </Link>
-              </li>
-              <li>
-                <a href="mailto:david@xucasa.com" className={linkClass} data-testid="footer-link-contact">
-                  Contact
-                </a>
-              </li>
-              {isAdmin && (
-                <li>
-                  <Link href="/admin" className={linkClass} data-testid="link-admin">
-                    Admin
-                  </Link>
-                </li>
-              )}
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="font-semibold text-sm text-foreground mb-4">Legal</h3>
-            <ul className="space-y-2.5 text-sm">
-              <li>
-                <Link href="/terms" className={linkClass} data-testid="footer-link-terms">
-                  Terms of Service
-                </Link>
-              </li>
-              <li>
-                <Link href="/privacy" className={linkClass} data-testid="footer-link-privacy">
-                  Privacy Policy
-                </Link>
-              </li>
-              <li>
-                <Link href="/terms#fair-housing" className={linkClass} data-testid="footer-link-fair-housing">
-                  Fair Housing
-                </Link>
-              </li>
-              <li>
-                <Link href="/terms#accessibility" className={linkClass} data-testid="footer-link-accessibility">
-                  Accessibility
-                </Link>
-              </li>
-            </ul>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <a href="mailto:david@xucasa.com" className={`flex items-center gap-1 ${linkClass}`} data-testid="footer-email">
+              <Mail className="w-3 h-3" aria-hidden="true" />
+              <span className="hidden md:inline">david@xucasa.com</span>
+              <span className="md:hidden">Contact</span>
+            </a>
+            <span data-testid="footer-disclaimer">Equal Housing Opportunity</span>
           </div>
         </div>
-
-        <div className="border-t border-border/40 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
-          <span data-testid="footer-copyright">&copy; {currentYear} xucasa. All rights reserved.</span>
-          <span data-testid="footer-disclaimer">Equal Housing Opportunity</span>
-        </div>
+        <span className="text-xs text-muted-foreground sm:hidden block text-center mt-2" data-testid="footer-copyright-mobile">&copy; {currentYear} xucasa</span>
       </div>
     </footer>
   );
