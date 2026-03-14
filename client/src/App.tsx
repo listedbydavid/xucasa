@@ -1,3 +1,4 @@
+import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Switch, Route, Link } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -6,6 +7,36 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
 import { Mail, MapPin } from "lucide-react";
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("ErrorBoundary caught:", error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4">
+          <h1 className="text-2xl font-bold mb-3">Something went wrong</h1>
+          <p className="text-muted-foreground mb-6">We ran into an issue loading this page.</p>
+          <button
+            onClick={() => { this.setState({ hasError: false }); window.location.href = "/"; }}
+            className="bg-primary text-white px-6 py-3 rounded-full font-bold"
+          >
+            Go Home
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 import { Navbar } from "@/components/layout/Navbar";
 import Home from "@/pages/Home";
@@ -183,7 +214,9 @@ function App() {
           </a>
           <Navbar />
           <main id="main-content" className="flex-1" tabIndex={-1}>
-            <Router />
+            <ErrorBoundary>
+              <Router />
+            </ErrorBoundary>
           </main>
           <Footer />
           <CookieConsent />

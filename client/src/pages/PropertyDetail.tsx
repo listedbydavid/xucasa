@@ -868,7 +868,7 @@ function PriceHistorySection({ property, daysOnMarket }: { property: any; daysOn
                     Listed
                   </span>
                 </td>
-                <td className="py-3 pr-4 text-right font-semibold text-foreground">${property.price.toLocaleString()}</td>
+                <td className="py-3 pr-4 text-right font-semibold text-foreground">${(property.price || 0).toLocaleString()}</td>
                 <td className="py-3 text-right text-muted-foreground">{pricePerSqft ? `$${pricePerSqft.toLocaleString()}` : '—'}</td>
               </tr>
             )}
@@ -899,7 +899,7 @@ function ListingActivitySection({ property, daysOnMarket }: { property: any; day
       date: listDateStr,
       icon: CalendarDays,
       label: "Listed for sale",
-      detail: `Listed at $${property.price.toLocaleString()}`,
+      detail: `Listed at $${(property.price || 0).toLocaleString()}`,
     });
   }
 
@@ -1183,7 +1183,7 @@ export default function PropertyDetail() {
                 <span className={`px-3 py-1 rounded-full font-bold text-xs ${
                   property.status === 'active' ? 'bg-green-500 text-white' : 'bg-muted text-muted-foreground'
                 }`}>
-                  {property.status === 'active' ? 'For Sale' : property.status.toUpperCase()}
+                  {property.status === 'active' ? 'For Sale' : (property.status || 'active').toUpperCase()}
                 </span>
                 {property.isOffMarket && (
                   <span className="bg-foreground text-background px-3 py-1 rounded-full font-bold text-xs flex items-center gap-1">
@@ -1204,7 +1204,7 @@ export default function PropertyDetail() {
                 <span className="text-muted-foreground">|</span>
                 <span>{property.baths} Baths</span>
                 <span className="text-muted-foreground">|</span>
-                <span>{property.sqft.toLocaleString()} Sq Ft</span>
+                <span>{(property.sqft || 0).toLocaleString()} Sq Ft</span>
                 {property.lotSize && (
                   <>
                     <span className="text-muted-foreground">|</span>
@@ -1284,7 +1284,7 @@ export default function PropertyDetail() {
             </div>
             <div className="flex flex-col items-center p-3 bg-muted/50 rounded-2xl border border-border">
               <Maximize className="w-6 h-6 text-primary mb-1.5" />
-              <span className="text-xl font-bold">{property.sqft.toLocaleString()}</span>
+              <span className="text-xl font-bold">{(property.sqft || 0).toLocaleString()}</span>
               <span className="text-xs font-medium text-muted-foreground">Sq Ft</span>
             </div>
             <div className="flex flex-col items-center p-3 bg-muted/50 rounded-2xl border border-border">
@@ -1310,7 +1310,7 @@ export default function PropertyDetail() {
             <div className="md:col-span-2">
               <h2 className="text-xl sm:text-2xl font-display font-bold mb-4">About this home</h2>
               <div className="prose prose-lg text-muted-foreground max-w-none mb-8">
-                {property.description.split('\n').map((paragraph, i) => (
+                {(property.description || 'No description available.').split('\n').map((paragraph, i) => (
                   <p key={i} className="mb-4 leading-relaxed">{paragraph}</p>
                 ))}
               </div>
