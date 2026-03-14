@@ -219,7 +219,7 @@ export function PropertyReviewSection({ propertyId, isListingAgent, isAdmin }: {
     enabled: isAuthenticated,
   });
 
-  const displayReviews = canModerate && allReviews ? allReviews : publicReviews;
+  const displayReviews = canModerate && Array.isArray(allReviews) ? allReviews : (Array.isArray(publicReviews) ? publicReviews : []);
   const showExampleReview = displayReviews.length === 0;
 
   const submitMutation = useMutation({

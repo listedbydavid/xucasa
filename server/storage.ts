@@ -52,8 +52,11 @@ import {
   users,
 } from "@shared/schema";
 import { eq, and, desc, sql, gte, count } from "drizzle-orm";
+import { authStorage } from "./replit_integrations/auth/storage";
 
 export interface IStorage {
+  getUser(id: string): Promise<any>;
+
   // Properties
   getProperties(filters?: any): Promise<(Property & { agent: any })[]>;
   getPropertiesCount(filters?: any): Promise<number>;
@@ -207,6 +210,10 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  async getUser(id: string): Promise<any> {
+    return authStorage.getUser(id);
+  }
+
   private buildPropertyFilters(filters?: any) {
     let conditions: any[] = [];
     if (filters) {
