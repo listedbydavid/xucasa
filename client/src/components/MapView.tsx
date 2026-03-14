@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { GoogleMap, InfoWindow, StreetViewPanorama } from '@react-google-maps/api';
 import { Property } from '@shared/schema';
-import { EyeOff } from 'lucide-react';
+import { EyeOff, Layers, Map as MapIcon, Satellite, Grid3X3 } from 'lucide-react';
 import { useGoogleMaps } from '@/hooks/use-google-maps';
 
 interface MapViewProps {
@@ -22,6 +22,8 @@ function formatPriceShort(price: number): string {
   return `$${price}`;
 }
 
+const REGRID_TILE_URL = 'https://tiles.arcgis.com/tiles/KzeiCaQsMoeCfoCq/arcgis/rest/services/Regrid_Nationwide_Parcel_Boundaries_v1/MapServer/tile/{z}/{y}/{x}';
+
 export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }: MapViewProps) {
   const { isLoaded, loadError } = useGoogleMaps();
 
@@ -29,19 +31,23 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }
   const [selectedPosition, setSelectedPosition] = useState<google.maps.LatLngLiteral | null>(null);
   const [streetViewOpen, setStreetViewOpen] = useState(false);
   const [streetViewPosition, setStreetViewPosition] = useState<google.maps.LatLngLiteral | null>(null);
+  const [showParcelLines, setShowParcelLines] = useState(false);
+  const [mapType, setMapType] = useState<'roadmap' | 'satellite'>('roadmap');
+  const [showControls, setShowControls] = useState(false);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+  const parcelOverlayRef = useRef<google.maps.ImageMapType | null>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
 
   const googleCenter = { lat: center[1], lng: center[0] };
 
-  // Use real lat/lng from property if available, otherwise place near center with small offset
   const getMarkerPosition = (property: Property, index: number): google.maps.LatLngLiteral => {
     const lat = property.lat ? parseFloat(property.lat as string) : null;
     const lng = property.lng ? parseFloat(property.lng as string) : null;
     if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
       return { lat, lng };
     }
-    // Fallback: scatter around center so markers are at least visible
     return {
       lat: center[1] + (Math.sin(index * 2.3) * 0.018),
       lng: center[0] + (Math.cos(index * 2.3) * 0.018),
@@ -50,7 +56,61 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
+    setMapInstance(map);
   }, []);
+
+  const onMapUnmount = useCallback(() => {
+    mapRef.current = null;
+    setMapInstance(null);
+  }, []);
+
+  useEffect(() => {
+    if (!mapInstance) return;
+
+    if (showParcelLines) {
+      if (!parcelOverlayRef.current) {
+        parcelOverlayRef.current = new google.maps.ImageMapType({
+          getTileUrl: (coord, zoom) => {
+            if (zoom < 14) return null;
+            return REGRID_TILE_URL
+              .replace('{z}', String(zoom))
+              .replace('{y}', String(coord.y))
+              .replace('{x}', String(coord.x));
+          },
+          tileSize: new google.maps.Size(256, 256),
+          opacity: 0.7,
+          name: 'Parcel Lines',
+        });
+      }
+      const overlays = mapInstance.overlayMapTypes;
+      let found = false;
+      for (let i = 0; i < overlays.getLength(); i++) {
+        if (overlays.getAt(i) === parcelOverlayRef.current) { found = true; break; }
+      }
+      if (!found) overlays.push(parcelOverlayRef.current);
+    } else if (parcelOverlayRef.current) {
+      const overlays = mapInstance.overlayMapTypes;
+      for (let i = overlays.getLength() - 1; i >= 0; i--) {
+        if (overlays.getAt(i) === parcelOverlayRef.current) { overlays.removeAt(i); break; }
+      }
+    }
+  }, [showParcelLines, mapInstance]);
+
+  useEffect(() => {
+    if (!mapInstance) return;
+    mapInstance.setMapTypeId(mapType === 'satellite' ? google.maps.MapTypeId.HYBRID : google.maps.MapTypeId.ROADMAP);
+  }, [mapType, mapInstance]);
+
+  useEffect(() => {
+    if (!showControls) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (controlsRef.current && !controlsRef.current.contains(e.target as Node)) {
+        setShowControls(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showControls]);
 
   useEffect(() => {
     if (!mapRef.current || !isLoaded) return;
@@ -122,7 +182,6 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }
       markersRef.current.push(marker);
     });
 
-    // Auto-fit map to show all pins
     if (positions.length > 0 && mapRef.current) {
       const bounds = new google.maps.LatLngBounds();
       positions.forEach(pos => bounds.extend(pos));
@@ -189,66 +248,129 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }
           </button>
         </div>
       ) : (
-        <GoogleMap
-          mapContainerStyle={{ width: '100%', height: '100%' }}
-          center={googleCenter}
-          zoom={zoom}
-          onLoad={onMapLoad}
-          options={{
-            mapId: 'real_estate_map',
-            streetViewControl: true,
-            mapTypeControl: false,
-            fullscreenControl: true,
-            zoomControl: true,
-          }}
-        >
-          {selectedProperty && selectedPosition && (
-            <InfoWindow
-              position={selectedPosition}
-              onCloseClick={() => { setSelectedProperty(null); setSelectedPosition(null); }}
-            >
-              <div style={{ maxWidth: 200, padding: 4 }}>
-                {selectedProperty.imageUrl && (
-                  <img
-                    src={selectedProperty.imageUrl}
-                    alt={selectedProperty.title}
-                    style={{ width: '100%', height: 88, objectFit: 'cover', borderRadius: 6, marginBottom: 8 }}
-                  />
-                )}
-                <div style={{ fontWeight: 700, fontSize: 13, color: '#111', marginBottom: 4 }}>
-                  {selectedProperty.title}
+        <>
+          <GoogleMap
+            mapContainerStyle={{ width: '100%', height: '100%' }}
+            center={googleCenter}
+            zoom={zoom}
+            onLoad={onMapLoad}
+            onUnmount={onMapUnmount}
+            options={{
+              mapId: 'real_estate_map',
+              streetViewControl: true,
+              mapTypeControl: false,
+              fullscreenControl: true,
+              zoomControl: true,
+            }}
+          >
+            {selectedProperty && selectedPosition && (
+              <InfoWindow
+                position={selectedPosition}
+                onCloseClick={() => { setSelectedProperty(null); setSelectedPosition(null); }}
+              >
+                <div style={{ maxWidth: 200, padding: 4 }}>
+                  {selectedProperty.imageUrl && (
+                    <img
+                      src={selectedProperty.imageUrl}
+                      alt={selectedProperty.title}
+                      style={{ width: '100%', height: 88, objectFit: 'cover', borderRadius: 6, marginBottom: 8 }}
+                    />
+                  )}
+                  <div style={{ fontWeight: 700, fontSize: 13, color: '#111', marginBottom: 4 }}>
+                    {selectedProperty.title}
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: '#dc2626', marginBottom: 8 }}>
+                    ${selectedProperty.price.toLocaleString()}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <a
+                      href={`/property/${selectedProperty.id}`}
+                      style={{
+                        flex: 1, textAlign: 'center', fontSize: 12, fontWeight: 700,
+                        background: '#111', color: '#fff', padding: '6px 0',
+                        borderRadius: 6, textDecoration: 'none',
+                      }}
+                    >
+                      View Details
+                    </a>
+                    <button
+                      onClick={() => {
+                        setStreetViewPosition(selectedPosition);
+                        setStreetViewOpen(true);
+                      }}
+                      style={{
+                        fontSize: 12, fontWeight: 700, background: '#2563eb', color: '#fff',
+                        padding: '6px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                      }}
+                    >
+                      Street View
+                    </button>
+                  </div>
                 </div>
-                <div style={{ fontWeight: 700, fontSize: 13, color: '#dc2626', marginBottom: 8 }}>
-                  ${selectedProperty.price.toLocaleString()}
-                </div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <a
-                    href={`/property/${selectedProperty.id}`}
-                    style={{
-                      flex: 1, textAlign: 'center', fontSize: 12, fontWeight: 700,
-                      background: '#111', color: '#fff', padding: '6px 0',
-                      borderRadius: 6, textDecoration: 'none',
-                    }}
-                  >
-                    View Details
-                  </a>
+              </InfoWindow>
+            )}
+          </GoogleMap>
+
+          <div className="absolute top-3 right-3 z-[5]" ref={controlsRef}>
+            <div className="relative">
+              <button
+                onClick={() => setShowControls(!showControls)}
+                className="bg-white/95 backdrop-blur-md p-2.5 rounded-xl shadow-lg border border-gray-200 hover:bg-white transition-colors"
+                data-testid="button-map-layers"
+                title="Map layers"
+              >
+                <Layers className="w-5 h-5 text-gray-700" />
+              </button>
+
+              {showControls && (
+                <div className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 p-2 min-w-[180px] animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 pt-1 pb-2">Map View</div>
                   <button
-                    onClick={() => {
-                      setStreetViewPosition(selectedPosition);
-                      setStreetViewOpen(true);
-                    }}
-                    style={{
-                      fontSize: 12, fontWeight: 700, background: '#2563eb', color: '#fff',
-                      padding: '6px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
-                    }}
+                    onClick={() => setMapType('roadmap')}
+                    className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      mapType === 'roadmap' ? 'bg-primary/10 text-primary' : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                    data-testid="button-map-roadmap"
                   >
-                    Street View
+                    <MapIcon className="w-4 h-4" />
+                    Standard
                   </button>
+                  <button
+                    onClick={() => setMapType('satellite')}
+                    className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      mapType === 'satellite' ? 'bg-primary/10 text-primary' : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                    data-testid="button-map-satellite"
+                  >
+                    <Satellite className="w-4 h-4" />
+                    Satellite
+                  </button>
+
+                  <div className="border-t border-gray-100 my-1.5" />
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 pt-1 pb-2">Overlays</div>
+                  <button
+                    onClick={() => setShowParcelLines(!showParcelLines)}
+                    className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      showParcelLines ? 'bg-primary/10 text-primary' : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                    data-testid="button-toggle-parcels"
+                  >
+                    <Grid3X3 className="w-4 h-4" />
+                    Lot Lines
+                    <span className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      showParcelLines ? 'bg-primary text-white' : 'bg-gray-200 text-gray-500'
+                    }`}>
+                      {showParcelLines ? 'ON' : 'OFF'}
+                    </span>
+                  </button>
+                  <p className="text-[10px] text-gray-400 px-3 pt-1 pb-1">
+                    Zoom in to see parcel boundaries
+                  </p>
                 </div>
-              </div>
-            </InfoWindow>
-          )}
-        </GoogleMap>
+              )}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
