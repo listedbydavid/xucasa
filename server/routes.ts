@@ -1,5 +1,7 @@
 import type { Express } from "express";
 import type { Server } from "http";
+import fs from "fs";
+import path from "path";
 import { storage } from "./storage";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { db } from "./db";
@@ -12,6 +14,8 @@ import { isAuthenticated } from "./replit_integrations/auth";
 import { getPublicRecords } from "./publicRecords";
 import { getZoningData } from "./zoningData";
 import { runIdxSync, isSyncInProgress, idxConfigured, getLastSyncLog, getSyncLogs, startIdxAutoSync, verifyAgentLicense, getRealtyFeedToken, realtyFeedODataFetch, REALTYFEED_API_BASE } from "./idxSync";
+
+const ERROR_ARCHIVE_PATH = path.join(process.cwd(), "data", "error-archive.json");
 
 const CONFIDENTIAL_MLS_FIELDS = [
   'confidentialRemarks', 'showingInstructions', 'showingContactName', 'showingContactPhone',
@@ -2571,6 +2575,69 @@ export async function registerRoutes(
       res.json(reports);
     } catch (err) {
       console.error("[Admin Error Reports] Failed:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  let archiveLock = false;
+  app.post("/api/admin/error-reports/archive", isAuthenticated, isAdmin, async (_req, res) => {
+    if (archiveLock) return res.status(409).json({ error: "Archive operation already in progress" });
+    archiveLock = true;
+    try {
+      const resolved = await storage.getErrorReports({ resolved: true });
+      if (resolved.length === 0) { archiveLock = false; return res.status(400).json({ error: "No resolved errors to archive" }); }
+
+      const resolvedIds = resolved.map(r => r.id);
+      await db.transaction(async (tx) => {
+        for (const id of resolvedIds) {
+          await tx.delete(errorReports).where(eq(errorReports.id, id));
+        }
+      });
+
+      let existing: any[] = [];
+      if (fs.existsSync(ERROR_ARCHIVE_PATH)) {
+        try {
+          existing = JSON.parse(fs.readFileSync(ERROR_ARCHIVE_PATH, "utf-8"));
+        } catch { existing = []; }
+      }
+
+      const batch = {
+        archivedAt: new Date().toISOString(),
+        count: resolved.length,
+        reports: resolved,
+      };
+      existing.push(batch);
+
+      fs.mkdirSync(path.dirname(ERROR_ARCHIVE_PATH), { recursive: true });
+      fs.writeFileSync(ERROR_ARCHIVE_PATH, JSON.stringify(existing, null, 2));
+
+      archiveLock = false;
+      res.json({ archived: resolved.length, totalBatches: existing.length, path: "data/error-archive.json" });
+    } catch (err) {
+      archiveLock = false;
+      console.error("[Archive Errors] Failed:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/error-reports/archive", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      if (!fs.existsSync(ERROR_ARCHIVE_PATH)) return res.json([]);
+      const data = JSON.parse(fs.readFileSync(ERROR_ARCHIVE_PATH, "utf-8"));
+      res.json(data);
+    } catch (err) {
+      console.error("[Archive Read] Failed:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/error-reports/archive/download", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      if (!fs.existsSync(ERROR_ARCHIVE_PATH)) return res.status(404).json({ error: "No archive file exists" });
+      res.setHeader("Content-Disposition", "attachment; filename=error-archive.json");
+      res.setHeader("Content-Type", "application/json");
+      fs.createReadStream(ERROR_ARCHIVE_PATH).pipe(res);
+    } catch (err) {
       res.status(500).json({ error: "Internal server error" });
     }
   });

@@ -11,7 +11,7 @@ import {
   MessageSquare, Image, FileText, Search, Layers, Briefcase,
   User, ExternalLink, UserCog, Ban, Trash2, Edit3, Save,
   Activity, Crown, ShieldCheck, UserX, MoreVertical,
-  Handshake, AlertTriangle,
+  Handshake, AlertTriangle, Archive, Download, FolderOpen,
 } from "lucide-react";
 
 
@@ -945,6 +945,28 @@ export default function Admin() {
     },
   });
 
+  const { data: errorArchive, refetch: refetchArchive } = useQuery<any[]>({
+    queryKey: ["/api/admin/error-reports/archive"],
+    enabled: isAdminUser && activeTab === "errors",
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/error-reports/archive");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/error-reports"] });
+      refetchArchive();
+      toast({ title: "Errors archived", description: `${data.archived} resolved errors moved to archive.` });
+    },
+    onError: (err: any) => {
+      toast({ title: "Archive failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const [showArchive, setShowArchive] = useState(false);
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted/30">
@@ -1718,7 +1740,7 @@ export default function Admin() {
                 <AlertTriangle className="w-4 h-4 text-red-500" />
                 Error Reports
               </h3>
-              <div className="flex gap-2 text-xs">
+              <div className="flex gap-2 text-xs items-center">
                 <span className="px-2 py-1 rounded-full bg-red-100 text-red-700" data-testid="text-error-count-new">
                   {errorReports?.filter((e: any) => e.status === "new").length || 0} new
                 </span>
@@ -1728,8 +1750,82 @@ export default function Admin() {
                 <span className="px-2 py-1 rounded-full bg-green-100 text-green-700">
                   {errorReports?.filter((e: any) => e.resolved).length || 0} resolved
                 </span>
+                <div className="w-px h-4 bg-border mx-1" />
+                <button
+                  onClick={() => archiveMutation.mutate()}
+                  disabled={archiveMutation.isPending || !errorReports?.some((e: any) => e.resolved)}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  data-testid="button-archive-errors"
+                >
+                  <Archive className="w-3 h-3" />
+                  {archiveMutation.isPending ? "Archiving..." : "Archive Resolved"}
+                </button>
+                <button
+                  onClick={() => setShowArchive(!showArchive)}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                  data-testid="button-view-archive"
+                >
+                  <FolderOpen className="w-3 h-3" />
+                  Archive{errorArchive && errorArchive.length > 0 ? ` (${errorArchive.length})` : ""}
+                </button>
+                <a
+                  href="/api/admin/error-reports/archive/download"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                  data-testid="button-download-archive"
+                >
+                  <Download className="w-3 h-3" />
+                </a>
               </div>
             </div>
+
+            {showArchive && (
+              <div className="bg-indigo-50 rounded-xl border border-indigo-200 p-4 space-y-3" data-testid="section-error-archive">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-indigo-800 flex items-center gap-2">
+                    <Archive className="w-4 h-4" />
+                    Error Archive
+                    <span className="text-xs font-normal text-indigo-600">data/error-archive.json</span>
+                  </h4>
+                  <button onClick={() => setShowArchive(false)} className="p-1 rounded hover:bg-indigo-100">
+                    <X className="w-4 h-4 text-indigo-600" />
+                  </button>
+                </div>
+                {errorArchive && errorArchive.length > 0 ? (
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                    {errorArchive.map((batch: any, bi: number) => (
+                      <details key={bi} className="bg-white rounded-lg border p-3">
+                        <summary className="cursor-pointer text-sm font-medium flex items-center gap-2">
+                          <span className="text-indigo-700">Batch #{bi + 1}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(batch.archivedAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                          </span>
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{batch.count} errors</span>
+                        </summary>
+                        <div className="mt-2 space-y-1.5">
+                          {batch.reports.map((r: any, ri: number) => (
+                            <div key={ri} className="text-xs border rounded-lg p-2 bg-gray-50">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="font-semibold px-1.5 py-0.5 rounded bg-gray-200 text-gray-600">{r.type?.replace(/_/g, " ")}</span>
+                                <span className="text-muted-foreground">×{r.occurrences}</span>
+                              </div>
+                              <p className="font-medium text-foreground truncate">{r.message}</p>
+                              {r.url && <p className="text-muted-foreground truncate">{r.url}</p>}
+                              <div className="flex gap-3 mt-1 text-muted-foreground">
+                                <span>First: {new Date(r.firstSeen).toLocaleDateString()}</span>
+                                <span>Last: {new Date(r.lastSeen).toLocaleDateString()}</span>
+                              </div>
+                              {r.adminNotes && <p className="mt-1 text-blue-700 bg-blue-50 rounded px-2 py-1">Note: {r.adminNotes}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-indigo-600 text-center py-4">No archived errors yet. Resolve errors and click "Archive Resolved" to move them here.</p>
+                )}
+              </div>
+            )}
 
             {errorReports && errorReports.length > 0 ? (
               <div className="space-y-3">
