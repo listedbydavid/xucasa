@@ -41,11 +41,14 @@ import {
   agentContacts,
   contactTags,
   contactTagAssignments,
+  errorReports,
   type AgentContact,
   type InsertAgentContact,
   type ContactTag,
   type InsertContactTag,
   type ContactTagAssignment,
+  type ErrorReport,
+  type InsertErrorReport,
   users,
 } from "@shared/schema";
 import { eq, and, desc, sql, gte, count } from "drizzle-orm";
@@ -194,6 +197,13 @@ export interface IStorage {
   assignTagToContact(contactId: number, tagId: number): Promise<ContactTagAssignment>;
   removeTagFromContact(contactId: number, tagId: number): Promise<void>;
   assignTagToContacts(contactIds: number[], tagId: number): Promise<void>;
+
+  // Error Reports
+  createErrorReport(report: InsertErrorReport): Promise<ErrorReport>;
+  getErrorReports(filters?: { status?: string; resolved?: boolean }): Promise<ErrorReport[]>;
+  getErrorReport(id: number): Promise<ErrorReport | undefined>;
+  updateErrorReport(id: number, updates: Partial<{ status: string; adminNotes: string; resolved: boolean }>): Promise<ErrorReport>;
+  incrementErrorOccurrence(fingerprint: string, url: string): Promise<ErrorReport | null>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1065,6 +1075,46 @@ export class DatabaseStorage implements IStorage {
     if (contactIds.length === 0) return;
     const values = contactIds.map(contactId => ({ contactId, tagId }));
     await db.insert(contactTagAssignments).values(values).onConflictDoNothing();
+  }
+
+  // === Error Reports ===
+  async createErrorReport(report: InsertErrorReport): Promise<ErrorReport> {
+    const [created] = await db.insert(errorReports).values(report).returning();
+    return created;
+  }
+
+  async getErrorReports(filters?: { status?: string; resolved?: boolean }): Promise<ErrorReport[]> {
+    let conditions: any[] = [];
+    if (filters?.status) conditions.push(eq(errorReports.status, filters.status));
+    if (filters?.resolved !== undefined) conditions.push(eq(errorReports.resolved, filters.resolved));
+    const query = conditions.length > 0
+      ? db.select().from(errorReports).where(and(...conditions)).orderBy(desc(errorReports.lastSeen)).limit(200)
+      : db.select().from(errorReports).orderBy(desc(errorReports.lastSeen)).limit(200);
+    return query;
+  }
+
+  async getErrorReport(id: number): Promise<ErrorReport | undefined> {
+    const [report] = await db.select().from(errorReports).where(eq(errorReports.id, id)).limit(1);
+    return report;
+  }
+
+  async updateErrorReport(id: number, updates: Partial<{ status: string; adminNotes: string; resolved: boolean }>): Promise<ErrorReport> {
+    const [updated] = await db.update(errorReports).set(updates).where(eq(errorReports.id, id)).returning();
+    return updated;
+  }
+
+  async incrementErrorOccurrence(fingerprint: string, url: string): Promise<ErrorReport | null> {
+    const conditions = [eq(errorReports.message, fingerprint), eq(errorReports.resolved, false)];
+    if (url) conditions.push(eq(errorReports.url, url));
+    const existing = await db.select().from(errorReports)
+      .where(and(...conditions))
+      .limit(1);
+    if (existing.length === 0) return null;
+    const [updated] = await db.update(errorReports)
+      .set({ occurrences: sql`${errorReports.occurrences} + 1`, lastSeen: new Date() })
+      .where(eq(errorReports.id, existing[0].id))
+      .returning();
+    return updated;
   }
 }
 

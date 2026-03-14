@@ -609,10 +609,221 @@ function UsersTab({ users, isLoading, currentUserId, onUpdateUser, onDeleteUser,
   );
 }
 
+function ErrorReportCard({ report, onUpdateStatus, onResolve, onDelete, onAddNote }: {
+  report: any;
+  onUpdateStatus: (status: string) => void;
+  onResolve: () => void;
+  onDelete: () => void;
+  onAddNote: (note: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [noteText, setNoteText] = useState(report.adminNotes || "");
+  const [showNote, setShowNote] = useState(false);
+
+  const typeColors: Record<string, string> = {
+    uncaught_error: "bg-red-100 text-red-700",
+    unhandled_rejection: "bg-orange-100 text-orange-700",
+    react_error: "bg-purple-100 text-purple-700",
+    api_error: "bg-yellow-100 text-yellow-700",
+  };
+
+  const statusColors: Record<string, string> = {
+    new: "bg-red-100 text-red-700",
+    investigating: "bg-yellow-100 text-yellow-700",
+    resolved: "bg-green-100 text-green-700",
+    ignored: "bg-gray-100 text-gray-500",
+  };
+
+  const timeSince = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  };
+
+  return (
+    <div
+      className={`bg-white rounded-xl border p-4 transition-all ${report.resolved ? "opacity-60" : ""}`}
+      data-testid={`card-error-${report.id}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${typeColors[report.type] || "bg-gray-100 text-gray-600"}`}>
+              {report.type?.replace(/_/g, " ")}
+            </span>
+            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${statusColors[report.status] || "bg-gray-100"}`}>
+              {report.status}
+            </span>
+            {report.occurrences > 1 && (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                ×{report.occurrences}
+              </span>
+            )}
+          </div>
+          <p className="text-sm font-medium text-foreground truncate" data-testid={`text-error-message-${report.id}`}>
+            {report.message}
+          </p>
+          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+            {report.url && <span className="truncate max-w-[200px]">{report.url}</span>}
+            <span>{timeSince(report.lastSeen)}</span>
+            {report.userId && <span>User: {report.userId.slice(0, 8)}...</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors"
+            data-testid={`button-expand-error-${report.id}`}
+          >
+            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="mt-3 space-y-3 border-t pt-3">
+          {report.stack && (
+            <div>
+              <h4 className="text-xs font-semibold text-muted-foreground mb-1">Stack Trace</h4>
+              <pre className="text-[11px] bg-gray-900 text-green-400 p-3 rounded-lg overflow-x-auto max-h-[200px] overflow-y-auto whitespace-pre-wrap" data-testid={`text-stack-${report.id}`}>
+                {report.stack}
+              </pre>
+            </div>
+          )}
+
+          {report.componentStack && (
+            <div>
+              <h4 className="text-xs font-semibold text-muted-foreground mb-1">Component Stack</h4>
+              <pre className="text-[11px] bg-gray-100 p-3 rounded-lg overflow-x-auto max-h-[150px] overflow-y-auto whitespace-pre-wrap">
+                {report.componentStack}
+              </pre>
+            </div>
+          )}
+
+          {report.breadcrumbs && Array.isArray(report.breadcrumbs) && report.breadcrumbs.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-muted-foreground mb-1">User Activity Trail ({report.breadcrumbs.length} actions)</h4>
+              <div className="bg-gray-50 rounded-lg p-2 max-h-[200px] overflow-y-auto">
+                {(report.breadcrumbs as any[]).map((crumb: any, i: number) => (
+                  <div key={i} className="flex items-center gap-2 py-0.5 text-[11px]">
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                      crumb.type === "click" ? "bg-blue-400" :
+                      crumb.type === "navigation" ? "bg-green-400" :
+                      crumb.type === "network" ? "bg-orange-400" : "bg-gray-400"
+                    }`} />
+                    <span className="text-muted-foreground">{crumb.message}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {report.metadata && (
+            <div>
+              <h4 className="text-xs font-semibold text-muted-foreground mb-1">Device Info</h4>
+              <div className="grid grid-cols-2 gap-1 text-[11px]">
+                {report.metadata.viewport && (
+                  <span className="text-muted-foreground">Viewport: {report.metadata.viewport.width}×{report.metadata.viewport.height}</span>
+                )}
+                {report.metadata.online !== undefined && (
+                  <span className="text-muted-foreground">Online: {report.metadata.online ? "Yes" : "No"}</span>
+                )}
+                {report.metadata.timestamp && (
+                  <span className="text-muted-foreground">Time: {new Date(report.metadata.timestamp).toLocaleString()}</span>
+                )}
+                {report.userAgent && (
+                  <span className="text-muted-foreground col-span-2 truncate">UA: {report.userAgent}</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {report.adminNotes && !showNote && (
+            <div className="bg-blue-50 rounded-lg p-2">
+              <h4 className="text-xs font-semibold text-blue-700 mb-0.5">Admin Notes</h4>
+              <p className="text-xs text-blue-800">{report.adminNotes}</p>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {!report.resolved && (
+              <>
+                <button
+                  onClick={() => onUpdateStatus("investigating")}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition-colors"
+                  data-testid={`button-investigate-${report.id}`}
+                >
+                  Investigating
+                </button>
+                <button
+                  onClick={() => onUpdateStatus("ignored")}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                >
+                  Ignore
+                </button>
+              </>
+            )}
+            <button
+              onClick={onResolve}
+              className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${
+                report.resolved
+                  ? "bg-orange-100 text-orange-700 hover:bg-orange-200"
+                  : "bg-green-100 text-green-700 hover:bg-green-200"
+              }`}
+              data-testid={`button-resolve-${report.id}`}
+            >
+              {report.resolved ? "Reopen" : "Resolve"}
+            </button>
+            <button
+              onClick={() => setShowNote(!showNote)}
+              className="text-xs px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+            >
+              {showNote ? "Cancel" : "Add Note"}
+            </button>
+            <button
+              onClick={onDelete}
+              className="text-xs px-3 py-1.5 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition-colors ml-auto"
+              data-testid={`button-delete-error-${report.id}`}
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+
+          {showNote && (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                placeholder="Add admin note..."
+                className="flex-1 text-xs border rounded-lg px-3 py-1.5"
+                data-testid={`input-note-${report.id}`}
+              />
+              <button
+                onClick={() => { onAddNote(noteText); setShowNote(false); }}
+                className="text-xs px-3 py-1.5 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors"
+                data-testid={`button-save-note-${report.id}`}
+              >
+                <Save className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Admin() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals" | "buyers" | "users" | "representation">("overview");
+  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals" | "buyers" | "users" | "representation" | "errors">("overview");
 
   const isAdminUser = isAuthenticated && (user as any)?.isAdmin;
 
@@ -697,6 +908,37 @@ export default function Admin() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       toast({ title: "User deleted" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const { data: errorReports } = useQuery<any[]>({
+    queryKey: ["/api/admin/error-reports"],
+    enabled: isAdminUser,
+  });
+
+  const updateErrorMutation = useMutation({
+    mutationFn: async ({ id, ...updates }: { id: number; status?: string; adminNotes?: string; resolved?: boolean }) => {
+      await apiRequest("PATCH", `/api/admin/error-reports/${id}`, updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/error-reports"] });
+      toast({ title: "Error report updated" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteErrorMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/admin/error-reports/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/error-reports"] });
+      toast({ title: "Error report deleted" });
     },
     onError: (err: any) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -810,7 +1052,7 @@ export default function Admin() {
         </div>
 
         <div className="flex gap-1 mb-6 bg-muted/30 rounded-xl p-1 overflow-x-auto" data-testid="section-admin-tabs">
-          {(["overview", "users", "pitches", "leads", "buyers", "referrals", "representation"] as const).map(tab => (
+          {(["overview", "users", "pitches", "leads", "buyers", "referrals", "representation", "errors"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -825,6 +1067,7 @@ export default function Admin() {
                 : tab === "leads" ? `Leads (${sellLeads?.length || 0})`
                 : tab === "buyers" ? `Buyers (${allBuyerProfiles?.length || 0})`
                 : tab === "referrals" ? `Referrals (${(referrals?.length || 0) + (sellerReferrals?.length || 0)})`
+                : tab === "errors" ? `Errors (${errorReports?.filter((e: any) => !e.resolved).length || 0})`
                 : `Representation (${swipeNotifications?.length || 0})`}
             </button>
           ))}
@@ -1465,6 +1708,49 @@ export default function Admin() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {activeTab === "errors" && (
+          <div className="space-y-4" data-testid="section-errors">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-500" />
+                Error Reports
+              </h3>
+              <div className="flex gap-2 text-xs">
+                <span className="px-2 py-1 rounded-full bg-red-100 text-red-700" data-testid="text-error-count-new">
+                  {errorReports?.filter((e: any) => e.status === "new").length || 0} new
+                </span>
+                <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-700">
+                  {errorReports?.filter((e: any) => e.status === "investigating").length || 0} investigating
+                </span>
+                <span className="px-2 py-1 rounded-full bg-green-100 text-green-700">
+                  {errorReports?.filter((e: any) => e.resolved).length || 0} resolved
+                </span>
+              </div>
+            </div>
+
+            {errorReports && errorReports.length > 0 ? (
+              <div className="space-y-3">
+                {errorReports.map((report: any) => (
+                  <ErrorReportCard
+                    key={report.id}
+                    report={report}
+                    onUpdateStatus={(status: string) => updateErrorMutation.mutate({ id: report.id, status })}
+                    onResolve={() => updateErrorMutation.mutate({ id: report.id, resolved: !report.resolved, status: report.resolved ? "new" : "resolved" })}
+                    onDelete={() => deleteErrorMutation.mutate(report.id)}
+                    onAddNote={(note: string) => updateErrorMutation.mutate({ id: report.id, adminNotes: note })}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border p-12 text-center">
+                <CheckCircle2 className="w-10 h-10 text-green-500 mx-auto mb-3" />
+                <h3 className="font-semibold mb-1">No errors reported</h3>
+                <p className="text-sm text-muted-foreground">The application is running smoothly.</p>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -439,6 +439,28 @@ export const insertAgentContactSchema = createInsertSchema(agentContacts).omit({
 export const insertContactTagSchema = createInsertSchema(contactTags).omit({ id: true, createdAt: true });
 export const insertContactTagAssignmentSchema = createInsertSchema(contactTagAssignments).omit({ id: true });
 
+export const errorReports = pgTable("error_reports", {
+  id: serial("id").primaryKey(),
+  type: text("type").notNull(),
+  message: text("message").notNull(),
+  stack: text("stack"),
+  componentStack: text("component_stack"),
+  url: text("url"),
+  userAgent: text("user_agent"),
+  userId: varchar("user_id"),
+  sessionId: text("session_id"),
+  breadcrumbs: jsonb("breadcrumbs"),
+  metadata: jsonb("metadata"),
+  status: text("status").default("new").notNull(),
+  adminNotes: text("admin_notes"),
+  resolved: boolean("resolved").default(false).notNull(),
+  occurrences: integer("occurrences").default(1).notNull(),
+  firstSeen: timestamp("first_seen").defaultNow().notNull(),
+  lastSeen: timestamp("last_seen").defaultNow().notNull(),
+});
+
+export const insertErrorReportSchema = createInsertSchema(errorReports).omit({ id: true, firstSeen: true, lastSeen: true });
+
 // Types
 export type Property = typeof properties.$inferSelect;
 export type InsertProperty = z.infer<typeof insertPropertySchema>;
@@ -474,6 +496,8 @@ export type ContactTag = typeof contactTags.$inferSelect;
 export type InsertContactTag = z.infer<typeof insertContactTagSchema>;
 export type ContactTagAssignment = typeof contactTagAssignments.$inferSelect;
 export type InsertContactTagAssignment = z.infer<typeof insertContactTagAssignmentSchema>;
+export type ErrorReport = typeof errorReports.$inferSelect;
+export type InsertErrorReport = z.infer<typeof insertErrorReportSchema>;
 
 // Request Types
 export type CreatePropertyRequest = InsertProperty;

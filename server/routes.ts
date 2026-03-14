@@ -3,7 +3,7 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { db } from "./db";
-import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews } from "@shared/schema";
+import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews, errorReports } from "@shared/schema";
 import { eq, desc, sql, or, and, ilike } from "drizzle-orm";
 import { api } from "@shared/routes";
 import { z } from "zod";
@@ -2516,6 +2516,105 @@ export async function registerRoutes(
 
   // Start scheduled IDX auto-sync (no-op if not configured)
   startIdxAutoSync();
+
+  // === Error Reporting (public endpoint with simple rate limiting) ===
+  const errorReportLimiter = new Map<string, { count: number; resetAt: number }>();
+  app.post("/api/error-reports", async (req, res) => {
+    const ip = req.ip || "unknown";
+    const now = Date.now();
+    const limit = errorReportLimiter.get(ip);
+    if (limit && limit.resetAt > now) {
+      if (limit.count >= 20) {
+        return res.status(429).json({ error: "Too many reports" });
+      }
+      limit.count++;
+    } else {
+      errorReportLimiter.set(ip, { count: 1, resetAt: now + 60000 });
+    }
+    try {
+      const { type, message, stack, componentStack, url, userAgent, userId, sessionId, breadcrumbs, metadata } = req.body;
+      if (!type || !message) {
+        return res.status(400).json({ error: "type and message are required" });
+      }
+      const existing = await storage.incrementErrorOccurrence(message, url);
+      if (existing) {
+        return res.json({ id: existing.id, deduplicated: true });
+      }
+      const report = await storage.createErrorReport({
+        type: String(type).slice(0, 100),
+        message: String(message).slice(0, 2000),
+        stack: stack ? String(stack).slice(0, 5000) : null,
+        componentStack: componentStack ? String(componentStack).slice(0, 3000) : null,
+        url: url ? String(url).slice(0, 500) : null,
+        userAgent: userAgent ? String(userAgent).slice(0, 500) : null,
+        userId: userId ? String(userId).slice(0, 100) : null,
+        sessionId: sessionId ? String(sessionId).slice(0, 100) : null,
+        breadcrumbs: breadcrumbs || null,
+        metadata: metadata || null,
+        status: "new",
+        resolved: false,
+        occurrences: 1,
+      });
+      res.json({ id: report.id });
+    } catch (err) {
+      console.error("[Error Report] Failed to save:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // === Admin Error Report endpoints (admin-only) ===
+  app.get("/api/admin/error-reports", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const status = (_req as any).query.status as string | undefined;
+      const resolved = (_req as any).query.resolved === "true" ? true : (_req as any).query.resolved === "false" ? false : undefined;
+      const reports = await storage.getErrorReports({ status, resolved });
+      res.json(reports);
+    } catch (err) {
+      console.error("[Admin Error Reports] Failed:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/error-reports/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      const report = await storage.getErrorReport(id);
+      if (!report) return res.status(404).json({ error: "Not found" });
+      res.json(report);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/admin/error-reports/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      const { status, adminNotes, resolved } = req.body;
+      const validStatuses = ["new", "investigating", "resolved", "ignored"];
+      const updates: any = {};
+      if (status && validStatuses.includes(status)) updates.status = status;
+      if (typeof adminNotes === "string") updates.adminNotes = adminNotes.slice(0, 2000);
+      if (typeof resolved === "boolean") updates.resolved = resolved;
+      if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid updates" });
+      const updated = await storage.updateErrorReport(id, updates);
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/admin/error-reports/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      await db.delete(errorReports).where(eq(errorReports.id, id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
 
   return httpServer;
 }
