@@ -17,7 +17,24 @@ export default function Search() {
   const [location, setNavigate] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
 
-  const [locationInput, setLocationInput] = useState(searchParams.get("location") || "");
+  const cityParam = searchParams.get("city") || "";
+  const countyParam = searchParams.get("county") || "";
+  const locationParam = searchParams.get("location") || "";
+  const initialLocationLabel = cityParam ? `${cityParam}, CA` : countyParam ? `${countyParam}, CA` : locationParam;
+  const [locationInput, setLocationInput] = useState(initialLocationLabel);
+  const [cityFilter, setCityFilter] = useState(cityParam);
+  const [countyFilter, setCountyFilter] = useState(countyParam);
+
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const c = sp.get("city") || "";
+    const co = sp.get("county") || "";
+    const loc = sp.get("location") || "";
+    setCityFilter(c);
+    setCountyFilter(co);
+    setLocationInput(c ? `${c}, CA` : co ? `${co}, CA` : loc);
+  }, [location]);
+
   const [filters, setFilters] = useState({
     minPrice: searchParams.get("minPrice") || "",
     maxPrice: searchParams.get("maxPrice") || "",
@@ -59,7 +76,13 @@ export default function Search() {
   // Sync location input → activeQuery and mapCenter
   useEffect(() => {
     const query: Record<string, any> = {};
-    if (locationInput) query.location = locationInput;
+    if (cityFilter) {
+      query.city = cityFilter;
+    } else if (countyFilter) {
+      query.county = countyFilter;
+    } else if (locationInput) {
+      query.location = locationInput;
+    }
     if (filters.minPrice) query.minPrice = Number(filters.minPrice);
     if (filters.maxPrice) query.maxPrice = Number(filters.maxPrice);
     if (filters.beds) query.minBeds = Number(filters.beds);
@@ -78,7 +101,7 @@ export default function Search() {
       setMapCenter([Number(lng), Number(lat)]);
       setMapZoom(14);
     }
-  }, [locationInput, filters]);
+  }, [locationInput, cityFilter, countyFilter, filters]);
 
   const [page, setPage] = useState(0);
   const activeQueryKey = JSON.stringify(activeQuery);
@@ -158,6 +181,8 @@ export default function Search() {
               }}
               onSearch={(q) => {
                 setLocationInput(q);
+                setCityFilter("");
+                setCountyFilter("");
               }}
             />
           </div>

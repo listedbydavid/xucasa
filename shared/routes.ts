@@ -24,6 +24,8 @@ export const api = {
       path: '/api/properties' as const,
       input: z.object({
         location: z.string().optional(),
+        city: z.string().optional(),
+        county: z.string().optional(),
         minPrice: z.coerce.number().optional(),
         maxPrice: z.coerce.number().optional(),
         minBeds: z.coerce.number().optional(),

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Search, MapPin, Home, ChevronRight, Loader2 } from "lucide-react";
+import { Search, MapPin, Home, ChevronRight, Loader2, Building2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 interface AutocompleteSuggestion {
@@ -16,6 +16,14 @@ interface AutocompleteSuggestion {
   addressCity: string | null;
   addressState: string | null;
   addressZip: string | null;
+}
+
+interface LocationSuggestion {
+  type: "city" | "county";
+  label: string;
+  value: string;
+  state: string;
+  count: number;
 }
 
 interface AddressAutocompleteProps {
@@ -78,20 +86,33 @@ export function AddressAutocomplete({
   }, [query]);
 
   const autocompleteUrl = debouncedQuery.length >= 2
-    ? `/api/properties/autocomplete?q=${encodeURIComponent(debouncedQuery)}&limit=8`
+    ? `/api/properties/autocomplete?q=${encodeURIComponent(debouncedQuery)}&limit=6`
     : null;
 
-  const { data: suggestions = [], isLoading: isSuggestionsLoading } = useQuery<AutocompleteSuggestion[]>({
+  const locationUrl = debouncedQuery.length >= 2
+    ? `/api/locations/autocomplete?q=${encodeURIComponent(debouncedQuery)}&limit=5`
+    : null;
+
+  const { data: propertySuggestions = [], isLoading: isPropsLoading } = useQuery<AutocompleteSuggestion[]>({
     queryKey: [autocompleteUrl],
     enabled: !!autocompleteUrl,
     staleTime: 30000,
   });
 
+  const { data: locationSuggestions = [], isLoading: isLocsLoading } = useQuery<LocationSuggestion[]>({
+    queryKey: [locationUrl],
+    enabled: !!locationUrl,
+    staleTime: 30000,
+  });
+
+  const totalItems = locationSuggestions.length + propertySuggestions.length;
+  const isLoading = isPropsLoading || isLocsLoading;
+
   useEffect(() => {
     setSelectedIndex(-1);
-  }, [suggestions]);
+  }, [propertySuggestions, locationSuggestions]);
 
-  const handleSelect = useCallback((property: AutocompleteSuggestion) => {
+  const handleSelectProperty = useCallback((property: AutocompleteSuggestion) => {
     setQuery(property.title);
     setIsOpen(false);
     if (onSelect) {
@@ -100,6 +121,16 @@ export function AddressAutocomplete({
       setLocation(`/property/${property.id}`);
     }
   }, [onSelect, setLocation]);
+
+  const handleSelectLocation = useCallback((loc: LocationSuggestion) => {
+    setQuery(loc.label);
+    setIsOpen(false);
+    if (loc.type === "county") {
+      setLocation(`/search?county=${encodeURIComponent(loc.value)}`);
+    } else {
+      setLocation(`/search?city=${encodeURIComponent(loc.value)}`);
+    }
+  }, [setLocation]);
 
   const handleSearchSubmit = useCallback(() => {
     setIsOpen(false);
@@ -113,7 +144,7 @@ export function AddressAutocomplete({
   }, [query, onSearch, setLocation]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (!isOpen || suggestions.length === 0) {
+    if (!isOpen || totalItems === 0) {
       if (e.key === "Enter") {
         e.preventDefault();
         handleSearchSubmit();
@@ -123,21 +154,25 @@ export function AddressAutocomplete({
 
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setSelectedIndex(prev => Math.min(prev + 1, suggestions.length - 1));
+      setSelectedIndex(prev => Math.min(prev + 1, totalItems - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setSelectedIndex(prev => Math.max(prev - 1, -1));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
-        handleSelect(suggestions[selectedIndex]);
+      if (selectedIndex >= 0 && selectedIndex < totalItems) {
+        if (selectedIndex < locationSuggestions.length) {
+          handleSelectLocation(locationSuggestions[selectedIndex]);
+        } else {
+          handleSelectProperty(propertySuggestions[selectedIndex - locationSuggestions.length]);
+        }
       } else {
         handleSearchSubmit();
       }
     } else if (e.key === "Escape") {
       setIsOpen(false);
     }
-  }, [isOpen, suggestions, selectedIndex, handleSelect, handleSearchSubmit]);
+  }, [isOpen, totalItems, selectedIndex, locationSuggestions, propertySuggestions, handleSelectLocation, handleSelectProperty, handleSearchSubmit]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -190,77 +225,122 @@ export function AddressAutocomplete({
           ref={dropdownRef}
           role="listbox"
           data-testid="autocomplete-dropdown"
-          className="absolute top-full left-0 right-0 z-50 mt-1 bg-white dark:bg-zinc-900 border border-border rounded-xl shadow-2xl overflow-hidden max-h-[420px] overflow-y-auto"
+          className="absolute top-full left-0 right-0 z-50 mt-1 bg-white dark:bg-zinc-900 border border-border rounded-xl shadow-2xl overflow-hidden max-h-[480px] overflow-y-auto"
         >
-          {isSuggestionsLoading ? (
+          {isLoading && totalItems === 0 ? (
             <div className="px-4 py-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
-              Searching properties...
+              Searching...
             </div>
-          ) : suggestions.length === 0 ? (
+          ) : totalItems === 0 ? (
             <div className="px-4 py-6 text-center text-sm text-muted-foreground">
               <MapPin className="w-5 h-5 mx-auto mb-2 opacity-50" />
-              No matching properties found
+              No matching results found
             </div>
           ) : (
             <>
-              {suggestions.map((property, index) => {
-                const st = statusLabel(property.status, property.isOffMarket);
-                return (
-                  <button
-                    key={property.id}
-                    role="option"
-                    aria-selected={index === selectedIndex}
-                    data-testid={`autocomplete-item-${property.id}`}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors cursor-pointer border-b border-border/50 last:border-0
-                      ${index === selectedIndex ? "bg-accent" : "hover:bg-accent/50"}`}
-                    onClick={() => handleSelect(property)}
-                    onMouseEnter={() => setSelectedIndex(index)}
-                  >
-                    {property.imageUrl ? (
-                      <img
-                        src={property.imageUrl}
-                        alt=""
-                        className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
-                      />
-                    ) : (
-                      <div className="w-14 h-14 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                        <Home className="w-6 h-6 text-muted-foreground" />
-                      </div>
-                    )}
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm text-foreground truncate">{property.title}</span>
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold text-white ${st.color} flex-shrink-0`}>
-                          {st.text}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                        <span className="font-semibold text-foreground">{formatPrice(property.price)}</span>
-                        <span>·</span>
-                        <span>{property.beds} bd</span>
-                        <span>·</span>
-                        <span>{property.baths} ba</span>
-                        {property.sqft && (
-                          <>
-                            <span>·</span>
-                            <span>{property.sqft.toLocaleString()} sqft</span>
-                          </>
+              {locationSuggestions.length > 0 && (
+                <div>
+                  <div className="px-3 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/50">
+                    Places
+                  </div>
+                  {locationSuggestions.map((loc, index) => (
+                    <button
+                      key={`${loc.type}-${loc.value}`}
+                      role="option"
+                      aria-selected={index === selectedIndex}
+                      data-testid={`autocomplete-location-${loc.type}-${loc.value}`}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors cursor-pointer border-b border-border/50 last:border-0
+                        ${index === selectedIndex ? "bg-accent" : "hover:bg-accent/50"}`}
+                      onClick={() => handleSelectLocation(loc)}
+                      onMouseEnter={() => setSelectedIndex(index)}
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        {loc.type === "county" ? (
+                          <Building2 className="w-5 h-5 text-primary" />
+                        ) : (
+                          <MapPin className="w-5 h-5 text-primary" />
                         )}
                       </div>
-                      {property.addressCity && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                          <MapPin className="w-3 h-3" />
-                          <span>{property.addressCity}, {property.addressState} {property.addressZip}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="font-medium text-sm text-foreground">{loc.label}</span>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {loc.count} {loc.count === 1 ? "listing" : "listings"} · {loc.type === "county" ? "County" : "City"}
                         </div>
-                      )}
-                    </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              )}
 
-                    <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  </button>
-                );
-              })}
+              {propertySuggestions.length > 0 && (
+                <div>
+                  {locationSuggestions.length > 0 && (
+                    <div className="px-3 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider bg-muted/50">
+                      Properties
+                    </div>
+                  )}
+                  {propertySuggestions.map((property, index) => {
+                    const globalIndex = locationSuggestions.length + index;
+                    const st = statusLabel(property.status, property.isOffMarket);
+                    return (
+                      <button
+                        key={property.id}
+                        role="option"
+                        aria-selected={globalIndex === selectedIndex}
+                        data-testid={`autocomplete-item-${property.id}`}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors cursor-pointer border-b border-border/50 last:border-0
+                          ${globalIndex === selectedIndex ? "bg-accent" : "hover:bg-accent/50"}`}
+                        onClick={() => handleSelectProperty(property)}
+                        onMouseEnter={() => setSelectedIndex(globalIndex)}
+                      >
+                        {property.imageUrl ? (
+                          <img
+                            src={property.imageUrl}
+                            alt=""
+                            className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-14 h-14 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                            <Home className="w-6 h-6 text-muted-foreground" />
+                          </div>
+                        )}
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm text-foreground truncate">{property.title}</span>
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold text-white ${st.color} flex-shrink-0`}>
+                              {st.text}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                            <span className="font-semibold text-foreground">{formatPrice(property.price)}</span>
+                            <span>·</span>
+                            <span>{property.beds} bd</span>
+                            <span>·</span>
+                            <span>{property.baths} ba</span>
+                            {property.sqft && (
+                              <>
+                                <span>·</span>
+                                <span>{property.sqft.toLocaleString()} sqft</span>
+                              </>
+                            )}
+                          </div>
+                          {property.addressCity && (
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                              <MapPin className="w-3 h-3" />
+                              <span>{property.addressCity}, {property.addressState} {property.addressZip}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               <button
                 data-testid="autocomplete-search-all"

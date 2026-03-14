@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { db } from "./db";
 import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews } from "@shared/schema";
-import { eq, desc, sql, or, and, ilike } from "drizzle-orm";
+import { eq, desc, sql, or, and, ilike, count } from "drizzle-orm";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { registerAuthRoutes } from "./replit_integrations/auth";
@@ -77,6 +77,56 @@ export async function registerRoutes(
       const limit = Math.min(parseInt(req.query.limit as string) || 8, 20);
       const results = await storage.autocompleteProperties(query, limit);
       res.json(results);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/locations/autocomplete", async (req, res) => {
+    try {
+      const query = (req.query.q as string) || "";
+      const limit = Math.min(parseInt(req.query.limit as string) || 10, 20);
+      const cities = await storage.autocompleteCities(query, limit);
+
+      const SAN_DIEGO_COUNTY_CITIES = [
+        "San Diego", "Chula Vista", "Oceanside", "Escondido", "Carlsbad",
+        "El Cajon", "Vista", "San Marcos", "Encinitas", "National City",
+        "La Mesa", "Santee", "Poway", "Imperial Beach", "Solana Beach",
+        "Lemon Grove", "Coronado", "Del Mar", "Rancho Santa Fe", "La Jolla",
+        "Spring Valley", "Ramona", "Alpine", "Lakeside", "Pacific Beach",
+        "East San Diego", "Fallbrook", "Valley Center", "Bonita", "Bonsall",
+      ];
+
+      const suggestions: { type: string; label: string; value: string; state: string; count: number }[] = [];
+
+      const lowerQuery = query.toLowerCase().trim();
+      const countyTokens = ["san diego", "san diego county", "sd county"];
+      const showCounty = countyTokens.some(t => t.startsWith(lowerQuery) || lowerQuery.startsWith(t));
+      if (showCounty) {
+        const countResult = await db
+          .select({ total: count() })
+          .from(properties);
+        const totalCounty = countResult[0]?.total ?? 0;
+        suggestions.push({
+          type: "county",
+          label: "San Diego County, CA",
+          value: "San Diego County",
+          state: "CA",
+          count: totalCounty,
+        });
+      }
+
+      for (const c of cities) {
+        suggestions.push({
+          type: "city",
+          label: `${c.city}, ${c.state}`,
+          value: c.city,
+          state: c.state,
+          count: c.count,
+        });
+      }
+
+      res.json(suggestions);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

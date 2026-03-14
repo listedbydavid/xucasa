@@ -433,6 +433,8 @@ export type UserHomeResponse = UserHome;
 // Criteria JSON type
 export const searchCriteriaSchema = z.object({
   location: z.string().optional(),
+  city: z.string().optional(),
+  county: z.string().optional(),
   minPrice: z.number().optional(),
   maxPrice: z.number().optional(),
   minBeds: z.number().optional(),

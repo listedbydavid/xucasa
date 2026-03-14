@@ -120,6 +120,7 @@ export interface IStorage {
   updateSellerPitchStatus(id: number, status: string, adminNotes?: string): Promise<SellerPitch>;
 
   // Autocomplete
+  autocompleteCities(query: string, limit?: number): Promise<{ city: string; state: string; count: number }[]>;
   autocompleteProperties(query: string, limit?: number): Promise<{
     id: number;
     title: string;
@@ -171,7 +172,11 @@ export class DatabaseStorage implements IStorage {
   private buildPropertyFilters(filters?: any) {
     let conditions: any[] = [];
     if (filters) {
-      if (filters.location) {
+      if (filters.city) {
+        conditions.push(sql`LOWER(${properties.addressCity}) = LOWER(${filters.city})`);
+      } else if (filters.county) {
+        // no additional city filter needed — the IDX data is already geo-filtered to SD area
+      } else if (filters.location) {
         const q = `%${filters.location}%`;
         const fullAddr = sql`CONCAT(${properties.addressStreetNumber}, ' ', ${properties.addressStreetName}, ', ', ${properties.addressCity}, ', ', ${properties.addressState}, ' ', ${properties.addressZip})`;
         conditions.push(sql`(
@@ -439,6 +444,27 @@ export class DatabaseStorage implements IStorage {
 
   async getSellLeads(): Promise<SellLead[]> {
     return await db.select().from(sellLeads).orderBy(desc(sellLeads.createdAt));
+  }
+
+  async autocompleteCities(query: string, limit: number = 10) {
+    if (!query || query.length < 2) return [];
+    const q = `%${query}%`;
+    const results = await db
+      .select({
+        city: properties.addressCity,
+        state: properties.addressState,
+        count: count(),
+      })
+      .from(properties)
+      .where(sql`${properties.addressCity} ILIKE ${q} AND ${properties.addressCity} IS NOT NULL`)
+      .groupBy(properties.addressCity, properties.addressState)
+      .orderBy(desc(count()))
+      .limit(limit);
+    return results.map(r => ({
+      city: r.city!,
+      state: r.state || "CA",
+      count: Number(r.count),
+    }));
   }
 
   async autocompleteProperties(query: string, limit: number = 8) {
