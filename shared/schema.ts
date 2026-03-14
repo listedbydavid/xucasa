@@ -16,6 +16,7 @@ export const properties = pgTable("properties", {
   addressUnitNumber: text("address_unit_number"),
   addressCity: text("address_city"),
   addressState: text("address_state"),
+  addressCounty: text("address_county"),
   addressZip: text("address_zip"),
   location: text("location").notNull(),
   beds: integer("beds").notNull(),

@@ -121,6 +121,7 @@ export interface IStorage {
 
   // Autocomplete
   autocompleteCities(query: string, limit?: number): Promise<{ city: string; state: string; count: number }[]>;
+  autocompleteCounties(query: string, limit?: number): Promise<{ county: string; state: string; count: number }[]>;
   autocompleteProperties(query: string, limit?: number): Promise<{
     id: number;
     title: string;
@@ -175,7 +176,7 @@ export class DatabaseStorage implements IStorage {
       if (filters.city) {
         conditions.push(sql`LOWER(${properties.addressCity}) = LOWER(${filters.city})`);
       } else if (filters.county) {
-        // no additional city filter needed — the IDX data is already geo-filtered to SD area
+        conditions.push(sql`LOWER(${properties.addressCounty}) = LOWER(${filters.county})`);
       } else if (filters.location) {
         const q = `%${filters.location}%`;
         const fullAddr = sql`CONCAT(${properties.addressStreetNumber}, ' ', ${properties.addressStreetName}, ', ', ${properties.addressCity}, ', ', ${properties.addressState}, ' ', ${properties.addressZip})`;
@@ -462,6 +463,27 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
     return results.map(r => ({
       city: r.city!,
+      state: r.state || "CA",
+      count: Number(r.count),
+    }));
+  }
+
+  async autocompleteCounties(query: string, limit: number = 5) {
+    if (!query || query.length < 2) return [];
+    const q = `%${query}%`;
+    const results = await db
+      .select({
+        county: properties.addressCounty,
+        state: properties.addressState,
+        count: count(),
+      })
+      .from(properties)
+      .where(sql`${properties.addressCounty} ILIKE ${q} AND ${properties.addressCounty} IS NOT NULL`)
+      .groupBy(properties.addressCounty, properties.addressState)
+      .orderBy(desc(count()))
+      .limit(limit);
+    return results.map(r => ({
+      county: r.county!,
       state: r.state || "CA",
       count: Number(r.count),
     }));
