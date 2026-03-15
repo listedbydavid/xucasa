@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Search, User, LogOut, Briefcase, Layers, TrendingUp, Users, Shield, Menu, X, FileText, ChevronLeft } from "lucide-react";
 import { useState } from "react";
 import { ThemeToggle } from "./ThemeToggle";
+import { NotificationBell } from "./NotificationBell";
 
 export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -71,6 +72,7 @@ export function Navbar() {
 
         <div className="flex items-center gap-2">
           <ThemeToggle />
+          <NotificationBell />
           <button
             className="md:hidden p-2 text-muted-foreground hover:text-foreground transition-colors rounded-full hover:bg-muted/50"
             onClick={() => setMobileOpen(!mobileOpen)}

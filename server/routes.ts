@@ -5,7 +5,7 @@ import path from "path";
 import { storage } from "./storage";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { db } from "./db";
-import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews, errorReports } from "@shared/schema";
+import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews, errorReports, notifications } from "@shared/schema";
 import { eq, desc, sql, or, and, ilike } from "drizzle-orm";
 import { api } from "@shared/routes";
 import { z } from "zod";
@@ -2520,6 +2520,118 @@ export async function registerRoutes(
 
   // Start scheduled IDX auto-sync (no-op if not configured)
   startIdxAutoSync();
+
+  // === Notifications ===
+  app.get("/api/notifications", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const unreadOnly = req.query.unread === "true";
+      const archived = req.query.archived === "true";
+      const result = await storage.getNotifications(userId, { unreadOnly, archived });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/notifications/unread-count", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const count = await storage.getUnreadCount(userId);
+      res.json({ count });
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/notifications", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      const isAdminUser = user?.email === process.env.ADMIN_EMAIL;
+      if (!isAdminUser) return res.status(403).json({ error: "Admin only" });
+      const { targetUserId, type, title, message, propertyId, linkUrl, metadata } = req.body;
+      if (!targetUserId || !type || !title || !message) return res.status(400).json({ error: "Missing required fields" });
+      const notification = await storage.createNotification({
+        userId: targetUserId, type, title, message,
+        propertyId: propertyId || null, linkUrl: linkUrl || null,
+        metadata: metadata || null, read: false, archived: false,
+      });
+      res.json(notification);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/notifications/test", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const sampleNotifications = [
+        { type: "new_listing", title: "New Home Match!", message: "A new 3-bed home in Pacific Beach matching your saved search is now available at $1,250,000.", linkUrl: "/search?city=San+Diego", propertyId: null },
+        { type: "price_drop", title: "Price Reduced", message: "A home you saved dropped from $899K to $849K — 5.6% price reduction.", linkUrl: "/dashboard", propertyId: null },
+        { type: "agent_match", title: "New Buyer Interested", message: "A buyer has expressed interest in one of your listings through the swipe feed.", linkUrl: "/agent", propertyId: null },
+        { type: "open_house", title: "Open House Tomorrow", message: "Reminder: Open house at 1234 Ocean Blvd, Pacific Beach tomorrow 1-4 PM.", linkUrl: "/search", propertyId: null },
+        { type: "system", title: "Welcome to xucasa!", message: "Set up your profile and save searches to get notified about new homes.", linkUrl: "/dashboard", propertyId: null },
+      ];
+      const created = [];
+      for (const n of sampleNotifications) {
+        const notification = await storage.createNotification({
+          userId, type: n.type, title: n.title, message: n.message,
+          propertyId: n.propertyId, linkUrl: n.linkUrl,
+          read: false, archived: false, metadata: null,
+        });
+        created.push(notification);
+      }
+      res.json({ created: created.length, notifications: created });
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/notifications/mark-all-read", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      await storage.markAllNotificationsRead(userId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/notifications/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      const userId = req.user.claims.sub;
+      const { read, archived } = req.body;
+      if (archived === true) {
+        const updated = await storage.archiveNotification(id, userId);
+        if (!updated) return res.status(404).json({ error: "Notification not found" });
+        return res.json(updated);
+      }
+      if (read === true) {
+        const updated = await storage.markNotificationRead(id, userId);
+        if (!updated) return res.status(404).json({ error: "Notification not found" });
+        return res.json(updated);
+      }
+      res.status(400).json({ error: "No valid updates" });
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/notifications/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      const userId = req.user.claims.sub;
+      const deleted = await storage.deleteNotification(id, userId);
+      if (!deleted) return res.status(404).json({ error: "Notification not found" });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
 
   // === Error Reporting (public endpoint with simple rate limiting) ===
   const errorReportLimiter = new Map<string, { count: number; resetAt: number }>();

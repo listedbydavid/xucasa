@@ -461,6 +461,22 @@ export const errorReports = pgTable("error_reports", {
 
 export const insertErrorReportSchema = createInsertSchema(errorReports).omit({ id: true, firstSeen: true, lastSeen: true });
 
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  propertyId: integer("property_id"),
+  linkUrl: text("link_url"),
+  read: boolean("read").default(false).notNull(),
+  archived: boolean("archived").default(false).notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
+
 // Types
 export type Property = typeof properties.$inferSelect;
 export type InsertProperty = z.infer<typeof insertPropertySchema>;
@@ -498,6 +514,8 @@ export type ContactTagAssignment = typeof contactTagAssignments.$inferSelect;
 export type InsertContactTagAssignment = z.infer<typeof insertContactTagAssignmentSchema>;
 export type ErrorReport = typeof errorReports.$inferSelect;
 export type InsertErrorReport = z.infer<typeof insertErrorReportSchema>;
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 
 // Request Types
 export type CreatePropertyRequest = InsertProperty;

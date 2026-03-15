@@ -26,6 +26,7 @@ import {
   Briefcase, ShieldCheck, BadgeCheck,
   FileText, DollarSign, ThumbsUp, ThumbsDown, Eye,
   ArrowRightLeft, Shield, Banknote,
+  Bell, Archive, CheckCheck, Info, TrendingDown, Settings,
 } from "lucide-react";
 import { Autocomplete } from "@react-google-maps/api";
 import { useGoogleMaps } from "@/hooks/use-google-maps";
@@ -35,11 +36,14 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { BuyerProfile } from "@shared/schema";
 
-type Section = "profile" | "myhome" | "favorites" | "searches" | "history" | "agent" | "openhouses" | "offers";
+type Section = "profile" | "myhome" | "favorites" | "searches" | "history" | "agent" | "openhouses" | "offers" | "notifications";
 
 export default function Dashboard() {
   const { user, isAuthenticated } = useAuth();
-  const [activeSection, setActiveSection] = useState<Section>("profile");
+  const urlSection = new URLSearchParams(window.location.search).get("section");
+  const [activeSection, setActiveSection] = useState<Section>(
+    urlSection && ["profile","myhome","favorites","searches","history","agent","openhouses","offers","notifications"].includes(urlSection) ? urlSection as Section : "profile"
+  );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   if (!isAuthenticated) {
@@ -66,6 +70,7 @@ export default function Dashboard() {
     { id: "agent",      label: "My Agent",         icon: UserPlus },
     { id: "openhouses", label: "Open Houses",      icon: CalendarDays },
     { id: "history",    label: "Search History",   icon: Clock },
+    { id: "notifications", label: "Notifications", icon: Bell },
   ];
 
   return (
@@ -135,6 +140,7 @@ export default function Dashboard() {
             {activeSection === "agent"      && <MyAgentSection />}
             {activeSection === "openhouses" && <OpenHousesSection />}
             {activeSection === "history"    && <SearchHistorySection />}
+            {activeSection === "notifications" && <NotificationsSection />}
           </main>
         </div>
       </div>
@@ -1929,6 +1935,290 @@ function EmptyState({ icon: Icon, title, description, children }: { icon: any; t
       <h3 className="font-display font-bold text-xl mb-2">{title}</h3>
       <p className="text-muted-foreground mb-6 max-w-sm mx-auto text-sm">{description}</p>
       {children}
+    </div>
+  );
+}
+
+const notifTypeIcons: Record<string, typeof Home> = {
+  new_listing: Home, price_drop: TrendingDown, agent_match: UserPlus,
+  open_house: CalendarDays, system: Info,
+};
+const notifTypeColors: Record<string, string> = {
+  new_listing: "bg-green-100 text-green-600", price_drop: "bg-orange-100 text-orange-600",
+  agent_match: "bg-blue-100 text-blue-600", open_house: "bg-purple-100 text-purple-600",
+  system: "bg-gray-100 text-gray-600",
+};
+const notifTypeLabels: Record<string, string> = {
+  new_listing: "New Listing", price_drop: "Price Drop", agent_match: "Agent Match",
+  open_house: "Open House", system: "System",
+};
+
+function NotificationsSection() {
+  const [filter, setFilter] = useState<"all" | "unread" | "archived">("all");
+  const [prefsOpen, setPrefsOpen] = useState(false);
+
+  const queryParams = filter === "unread" ? "?unread=true" : filter === "archived" ? "?archived=true" : "";
+  const { data: notifs, isLoading } = useQuery<any[]>({
+    queryKey: ["/api/notifications", filter],
+    queryFn: async () => {
+      const res = await fetch(`/api/notifications${queryParams}`, { credentials: "include" });
+      return res.json();
+    },
+  });
+
+  const { data: countData } = useQuery<{ count: number }>({
+    queryKey: ["/api/notifications/unread-count"],
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: async (id: number) => { await apiRequest("PATCH", `/api/notifications/${id}`, { read: true }); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
+    },
+  });
+
+  const markAllReadMutation = useMutation({
+    mutationFn: async () => { await apiRequest("PATCH", "/api/notifications/mark-all-read", {}); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: async (id: number) => { await apiRequest("PATCH", `/api/notifications/${id}`, { archived: true }); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => { await apiRequest("DELETE", `/api/notifications/${id}`); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
+    },
+  });
+
+  const generateTestMutation = useMutation({
+    mutationFn: async () => { await apiRequest("POST", "/api/notifications/test", {}); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
+    },
+  });
+
+  const unreadCount = countData?.count || 0;
+
+  function timeSince(dateStr: string) {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 7) return `${days}d ago`;
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  return (
+    <div className="space-y-6" data-testid="section-notifications">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-xl font-display font-bold flex items-center gap-2">
+            <Bell className="w-5 h-5" />
+            Notifications
+            {unreadCount > 0 && (
+              <span className="text-sm font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-600">{unreadCount} unread</span>
+            )}
+          </h2>
+        </div>
+        <div className="flex items-center gap-2">
+          {unreadCount > 0 && (
+            <button
+              onClick={() => markAllReadMutation.mutate()}
+              disabled={markAllReadMutation.isPending}
+              className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+              data-testid="button-mark-all-read-dashboard"
+            >
+              <CheckCheck className="w-4 h-4" />
+              Mark all read
+            </button>
+          )}
+          <button
+            onClick={() => setPrefsOpen(!prefsOpen)}
+            className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+            data-testid="button-notification-preferences"
+          >
+            <Settings className="w-4 h-4" />
+            Preferences
+          </button>
+        </div>
+      </div>
+
+      <div className="flex gap-2" data-testid="notification-filters">
+        {(["all", "unread", "archived"] as const).map(f => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${filter === f ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+            data-testid={`button-filter-${f}`}
+          >
+            {f === "all" ? "All" : f === "unread" ? "Unread" : "Archived"}
+          </button>
+        ))}
+      </div>
+
+      {prefsOpen && (
+        <div className="bg-card border border-border rounded-xl p-6 space-y-4" data-testid="section-notification-preferences">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-sm flex items-center gap-2">
+              <Settings className="w-4 h-4" />
+              Notification Preferences
+            </h3>
+            <button onClick={() => setPrefsOpen(false)} className="p-1 text-muted-foreground hover:text-foreground">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between py-2 border-b border-border/50">
+              <div>
+                <p className="text-sm font-medium">Email Notifications</p>
+                <p className="text-xs text-muted-foreground">Receive daily email digests of new matches</p>
+              </div>
+              <div className="px-3 py-1 rounded-full bg-muted text-muted-foreground text-xs font-medium">Coming Soon</div>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b border-border/50">
+              <div>
+                <p className="text-sm font-medium">Push Notifications</p>
+                <p className="text-xs text-muted-foreground">Get instant alerts on your device</p>
+              </div>
+              <div className="px-3 py-1 rounded-full bg-muted text-muted-foreground text-xs font-medium">Coming Soon</div>
+            </div>
+            <div className="flex items-center justify-between py-2 border-b border-border/50">
+              <div>
+                <p className="text-sm font-medium">New Listing Alerts</p>
+                <p className="text-xs text-muted-foreground">Notify when properties match your saved searches</p>
+              </div>
+              <div className="px-3 py-1 rounded-full bg-muted text-muted-foreground text-xs font-medium">Coming Soon</div>
+            </div>
+            <div className="flex items-center justify-between py-2">
+              <div>
+                <p className="text-sm font-medium">Price Drop Alerts</p>
+                <p className="text-xs text-muted-foreground">Notify when saved properties reduce their price</p>
+              </div>
+              <div className="px-3 py-1 rounded-full bg-muted text-muted-foreground text-xs font-medium">Coming Soon</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1,2,3].map(i => (
+            <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+              <div className="flex gap-3">
+                <div className="w-10 h-10 rounded-full bg-muted" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-muted rounded w-48" />
+                  <div className="h-3 bg-muted rounded w-full" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : !notifs || notifs.length === 0 ? (
+        <div className="text-center py-16 bg-card border border-border rounded-xl">
+          <Bell className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+          <h3 className="font-bold text-lg mb-1">
+            {filter === "archived" ? "No archived notifications" : filter === "unread" ? "All caught up!" : "No notifications yet"}
+          </h3>
+          <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-4">
+            {filter === "all" ? "When you receive notifications about new listings, price drops, or agent updates, they'll appear here." : filter === "unread" ? "You've read all your notifications." : "Archived notifications will appear here."}
+          </p>
+          {filter === "all" && (
+            <button
+              onClick={() => generateTestMutation.mutate()}
+              disabled={generateTestMutation.isPending}
+              className="text-sm px-4 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 font-medium"
+              data-testid="button-generate-test-notifications"
+            >
+              {generateTestMutation.isPending ? "Generating..." : "Generate sample notifications"}
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {notifs.map((n: any) => {
+            const Icon = notifTypeIcons[n.type] || Info;
+            const colorClass = notifTypeColors[n.type] || "bg-gray-100 text-gray-600";
+            const typeLabel = notifTypeLabels[n.type] || n.type;
+            return (
+              <div
+                key={n.id}
+                className={`bg-card border border-border rounded-xl p-4 transition-all hover:shadow-sm ${!n.read ? "border-l-4 border-l-primary" : ""}`}
+                data-testid={`notification-dashboard-${n.id}`}
+              >
+                <div className="flex gap-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${colorClass}`}>
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${colorClass}`}>{typeLabel}</span>
+                          {!n.read && <span className="w-2 h-2 rounded-full bg-primary" />}
+                        </div>
+                        <p className={`text-sm ${!n.read ? "font-semibold" : ""}`}>{n.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{n.message}</p>
+                        <p className="text-[10px] text-muted-foreground/70 mt-1">{timeSince(n.createdAt)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      {!n.read && (
+                        <button
+                          onClick={() => markReadMutation.mutate(n.id)}
+                          className="text-xs px-2.5 py-1 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground flex items-center gap-1"
+                          data-testid={`button-read-dashboard-${n.id}`}
+                        >
+                          <Check className="w-3 h-3" /> Mark read
+                        </button>
+                      )}
+                      {n.linkUrl && (
+                        <Link href={n.linkUrl} className="text-xs px-2.5 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 flex items-center gap-1">
+                          <ExternalLink className="w-3 h-3" /> View
+                        </Link>
+                      )}
+                      {!n.archived && (
+                        <button
+                          onClick={() => archiveMutation.mutate(n.id)}
+                          className="text-xs px-2.5 py-1 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground flex items-center gap-1"
+                          data-testid={`button-archive-dashboard-${n.id}`}
+                        >
+                          <Archive className="w-3 h-3" /> Archive
+                        </button>
+                      )}
+                      <button
+                        onClick={() => deleteMutation.mutate(n.id)}
+                        className="text-xs px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 flex items-center gap-1 ml-auto"
+                        data-testid={`button-delete-dashboard-${n.id}`}
+                      >
+                        <Trash2 className="w-3 h-3" /> Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

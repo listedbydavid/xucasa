@@ -49,6 +49,9 @@ import {
   type ContactTagAssignment,
   type ErrorReport,
   type InsertErrorReport,
+  type Notification,
+  type InsertNotification,
+  notifications,
   users,
 } from "@shared/schema";
 import { eq, and, desc, sql, gte, count } from "drizzle-orm";
@@ -207,6 +210,15 @@ export interface IStorage {
   getErrorReport(id: number): Promise<ErrorReport | undefined>;
   updateErrorReport(id: number, updates: Partial<{ status: string; adminNotes: string; resolved: boolean }>): Promise<ErrorReport>;
   incrementErrorOccurrence(fingerprint: string, url: string): Promise<ErrorReport | null>;
+
+  // Notifications
+  getNotifications(userId: string, filters?: { unreadOnly?: boolean; archived?: boolean }): Promise<Notification[]>;
+  getUnreadCount(userId: string): Promise<number>;
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  markNotificationRead(id: number, userId: string): Promise<Notification>;
+  markAllNotificationsRead(userId: string): Promise<void>;
+  archiveNotification(id: number, userId: string): Promise<Notification>;
+  deleteNotification(id: number, userId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1122,6 +1134,50 @@ export class DatabaseStorage implements IStorage {
       .where(eq(errorReports.id, existing[0].id))
       .returning();
     return updated;
+  }
+
+  async getNotifications(userId: string, filters?: { unreadOnly?: boolean; archived?: boolean }): Promise<Notification[]> {
+    const conditions = [eq(notifications.userId, userId)];
+    if (filters?.unreadOnly) conditions.push(eq(notifications.read, false));
+    if (filters?.archived === true) {
+      conditions.push(eq(notifications.archived, true));
+    } else if (filters?.archived === false || !filters?.archived) {
+      conditions.push(eq(notifications.archived, false));
+    }
+    return db.select().from(notifications).where(and(...conditions)).orderBy(desc(notifications.createdAt)).limit(100);
+  }
+
+  async getUnreadCount(userId: string): Promise<number> {
+    const [result] = await db.select({ value: count() }).from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.read, false), eq(notifications.archived, false)));
+    return result?.value || 0;
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [created] = await db.insert(notifications).values(notification).returning();
+    return created;
+  }
+
+  async markNotificationRead(id: number, userId: string): Promise<Notification> {
+    const [updated] = await db.update(notifications).set({ read: true })
+      .where(and(eq(notifications.id, id), eq(notifications.userId, userId))).returning();
+    return updated;
+  }
+
+  async markAllNotificationsRead(userId: string): Promise<void> {
+    await db.update(notifications).set({ read: true })
+      .where(and(eq(notifications.userId, userId), eq(notifications.read, false)));
+  }
+
+  async archiveNotification(id: number, userId: string): Promise<Notification> {
+    const [updated] = await db.update(notifications).set({ archived: true, read: true })
+      .where(and(eq(notifications.id, id), eq(notifications.userId, userId))).returning();
+    return updated;
+  }
+
+  async deleteNotification(id: number, userId: string): Promise<boolean> {
+    const result = await db.delete(notifications).where(and(eq(notifications.id, id), eq(notifications.userId, userId))).returning({ id: notifications.id });
+    return result.length > 0;
   }
 }
 
