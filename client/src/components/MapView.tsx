@@ -8,6 +8,8 @@ interface MapViewProps {
   properties: Property[];
   center?: [number, number]; // [lng, lat]
   zoom?: number;
+  highlightedPropertyId?: number | null;
+  onMarkerHover?: (property: Property | null) => void;
 }
 
 function formatPriceShort(price: number): string {
@@ -24,7 +26,7 @@ function formatPriceShort(price: number): string {
 
 const REGRID_TILE_URL = 'https://tiles.arcgis.com/tiles/KzeiCaQsMoeCfoCq/arcgis/rest/services/Regrid_Nationwide_Parcel_Boundaries_v1/MapServer/tile/{z}/{y}/{x}';
 
-export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }: MapViewProps) {
+export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13, highlightedPropertyId, onMarkerHover }: MapViewProps) {
   const { isLoaded, loadError } = useGoogleMaps();
 
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
@@ -37,6 +39,7 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+  const markerPinsRef = useRef<Map<number, HTMLDivElement>>(new Map());
   const parcelOverlayRef = useRef<google.maps.ImageMapType | null>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
 
@@ -118,6 +121,7 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }
 
     markersRef.current.forEach(m => { m.map = null; });
     markersRef.current = [];
+    markerPinsRef.current.clear();
 
     const positions: google.maps.LatLngLiteral[] = [];
 
@@ -158,6 +162,7 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }
         pin.style.transform = 'scale(1.15)';
         pin.style.boxShadow = '0 4px 14px rgba(0,0,0,0.4)';
         pin.style.zIndex = '10';
+        onMarkerHover?.(property);
       });
       pin.addEventListener('mouseleave', () => {
         if (selectedProperty?.id !== property.id) {
@@ -165,7 +170,10 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }
           pin.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
           pin.style.zIndex = '';
         }
+        onMarkerHover?.(null);
       });
+
+      markerPinsRef.current.set(property.id, pin);
 
       const marker = new google.maps.marker.AdvancedMarkerElement({
         map: mapRef.current!,
@@ -199,8 +207,23 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13 }
     return () => {
       markersRef.current.forEach(m => { m.map = null; });
       markersRef.current = [];
+      markerPinsRef.current.clear();
     };
   }, [properties, isLoaded]);
+
+  useEffect(() => {
+    markerPinsRef.current.forEach((pin, id) => {
+      if (id === highlightedPropertyId) {
+        pin.style.transform = 'scale(1.25)';
+        pin.style.boxShadow = '0 4px 14px rgba(0,0,0,0.5)';
+        pin.style.zIndex = '20';
+      } else {
+        pin.style.transform = 'scale(1)';
+        pin.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+        pin.style.zIndex = '';
+      }
+    });
+  }, [highlightedPropertyId]);
 
   if (loadError) {
     return (
