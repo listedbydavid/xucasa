@@ -1970,6 +1970,23 @@ function NotificationsSection() {
     queryKey: ["/api/notifications/unread-count"],
   });
 
+  const { data: emailPrefs } = useQuery<any>({
+    queryKey: ["/api/notification-preferences"],
+  });
+
+  const { data: emailStatus } = useQuery<{ configured: boolean }>({
+    queryKey: ["/api/email-status"],
+  });
+
+  const prefsMutation = useMutation({
+    mutationFn: async (updates: Record<string, any>) => {
+      await apiRequest("PATCH", "/api/notification-preferences", updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notification-preferences"] });
+    },
+  });
+
   const markReadMutation = useMutation({
     mutationFn: async (id: number) => { await apiRequest("PATCH", `/api/notifications/${id}`, { read: true }); },
     onSuccess: () => {
@@ -2085,36 +2102,114 @@ function NotificationsSection() {
               <X className="w-4 h-4" />
             </button>
           </div>
+          {!emailStatus?.configured && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs" data-testid="email-not-configured-banner">
+              <Info className="w-4 h-4 flex-shrink-0" />
+              <span>Email delivery requires SMTP configuration. Contact your admin to set up SMTP_HOST, SMTP_USER, and SMTP_PASS.</span>
+            </div>
+          )}
           <div className="space-y-3">
             <div className="flex items-center justify-between py-2 border-b border-border/50">
               <div>
                 <p className="text-sm font-medium">Email Notifications</p>
-                <p className="text-xs text-muted-foreground">Receive daily email digests of new matches</p>
+                <p className="text-xs text-muted-foreground">Receive email alerts for notification types below</p>
               </div>
-              <div className="px-3 py-1 rounded-full bg-muted text-muted-foreground text-xs font-medium">Coming Soon</div>
+              <button
+                onClick={() => prefsMutation.mutate({ emailEnabled: !emailPrefs?.emailEnabled })}
+                className={`relative w-10 h-5 rounded-full transition-colors ${emailPrefs?.emailEnabled ? "bg-primary" : "bg-muted"}`}
+                disabled={prefsMutation.isPending}
+                data-testid="toggle-email-enabled"
+              >
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${emailPrefs?.emailEnabled ? "left-5" : "left-0.5"}`} />
+              </button>
             </div>
-            <div className="flex items-center justify-between py-2 border-b border-border/50">
+            {emailPrefs?.emailEnabled && (
+              <>
+                <div className="flex items-center justify-between py-2 border-b border-border/50 pl-4">
+                  <div>
+                    <p className="text-sm font-medium">New Listing Alerts</p>
+                    <p className="text-xs text-muted-foreground">Email when properties match your saved searches</p>
+                  </div>
+                  <button
+                    onClick={() => prefsMutation.mutate({ emailNewListing: !emailPrefs?.emailNewListing })}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${emailPrefs?.emailNewListing !== false ? "bg-primary" : "bg-muted"}`}
+                    disabled={prefsMutation.isPending}
+                    data-testid="toggle-email-new-listing"
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${emailPrefs?.emailNewListing !== false ? "left-5" : "left-0.5"}`} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-border/50 pl-4">
+                  <div>
+                    <p className="text-sm font-medium">Price Drop Alerts</p>
+                    <p className="text-xs text-muted-foreground">Email when saved properties reduce their price</p>
+                  </div>
+                  <button
+                    onClick={() => prefsMutation.mutate({ emailPriceDrop: !emailPrefs?.emailPriceDrop })}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${emailPrefs?.emailPriceDrop !== false ? "bg-primary" : "bg-muted"}`}
+                    disabled={prefsMutation.isPending}
+                    data-testid="toggle-email-price-drop"
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${emailPrefs?.emailPriceDrop !== false ? "left-5" : "left-0.5"}`} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-border/50 pl-4">
+                  <div>
+                    <p className="text-sm font-medium">Open House Reminders</p>
+                    <p className="text-xs text-muted-foreground">Email about upcoming open house events</p>
+                  </div>
+                  <button
+                    onClick={() => prefsMutation.mutate({ emailOpenHouse: !emailPrefs?.emailOpenHouse })}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${emailPrefs?.emailOpenHouse !== false ? "bg-primary" : "bg-muted"}`}
+                    disabled={prefsMutation.isPending}
+                    data-testid="toggle-email-open-house"
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${emailPrefs?.emailOpenHouse !== false ? "left-5" : "left-0.5"}`} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-border/50 pl-4">
+                  <div>
+                    <p className="text-sm font-medium">Agent Match Updates</p>
+                    <p className="text-xs text-muted-foreground">Email when a buyer or agent contacts you</p>
+                  </div>
+                  <button
+                    onClick={() => prefsMutation.mutate({ emailAgentMatch: !emailPrefs?.emailAgentMatch })}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${emailPrefs?.emailAgentMatch !== false ? "bg-primary" : "bg-muted"}`}
+                    disabled={prefsMutation.isPending}
+                    data-testid="toggle-email-agent-match"
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${emailPrefs?.emailAgentMatch !== false ? "left-5" : "left-0.5"}`} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between py-2 pl-4">
+                  <div>
+                    <p className="text-sm font-medium">System Notifications</p>
+                    <p className="text-xs text-muted-foreground">Email for platform updates and announcements</p>
+                  </div>
+                  <button
+                    onClick={() => prefsMutation.mutate({ emailSystem: !emailPrefs?.emailSystem })}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${emailPrefs?.emailSystem ? "bg-primary" : "bg-muted"}`}
+                    disabled={prefsMutation.isPending}
+                    data-testid="toggle-email-system"
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${emailPrefs?.emailSystem ? "left-5" : "left-0.5"}`} />
+                  </button>
+                </div>
+              </>
+            )}
+            <div className="flex items-center justify-between py-2 border-t border-border/50">
               <div>
                 <p className="text-sm font-medium">Push Notifications</p>
                 <p className="text-xs text-muted-foreground">Get instant alerts on your device</p>
               </div>
               <div className="px-3 py-1 rounded-full bg-muted text-muted-foreground text-xs font-medium">Coming Soon</div>
             </div>
-            <div className="flex items-center justify-between py-2 border-b border-border/50">
-              <div>
-                <p className="text-sm font-medium">New Listing Alerts</p>
-                <p className="text-xs text-muted-foreground">Notify when properties match your saved searches</p>
-              </div>
-              <div className="px-3 py-1 rounded-full bg-muted text-muted-foreground text-xs font-medium">Coming Soon</div>
-            </div>
-            <div className="flex items-center justify-between py-2">
-              <div>
-                <p className="text-sm font-medium">Price Drop Alerts</p>
-                <p className="text-xs text-muted-foreground">Notify when saved properties reduce their price</p>
-              </div>
-              <div className="px-3 py-1 rounded-full bg-muted text-muted-foreground text-xs font-medium">Coming Soon</div>
-            </div>
           </div>
+          {emailPrefs?.emailEnabled && emailPrefs?.emailsSentToday > 0 && (
+            <div className="text-xs text-muted-foreground pt-2 border-t border-border/50">
+              {emailPrefs.emailsSentToday}/20 emails sent today
+            </div>
+          )}
         </div>
       )}
 

@@ -14,6 +14,7 @@ import { isAuthenticated } from "./replit_integrations/auth";
 import { getPublicRecords } from "./publicRecords";
 import { getZoningData } from "./zoningData";
 import { runIdxSync, isSyncInProgress, idxConfigured, getLastSyncLog, getSyncLogs, startIdxAutoSync, verifyAgentLicense, getRealtyFeedToken, realtyFeedODataFetch, REALTYFEED_API_BASE } from "./idxSync";
+import { sendNotificationEmail, sendTestEmail, isEmailConfigured } from "./emailService";
 
 const ERROR_ARCHIVE_PATH = path.join(process.cwd(), "data", "error-archive.json");
 
@@ -2544,19 +2545,72 @@ export async function registerRoutes(
     }
   });
 
+  async function trySendNotificationEmail(targetUserId: string, type: string, title: string, message: string, linkUrl?: string | null) {
+    try {
+      if (!isEmailConfigured()) return;
+      const prefs = await storage.getNotificationPreferences(targetUserId);
+      if (!prefs || !prefs.emailEnabled) return;
+
+      const typeToField: Record<string, keyof typeof prefs> = {
+        new_listing: "emailNewListing",
+        price_drop: "emailPriceDrop",
+        open_house: "emailOpenHouse",
+        agent_match: "emailAgentMatch",
+        system: "emailSystem",
+      };
+      const field = typeToField[type];
+      if (!field) return;
+      if (!prefs[field]) return;
+
+      const today = new Date().toISOString().split("T")[0];
+      const emailsToday = prefs.lastEmailResetDate === today ? prefs.emailsSentToday : 0;
+
+      const targetUser = await storage.getUser(targetUserId);
+      if (!targetUser?.email) return;
+
+      const result = await sendNotificationEmail({
+        to: targetUser.email,
+        recipientName: targetUser.firstName || targetUser.email,
+        type, title, message, linkUrl,
+        userId: targetUserId,
+        emailsSentToday: emailsToday,
+      });
+
+      if (result.sent) {
+        await storage.incrementEmailCount(targetUserId);
+      }
+    } catch (err) {
+      console.error("[Email] Background email send failed:", err);
+    }
+  }
+
+  const createNotificationSchema = z.object({
+    targetUserId: z.string().min(1),
+    type: z.enum(["new_listing", "price_drop", "agent_match", "open_house", "system"]),
+    title: z.string().min(1).max(200),
+    message: z.string().min(1).max(2000),
+    propertyId: z.number().int().positive().nullable().optional(),
+    linkUrl: z.string().max(500).nullable().optional(),
+    metadata: z.any().nullable().optional(),
+  });
+
   app.post("/api/notifications", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
       const isAdminUser = user?.email === process.env.ADMIN_EMAIL;
       if (!isAdminUser) return res.status(403).json({ error: "Admin only" });
-      const { targetUserId, type, title, message, propertyId, linkUrl, metadata } = req.body;
-      if (!targetUserId || !type || !title || !message) return res.status(400).json({ error: "Missing required fields" });
+      const parsed = createNotificationSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0]?.message || "Invalid input" });
+      }
+      const { targetUserId, type, title, message, propertyId, linkUrl, metadata } = parsed.data;
       const notification = await storage.createNotification({
         userId: targetUserId, type, title, message,
         propertyId: propertyId || null, linkUrl: linkUrl || null,
         metadata: metadata || null, read: false, archived: false,
       });
+      trySendNotificationEmail(targetUserId, type, title, message, linkUrl);
       res.json(notification);
     } catch (err) {
       res.status(500).json({ error: "Internal server error" });
@@ -2628,6 +2682,76 @@ export async function registerRoutes(
       const deleted = await storage.deleteNotification(id, userId);
       if (!deleted) return res.status(404).json({ error: "Notification not found" });
       res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/notification-preferences", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const prefs = await storage.getNotificationPreferences(userId);
+      res.json(prefs || {
+        emailEnabled: false,
+        emailNewListing: true,
+        emailPriceDrop: true,
+        emailOpenHouse: true,
+        emailAgentMatch: true,
+        emailSystem: false,
+        emailDigestFrequency: "instant",
+        emailsSentToday: 0,
+      });
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  const notificationPrefsUpdateSchema = z.object({
+    emailEnabled: z.boolean().optional(),
+    emailNewListing: z.boolean().optional(),
+    emailPriceDrop: z.boolean().optional(),
+    emailOpenHouse: z.boolean().optional(),
+    emailAgentMatch: z.boolean().optional(),
+    emailSystem: z.boolean().optional(),
+    emailDigestFrequency: z.enum(["instant", "daily", "weekly"]).optional(),
+  }).refine(obj => Object.values(obj).some(v => v !== undefined), { message: "No valid fields to update" });
+
+  app.patch("/api/notification-preferences", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const parsed = notificationPrefsUpdateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0]?.message || "Invalid input" });
+      }
+      const updates: Record<string, any> = {};
+      for (const [key, val] of Object.entries(parsed.data)) {
+        if (val !== undefined) updates[key] = val;
+      }
+      const prefs = await storage.upsertNotificationPreferences(userId, updates);
+      res.json(prefs);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/email-status", isAuthenticated, async (req: any, res) => {
+    try {
+      res.json({ configured: isEmailConfigured() });
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/test-email", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      const isAdminUser = user?.email === process.env.ADMIN_EMAIL;
+      if (!isAdminUser) return res.status(403).json({ error: "Admin only" });
+      const { to } = req.body;
+      const targetEmail = to || user.email;
+      const result = await sendTestEmail(targetEmail, user.firstName || user.email);
+      res.json(result);
     } catch (err) {
       res.status(500).json({ error: "Internal server error" });
     }

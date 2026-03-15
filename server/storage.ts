@@ -52,6 +52,8 @@ import {
   type Notification,
   type InsertNotification,
   notifications,
+  notificationPreferences,
+  type NotificationPreference,
   users,
 } from "@shared/schema";
 import { eq, and, desc, sql, gte, count } from "drizzle-orm";
@@ -219,6 +221,11 @@ export interface IStorage {
   markAllNotificationsRead(userId: string): Promise<void>;
   archiveNotification(id: number, userId: string): Promise<Notification>;
   deleteNotification(id: number, userId: string): Promise<boolean>;
+
+  getNotificationPreferences(userId: string): Promise<NotificationPreference | null>;
+  upsertNotificationPreferences(userId: string, prefs: Partial<NotificationPreference>): Promise<NotificationPreference>;
+  incrementEmailCount(userId: string): Promise<void>;
+  resetDailyEmailCount(userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1178,6 +1185,61 @@ export class DatabaseStorage implements IStorage {
   async deleteNotification(id: number, userId: string): Promise<boolean> {
     const result = await db.delete(notifications).where(and(eq(notifications.id, id), eq(notifications.userId, userId))).returning({ id: notifications.id });
     return result.length > 0;
+  }
+
+  async getNotificationPreferences(userId: string): Promise<NotificationPreference | null> {
+    const rows = await db.select().from(notificationPreferences).where(eq(notificationPreferences.userId, userId)).limit(1);
+    return rows[0] || null;
+  }
+
+  async upsertNotificationPreferences(userId: string, prefs: Partial<NotificationPreference>): Promise<NotificationPreference> {
+    const existing = await this.getNotificationPreferences(userId);
+    if (existing) {
+      const { id, userId: _uid, ...rest } = prefs as any;
+      const [updated] = await db.update(notificationPreferences)
+        .set({ ...rest, updatedAt: new Date() })
+        .where(eq(notificationPreferences.userId, userId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(notificationPreferences)
+      .values({
+        userId,
+        emailEnabled: prefs.emailEnabled ?? false,
+        emailNewListing: prefs.emailNewListing ?? true,
+        emailPriceDrop: prefs.emailPriceDrop ?? true,
+        emailOpenHouse: prefs.emailOpenHouse ?? true,
+        emailAgentMatch: prefs.emailAgentMatch ?? true,
+        emailSystem: prefs.emailSystem ?? false,
+        emailDigestFrequency: prefs.emailDigestFrequency ?? "instant",
+        emailsSentToday: 0,
+        lastEmailResetDate: null,
+        lastEmailSentAt: null,
+      })
+      .returning();
+    return created;
+  }
+
+  async incrementEmailCount(userId: string): Promise<void> {
+    const today = new Date().toISOString().split("T")[0];
+    const prefs = await this.getNotificationPreferences(userId);
+    if (!prefs) return;
+
+    if (prefs.lastEmailResetDate !== today) {
+      await db.update(notificationPreferences)
+        .set({ emailsSentToday: 1, lastEmailResetDate: today, lastEmailSentAt: new Date() })
+        .where(eq(notificationPreferences.userId, userId));
+    } else {
+      await db.update(notificationPreferences)
+        .set({ emailsSentToday: sql`${notificationPreferences.emailsSentToday} + 1`, lastEmailSentAt: new Date() })
+        .where(eq(notificationPreferences.userId, userId));
+    }
+  }
+
+  async resetDailyEmailCount(userId: string): Promise<void> {
+    await db.update(notificationPreferences)
+      .set({ emailsSentToday: 0, lastEmailResetDate: new Date().toISOString().split("T")[0] })
+      .where(eq(notificationPreferences.userId, userId));
   }
 }
 

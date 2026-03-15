@@ -477,6 +477,24 @@ export const notifications = pgTable("notifications", {
 
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
 
+export const notificationPreferences = pgTable("notification_preferences", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().unique(),
+  emailEnabled: boolean("email_enabled").default(false).notNull(),
+  emailNewListing: boolean("email_new_listing").default(true).notNull(),
+  emailPriceDrop: boolean("email_price_drop").default(true).notNull(),
+  emailOpenHouse: boolean("email_open_house").default(true).notNull(),
+  emailAgentMatch: boolean("email_agent_match").default(true).notNull(),
+  emailSystem: boolean("email_system").default(false).notNull(),
+  emailDigestFrequency: text("email_digest_frequency").default("instant").notNull(),
+  emailsSentToday: integer("emails_sent_today").default(0).notNull(),
+  lastEmailSentAt: timestamp("last_email_sent_at"),
+  lastEmailResetDate: text("last_email_reset_date"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertNotificationPreferencesSchema = createInsertSchema(notificationPreferences).omit({ id: true, updatedAt: true });
+
 // Types
 export type Property = typeof properties.$inferSelect;
 export type InsertProperty = z.infer<typeof insertPropertySchema>;
@@ -516,6 +534,8 @@ export type ErrorReport = typeof errorReports.$inferSelect;
 export type InsertErrorReport = z.infer<typeof insertErrorReportSchema>;
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type NotificationPreference = typeof notificationPreferences.$inferSelect;
+export type InsertNotificationPreference = z.infer<typeof insertNotificationPreferencesSchema>;
 
 // Request Types
 export type CreatePropertyRequest = InsertProperty;
