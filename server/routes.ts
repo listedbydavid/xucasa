@@ -2549,8 +2549,11 @@ export async function registerRoutes(
     try {
       const configured = await isEmailConfigured();
       if (!configured) return;
-      const prefs = await storage.getNotificationPreferences(targetUserId);
-      if (!prefs || !prefs.emailEnabled) return;
+      let prefs = await storage.getNotificationPreferences(targetUserId);
+      if (!prefs) {
+        prefs = await storage.upsertNotificationPreferences(targetUserId, {});
+      }
+      if (!prefs.emailEnabled) return;
 
       const typeToField: Record<string, keyof typeof prefs> = {
         new_listing: "emailNewListing",
@@ -2618,8 +2621,10 @@ export async function registerRoutes(
 
   async function shouldDeliverInApp(targetUserId: string, type: string): Promise<boolean> {
     try {
-      const prefs = await storage.getNotificationPreferences(targetUserId);
-      if (!prefs) return true;
+      let prefs = await storage.getNotificationPreferences(targetUserId);
+      if (!prefs) {
+        prefs = await storage.upsertNotificationPreferences(targetUserId, {});
+      }
       if (!prefs.inAppEnabled) return false;
       const typeToField: Record<string, keyof typeof prefs> = {
         new_listing: "inAppNewListing",
@@ -2739,17 +2744,11 @@ export async function registerRoutes(
   app.get("/api/notification-preferences", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const prefs = await storage.getNotificationPreferences(userId);
-      res.json(prefs || {
-        emailEnabled: false,
-        emailNewListing: true,
-        emailPriceDrop: true,
-        emailOpenHouse: true,
-        emailAgentMatch: true,
-        emailSystem: false,
-        emailDigestFrequency: "instant",
-        emailsSentToday: 0,
-      });
+      let prefs = await storage.getNotificationPreferences(userId);
+      if (!prefs) {
+        prefs = await storage.upsertNotificationPreferences(userId, {});
+      }
+      res.json(prefs);
     } catch (err) {
       res.status(500).json({ error: "Internal server error" });
     }
