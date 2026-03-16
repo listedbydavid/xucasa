@@ -2545,9 +2545,10 @@ export async function registerRoutes(
     }
   });
 
-  async function trySendNotificationEmail(targetUserId: string, type: string, title: string, message: string, linkUrl?: string | null) {
+  async function trySendNotificationEmail(targetUserId: string, type: string, title: string, message: string, linkUrl?: string | null, propertyId?: number | null) {
     try {
-      if (!isEmailConfigured()) return;
+      const configured = await isEmailConfigured();
+      if (!configured) return;
       const prefs = await storage.getNotificationPreferences(targetUserId);
       if (!prefs || !prefs.emailEnabled) return;
 
@@ -2572,6 +2573,7 @@ export async function registerRoutes(
         to: targetUser.email,
         recipientName: targetUser.firstName || targetUser.email,
         type, title, message, linkUrl,
+        propertyId: propertyId ?? null,
         userId: targetUserId,
         emailsSentToday: emailsToday,
       });
@@ -2594,6 +2596,26 @@ export async function registerRoutes(
     metadata: z.any().nullable().optional(),
   });
 
+  async function shouldDeliverInApp(targetUserId: string, type: string): Promise<boolean> {
+    try {
+      const prefs = await storage.getNotificationPreferences(targetUserId);
+      if (!prefs) return true;
+      if (!prefs.inAppEnabled) return false;
+      const typeToField: Record<string, keyof typeof prefs> = {
+        new_listing: "inAppNewListing",
+        price_drop: "inAppPriceDrop",
+        open_house: "inAppOpenHouse",
+        agent_match: "inAppAgentMatch",
+        system: "inAppSystem",
+      };
+      const field = typeToField[type];
+      if (field && prefs[field] === false) return false;
+      return true;
+    } catch {
+      return true;
+    }
+  }
+
   app.post("/api/notifications", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
@@ -2605,13 +2627,17 @@ export async function registerRoutes(
         return res.status(400).json({ error: parsed.error.errors[0]?.message || "Invalid input" });
       }
       const { targetUserId, type, title, message, propertyId, linkUrl, metadata } = parsed.data;
-      const notification = await storage.createNotification({
-        userId: targetUserId, type, title, message,
-        propertyId: propertyId || null, linkUrl: linkUrl || null,
-        metadata: metadata || null, read: false, archived: false,
-      });
-      trySendNotificationEmail(targetUserId, type, title, message, linkUrl);
-      res.json(notification);
+      const deliverInApp = await shouldDeliverInApp(targetUserId, type);
+      let notification = null;
+      if (deliverInApp) {
+        notification = await storage.createNotification({
+          userId: targetUserId, type, title, message,
+          propertyId: propertyId || null, linkUrl: linkUrl || null,
+          metadata: metadata || null, read: false, archived: false,
+        });
+      }
+      trySendNotificationEmail(targetUserId, type, title, message, linkUrl, propertyId);
+      res.json(notification || { skipped: true, reason: "in-app delivery disabled" });
     } catch (err) {
       res.status(500).json({ error: "Internal server error" });
     }
@@ -2629,12 +2655,15 @@ export async function registerRoutes(
       ];
       const created = [];
       for (const n of sampleNotifications) {
-        const notification = await storage.createNotification({
-          userId, type: n.type, title: n.title, message: n.message,
-          propertyId: n.propertyId, linkUrl: n.linkUrl,
-          read: false, archived: false, metadata: null,
-        });
-        created.push(notification);
+        const deliverInApp = await shouldDeliverInApp(userId, n.type);
+        if (deliverInApp) {
+          const notification = await storage.createNotification({
+            userId, type: n.type, title: n.title, message: n.message,
+            propertyId: n.propertyId, linkUrl: n.linkUrl,
+            read: false, archived: false, metadata: null,
+          });
+          created.push(notification);
+        }
       }
       res.json({ created: created.length, notifications: created });
     } catch (err) {
@@ -2714,6 +2743,12 @@ export async function registerRoutes(
     emailAgentMatch: z.boolean().optional(),
     emailSystem: z.boolean().optional(),
     emailDigestFrequency: z.enum(["instant", "daily", "weekly"]).optional(),
+    inAppEnabled: z.boolean().optional(),
+    inAppNewListing: z.boolean().optional(),
+    inAppPriceDrop: z.boolean().optional(),
+    inAppOpenHouse: z.boolean().optional(),
+    inAppAgentMatch: z.boolean().optional(),
+    inAppSystem: z.boolean().optional(),
   }).refine(obj => Object.values(obj).some(v => v !== undefined), { message: "No valid fields to update" });
 
   app.patch("/api/notification-preferences", isAuthenticated, async (req: any, res) => {
@@ -2736,21 +2771,19 @@ export async function registerRoutes(
 
   app.get("/api/email-status", isAuthenticated, async (req: any, res) => {
     try {
-      res.json({ configured: isEmailConfigured() });
+      const configured = await isEmailConfigured();
+      res.json({ configured });
     } catch (err) {
       res.status(500).json({ error: "Internal server error" });
     }
   });
 
-  app.post("/api/admin/test-email", isAuthenticated, async (req: any, res) => {
+  app.post("/api/test-email", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-      const isAdminUser = user?.email === process.env.ADMIN_EMAIL;
-      if (!isAdminUser) return res.status(403).json({ error: "Admin only" });
-      const { to } = req.body;
-      const targetEmail = to || user.email;
-      const result = await sendTestEmail(targetEmail, user.firstName || user.email);
+      if (!user?.email) return res.status(400).json({ error: "No email on file" });
+      const result = await sendTestEmail(user.email, user.firstName || user.email);
       res.json(result);
     } catch (err) {
       res.status(500).json({ error: "Internal server error" });

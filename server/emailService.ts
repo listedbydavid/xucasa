@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import { google } from "googleapis";
 
 const DAILY_EMAIL_LIMIT = 20;
 
@@ -9,59 +9,103 @@ const BRAND = {
   logoText: "xucasa",
 };
 
-let transporter: nodemailer.Transporter | null = null;
+// --- Gmail connector integration (Replit Gmail connector) ---
+let connectionSettings: any;
 
-function getTransporter(): nodemailer.Transporter | null {
-  if (transporter) return transporter;
-
-  const host = process.env.SMTP_HOST;
-  const port = parseInt(process.env.SMTP_PORT || "587");
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-
-  if (!host || !user || !pass) {
-    return null;
+async function getAccessToken(): Promise<string> {
+  if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
+    return connectionSettings.settings.access_token;
   }
 
-  transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  });
+  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
+  const xReplitToken = process.env.REPL_IDENTITY
+    ? "repl " + process.env.REPL_IDENTITY
+    : process.env.WEB_REPL_RENEWAL
+    ? "depl " + process.env.WEB_REPL_RENEWAL
+    : null;
 
-  return transporter;
+  if (!xReplitToken) {
+    throw new Error("X-Replit-Token not found for repl/depl");
+  }
+
+  connectionSettings = await fetch(
+    "https://" + hostname + "/api/v2/connection?include_secrets=true&connector_names=google-mail",
+    {
+      headers: {
+        Accept: "application/json",
+        "X-Replit-Token": xReplitToken,
+      },
+    }
+  ).then(res => res.json()).then(data => data.items?.[0]);
+
+  const accessToken = connectionSettings?.settings?.access_token || connectionSettings?.settings?.oauth?.credentials?.access_token;
+
+  if (!connectionSettings || !accessToken) {
+    throw new Error("Gmail not connected");
+  }
+  return accessToken;
 }
 
-export function isEmailConfigured(): boolean {
-  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+async function getGmailClient() {
+  const accessToken = await getAccessToken();
+  const oauth2Client = new google.auth.OAuth2();
+  oauth2Client.setCredentials({ access_token: accessToken });
+  return google.gmail({ version: "v1", auth: oauth2Client });
 }
 
-const recentEmails = new Map<string, { hash: string; sentAt: number }[]>();
+let gmailAvailable: boolean | null = null;
+let gmailCacheTime = 0;
+const GMAIL_CACHE_TTL = 60_000;
 
-function deduplicationKey(userId: string, type: string, title: string): string {
-  return `${userId}:${type}:${title}`;
+export async function isEmailConfigured(): Promise<boolean> {
+  if (gmailAvailable !== null && Date.now() - gmailCacheTime < GMAIL_CACHE_TTL) {
+    return gmailAvailable;
+  }
+  try {
+    await getAccessToken();
+    gmailAvailable = true;
+    gmailCacheTime = Date.now();
+    return true;
+  } catch {
+    gmailAvailable = false;
+    gmailCacheTime = Date.now();
+    return false;
+  }
 }
 
-function isDuplicate(userId: string, type: string, title: string): boolean {
-  const key = deduplicationKey(userId, type, title);
-  const recent = recentEmails.get(key);
-  if (!recent) return false;
+export function resetEmailConfigCache() {
+  gmailAvailable = null;
+  gmailCacheTime = 0;
+  connectionSettings = null;
+}
+
+// --- Deduplication: keyed by userId + type + propertyId, 1-hour window ---
+const recentEmails = new Map<string, number[]>();
+
+function deduplicationKey(userId: string, type: string, propertyId: number | null | undefined): string {
+  return `${userId}:${type}:${propertyId ?? "none"}`;
+}
+
+function isDuplicate(userId: string, type: string, propertyId: number | null | undefined): boolean {
+  const key = deduplicationKey(userId, type, propertyId);
+  const timestamps = recentEmails.get(key);
+  if (!timestamps) return false;
 
   const oneHourAgo = Date.now() - 60 * 60 * 1000;
-  const validEntries = recent.filter(e => e.sentAt > oneHourAgo);
-  recentEmails.set(key, validEntries);
+  const valid = timestamps.filter(ts => ts > oneHourAgo);
+  recentEmails.set(key, valid);
 
-  return validEntries.length > 0;
+  return valid.length > 0;
 }
 
-function recordEmail(userId: string, type: string, title: string) {
-  const key = deduplicationKey(userId, type, title);
+function recordEmail(userId: string, type: string, propertyId: number | null | undefined) {
+  const key = deduplicationKey(userId, type, propertyId);
   const existing = recentEmails.get(key) || [];
-  existing.push({ hash: key, sentAt: Date.now() });
+  existing.push(Date.now());
   recentEmails.set(key, existing);
 }
 
+// --- HTML escaping ---
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
@@ -71,6 +115,7 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#039;");
 }
 
+// --- Branded email template ---
 function buildEmailHtml(params: {
   title: string;
   message: string;
@@ -100,16 +145,16 @@ function buildEmailHtml(params: {
   };
 
   const typeEmoji: Record<string, string> = {
-    new_listing: "🏠",
-    price_drop: "📉",
-    agent_match: "🤝",
-    open_house: "📅",
-    system: "ℹ️",
+    new_listing: "\u{1F3E0}",
+    price_drop: "\u{1F4C9}",
+    agent_match: "\u{1F91D}",
+    open_house: "\u{1F4C5}",
+    system: "\u{2139}\u{FE0F}",
   };
 
   const label = typeLabels[type] || "Notification";
   const color = typeColors[type] || BRAND.primaryColor;
-  const emoji = typeEmoji[type] || "📬";
+  const emoji = typeEmoji[type] || "\u{1F4EC}";
   const baseUrl = process.env.REPLIT_DEV_DOMAIN
     ? `https://${process.env.REPLIT_DEV_DOMAIN}`
     : process.env.REPL_SLUG
@@ -154,6 +199,39 @@ function buildEmailHtml(params: {
 </html>`;
 }
 
+// --- Build RFC 2822 raw message for Gmail API ---
+function buildRawMessage(to: string, subject: string, htmlBody: string, fromEmail: string): string {
+  const boundary = "boundary_" + Date.now().toString(36);
+  const lines = [
+    `From: "${BRAND.name}" <${fromEmail}>`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    ``,
+    `--${boundary}`,
+    `Content-Type: text/html; charset=UTF-8`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    Buffer.from(htmlBody).toString("base64"),
+    ``,
+    `--${boundary}--`,
+  ];
+  return Buffer.from(lines.join("\r\n")).toString("base64url");
+}
+
+// --- Send email via Gmail API ---
+async function sendViaGmail(to: string, subject: string, htmlBody: string): Promise<void> {
+  const gmail = await getGmailClient();
+  const profile = await gmail.users.getProfile({ userId: "me" });
+  const fromEmail = profile.data.emailAddress || "noreply@xucasa.com";
+  const raw = buildRawMessage(to, subject, htmlBody, fromEmail);
+  await gmail.users.messages.send({
+    userId: "me",
+    requestBody: { raw },
+  });
+}
+
 export interface SendNotificationEmailParams {
   to: string;
   recipientName?: string;
@@ -161,80 +239,63 @@ export interface SendNotificationEmailParams {
   title: string;
   message: string;
   linkUrl?: string | null;
+  propertyId?: number | null;
   userId: string;
   emailsSentToday: number;
 }
 
 export async function sendNotificationEmail(params: SendNotificationEmailParams): Promise<{ sent: boolean; reason?: string }> {
-  const { to, recipientName, type, title, message, linkUrl, userId, emailsSentToday } = params;
+  const { to, recipientName, type, title, message, linkUrl, propertyId, userId, emailsSentToday } = params;
 
-  if (!isEmailConfigured()) {
-    return { sent: false, reason: "SMTP not configured" };
+  const configured = await isEmailConfigured();
+  if (!configured) {
+    return { sent: false, reason: "Gmail not connected" };
   }
 
   if (emailsSentToday >= DAILY_EMAIL_LIMIT) {
     return { sent: false, reason: `Daily limit reached (${DAILY_EMAIL_LIMIT})` };
   }
 
-  if (isDuplicate(userId, type, title)) {
+  if (isDuplicate(userId, type, propertyId)) {
     return { sent: false, reason: "Duplicate email suppressed" };
   }
 
-  const transport = getTransporter();
-  if (!transport) {
-    return { sent: false, reason: "Transport not available" };
-  }
-
-  const fromName = process.env.SMTP_FROM_NAME || BRAND.name;
-  const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER;
-
   try {
-    await transport.sendMail({
-      from: `"${fromName}" <${fromEmail}>`,
-      to,
-      subject: `${title} — ${BRAND.name}`,
-      html: buildEmailHtml({ title, message, type, linkUrl, recipientName }),
-    });
+    const subject = `${title} \u2014 ${BRAND.name}`;
+    const html = buildEmailHtml({ title, message, type, linkUrl, recipientName });
+    await sendViaGmail(to, subject, html);
 
-    recordEmail(userId, type, title);
+    recordEmail(userId, type, propertyId);
     console.log(`[Email] Sent ${type} notification to ${to}`);
     return { sent: true };
   } catch (err: any) {
     console.error(`[Email] Failed to send to ${to}:`, err.message);
+    resetEmailConfigCache();
     return { sent: false, reason: err.message };
   }
 }
 
 export async function sendTestEmail(to: string, recipientName?: string): Promise<{ sent: boolean; reason?: string }> {
-  if (!isEmailConfigured()) {
-    return { sent: false, reason: "SMTP not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASS environment variables." };
+  const configured = await isEmailConfigured();
+  if (!configured) {
+    return { sent: false, reason: "Gmail not connected. Please connect the Gmail integration in the Integrations panel." };
   }
-
-  const transport = getTransporter();
-  if (!transport) {
-    return { sent: false, reason: "Transport not available" };
-  }
-
-  const fromName = process.env.SMTP_FROM_NAME || BRAND.name;
-  const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER;
 
   try {
-    await transport.sendMail({
-      from: `"${fromName}" <${fromEmail}>`,
-      to,
-      subject: `Test Email — ${BRAND.name}`,
-      html: buildEmailHtml({
-        title: "Test Email Successful!",
-        message: "This is a test email from xucasa. If you received this, your email notifications are working correctly. You can manage your notification preferences from your dashboard.",
-        type: "system",
-        linkUrl: "/dashboard?section=notifications",
-        recipientName,
-      }),
+    const subject = `Test Email \u2014 ${BRAND.name}`;
+    const html = buildEmailHtml({
+      title: "Test Email Successful!",
+      message: "This is a test email from xucasa. If you received this, your email notifications are working correctly. You can manage your notification preferences from your dashboard.",
+      type: "system",
+      linkUrl: "/dashboard?section=notifications",
+      recipientName,
     });
+    await sendViaGmail(to, subject, html);
     console.log(`[Email] Test email sent to ${to}`);
     return { sent: true };
   } catch (err: any) {
     console.error(`[Email] Test email failed:`, err.message);
+    resetEmailConfigCache();
     return { sent: false, reason: err.message };
   }
 }

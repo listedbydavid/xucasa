@@ -1195,9 +1195,20 @@ export class DatabaseStorage implements IStorage {
   async upsertNotificationPreferences(userId: string, prefs: Partial<NotificationPreference>): Promise<NotificationPreference> {
     const existing = await this.getNotificationPreferences(userId);
     if (existing) {
-      const { id, userId: _uid, ...rest } = prefs as any;
+      const updateFields: Record<string, unknown> = { updatedAt: new Date() };
+      const allowedKeys: Array<keyof NotificationPreference> = [
+        "emailEnabled", "emailNewListing", "emailPriceDrop", "emailOpenHouse",
+        "emailAgentMatch", "emailSystem", "emailDigestFrequency",
+        "inAppEnabled", "inAppNewListing", "inAppPriceDrop", "inAppOpenHouse",
+        "inAppAgentMatch", "inAppSystem",
+      ];
+      for (const key of allowedKeys) {
+        if (prefs[key] !== undefined) {
+          updateFields[key] = prefs[key];
+        }
+      }
       const [updated] = await db.update(notificationPreferences)
-        .set({ ...rest, updatedAt: new Date() })
+        .set(updateFields)
         .where(eq(notificationPreferences.userId, userId))
         .returning();
       return updated;
@@ -1212,6 +1223,12 @@ export class DatabaseStorage implements IStorage {
         emailAgentMatch: prefs.emailAgentMatch ?? true,
         emailSystem: prefs.emailSystem ?? false,
         emailDigestFrequency: prefs.emailDigestFrequency ?? "instant",
+        inAppEnabled: prefs.inAppEnabled ?? true,
+        inAppNewListing: prefs.inAppNewListing ?? true,
+        inAppPriceDrop: prefs.inAppPriceDrop ?? true,
+        inAppOpenHouse: prefs.inAppOpenHouse ?? true,
+        inAppAgentMatch: prefs.inAppAgentMatch ?? true,
+        inAppSystem: prefs.inAppSystem ?? true,
         emailsSentToday: 0,
         lastEmailResetDate: null,
         lastEmailSentAt: null,

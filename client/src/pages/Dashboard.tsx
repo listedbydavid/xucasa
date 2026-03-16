@@ -26,7 +26,7 @@ import {
   Briefcase, ShieldCheck, BadgeCheck,
   FileText, DollarSign, ThumbsUp, ThumbsDown, Eye,
   ArrowRightLeft, Shield, Banknote,
-  Bell, Archive, CheckCheck, Info, TrendingDown, Settings,
+  Bell, Archive, CheckCheck, Info, TrendingDown, Settings, Send,
 } from "lucide-react";
 import { Autocomplete } from "@react-google-maps/api";
 import { useGoogleMaps } from "@/hooks/use-google-maps";
@@ -1987,6 +1987,24 @@ function NotificationsSection() {
     },
   });
 
+  const [testEmailStatus, setTestEmailStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
+  const testEmailMutation = useMutation({
+    mutationFn: async () => {
+      setTestEmailStatus("sending");
+      const res = await apiRequest("POST", "/api/test-email", {});
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setTestEmailStatus(data.sent ? "sent" : "error");
+      setTimeout(() => setTestEmailStatus("idle"), 3000);
+    },
+    onError: () => {
+      setTestEmailStatus("error");
+      setTimeout(() => setTestEmailStatus("idle"), 3000);
+    },
+  });
+
   const markReadMutation = useMutation({
     mutationFn: async (id: number) => { await apiRequest("PATCH", `/api/notifications/${id}`, { read: true }); },
     onSuccess: () => {
@@ -2105,7 +2123,7 @@ function NotificationsSection() {
           {!emailStatus?.configured && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs" data-testid="email-not-configured-banner">
               <Info className="w-4 h-4 flex-shrink-0" />
-              <span>Email delivery requires SMTP configuration. Contact your admin to set up SMTP_HOST, SMTP_USER, and SMTP_PASS.</span>
+              <span>Gmail integration is not connected. Email delivery requires the Gmail connector to be set up.</span>
             </div>
           )}
           <div className="space-y-3">
@@ -2199,6 +2217,79 @@ function NotificationsSection() {
             )}
             <div className="flex items-center justify-between py-2 border-t border-border/50">
               <div>
+                <p className="text-sm font-medium">In-App Notifications</p>
+                <p className="text-xs text-muted-foreground">Show notifications in the bell menu</p>
+              </div>
+              <button
+                onClick={() => prefsMutation.mutate({ inAppEnabled: !emailPrefs?.inAppEnabled })}
+                className={`relative w-10 h-5 rounded-full transition-colors ${emailPrefs?.inAppEnabled !== false ? "bg-primary" : "bg-muted"}`}
+                disabled={prefsMutation.isPending}
+                data-testid="toggle-in-app-enabled"
+              >
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${emailPrefs?.inAppEnabled !== false ? "left-5" : "left-0.5"}`} />
+              </button>
+            </div>
+            {emailPrefs?.inAppEnabled !== false && (
+              <>
+                <div className="flex items-center justify-between py-2 border-b border-border/50 pl-4">
+                  <p className="text-sm">New Listing Alerts</p>
+                  <button
+                    onClick={() => prefsMutation.mutate({ inAppNewListing: !emailPrefs?.inAppNewListing })}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${emailPrefs?.inAppNewListing !== false ? "bg-primary" : "bg-muted"}`}
+                    disabled={prefsMutation.isPending}
+                    data-testid="toggle-in-app-new-listing"
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${emailPrefs?.inAppNewListing !== false ? "left-5" : "left-0.5"}`} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-border/50 pl-4">
+                  <p className="text-sm">Price Drop Alerts</p>
+                  <button
+                    onClick={() => prefsMutation.mutate({ inAppPriceDrop: !emailPrefs?.inAppPriceDrop })}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${emailPrefs?.inAppPriceDrop !== false ? "bg-primary" : "bg-muted"}`}
+                    disabled={prefsMutation.isPending}
+                    data-testid="toggle-in-app-price-drop"
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${emailPrefs?.inAppPriceDrop !== false ? "left-5" : "left-0.5"}`} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-border/50 pl-4">
+                  <p className="text-sm">Open House Reminders</p>
+                  <button
+                    onClick={() => prefsMutation.mutate({ inAppOpenHouse: !emailPrefs?.inAppOpenHouse })}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${emailPrefs?.inAppOpenHouse !== false ? "bg-primary" : "bg-muted"}`}
+                    disabled={prefsMutation.isPending}
+                    data-testid="toggle-in-app-open-house"
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${emailPrefs?.inAppOpenHouse !== false ? "left-5" : "left-0.5"}`} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-border/50 pl-4">
+                  <p className="text-sm">Agent Match Updates</p>
+                  <button
+                    onClick={() => prefsMutation.mutate({ inAppAgentMatch: !emailPrefs?.inAppAgentMatch })}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${emailPrefs?.inAppAgentMatch !== false ? "bg-primary" : "bg-muted"}`}
+                    disabled={prefsMutation.isPending}
+                    data-testid="toggle-in-app-agent-match"
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${emailPrefs?.inAppAgentMatch !== false ? "left-5" : "left-0.5"}`} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between py-2 pl-4">
+                  <p className="text-sm">System Notifications</p>
+                  <button
+                    onClick={() => prefsMutation.mutate({ inAppSystem: !emailPrefs?.inAppSystem })}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${emailPrefs?.inAppSystem !== false ? "bg-primary" : "bg-muted"}`}
+                    disabled={prefsMutation.isPending}
+                    data-testid="toggle-in-app-system"
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${emailPrefs?.inAppSystem !== false ? "left-5" : "left-0.5"}`} />
+                  </button>
+                </div>
+              </>
+            )}
+            <div className="flex items-center justify-between py-2 border-t border-border/50">
+              <div>
                 <p className="text-sm font-medium">Push Notifications</p>
                 <p className="text-xs text-muted-foreground">Get instant alerts on your device</p>
               </div>
@@ -2208,6 +2299,28 @@ function NotificationsSection() {
           {emailPrefs?.emailEnabled && emailPrefs?.emailsSentToday > 0 && (
             <div className="text-xs text-muted-foreground pt-2 border-t border-border/50">
               {emailPrefs.emailsSentToday}/20 emails sent today
+            </div>
+          )}
+          {emailStatus?.configured && (
+            <div className="pt-3 border-t border-border/50">
+              <button
+                onClick={() => testEmailMutation.mutate()}
+                disabled={testEmailStatus === "sending"}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                data-testid="button-send-test-email"
+              >
+                {testEmailStatus === "sending" ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : testEmailStatus === "sent" ? (
+                  <CheckCircle2 className="w-4 h-4" />
+                ) : testEmailStatus === "error" ? (
+                  <AlertCircle className="w-4 h-4" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                {testEmailStatus === "sending" ? "Sending..." : testEmailStatus === "sent" ? "Test Email Sent!" : testEmailStatus === "error" ? "Failed to Send" : "Send Test Email"}
+              </button>
+              <p className="text-xs text-muted-foreground mt-1">Sends a test email to your account email address</p>
             </div>
           )}
         </div>
