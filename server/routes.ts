@@ -2689,6 +2689,7 @@ export async function registerRoutes(
           });
           created.push(notification);
         }
+        trySendNotificationEmail(userId, n.type, n.title, n.message, n.linkUrl, n.propertyId);
       }
       res.json({ created: created.length, notifications: created });
     } catch (err) {
@@ -2797,12 +2798,18 @@ export async function registerRoutes(
     }
   });
 
+  const testEmailLimiter = new Map<string, number>();
   app.post("/api/test-email", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      const lastSent = testEmailLimiter.get(userId) || 0;
+      if (Date.now() - lastSent < 60_000) {
+        return res.status(429).json({ sent: false, reason: "Please wait at least 1 minute between test emails" });
+      }
       const user = await storage.getUser(userId);
       if (!user?.email) return res.status(400).json({ error: "No email on file" });
       const result = await sendTestEmail(user.email, user.firstName || user.email);
+      if (result.sent) testEmailLimiter.set(userId, Date.now());
       res.json(result);
     } catch (err) {
       res.status(500).json({ error: "Internal server error" });
