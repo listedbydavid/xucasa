@@ -1216,12 +1216,12 @@ export class DatabaseStorage implements IStorage {
     const [created] = await db.insert(notificationPreferences)
       .values({
         userId,
-        emailEnabled: prefs.emailEnabled ?? false,
+        emailEnabled: prefs.emailEnabled ?? true,
         emailNewListing: prefs.emailNewListing ?? true,
         emailPriceDrop: prefs.emailPriceDrop ?? true,
         emailOpenHouse: prefs.emailOpenHouse ?? true,
         emailAgentMatch: prefs.emailAgentMatch ?? true,
-        emailSystem: prefs.emailSystem ?? false,
+        emailSystem: prefs.emailSystem ?? true,
         emailDigestFrequency: prefs.emailDigestFrequency ?? "instant",
         inAppEnabled: prefs.inAppEnabled ?? true,
         inAppNewListing: prefs.inAppNewListing ?? true,

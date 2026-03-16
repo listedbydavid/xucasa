@@ -115,15 +115,46 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#039;");
 }
 
-// --- Branded email template ---
+export interface PropertyCardData {
+  address?: string;
+  price?: string;
+  beds?: number;
+  baths?: string;
+  sqft?: number;
+  imageUrl?: string | null;
+  propertyType?: string;
+}
+
+function buildPropertyCardHtml(card: PropertyCardData): string {
+  const address = card.address ? escapeHtml(card.address) : "";
+  const price = card.price ? escapeHtml(card.price) : "";
+  const specs: string[] = [];
+  if (card.beds) specs.push(`${card.beds} bed`);
+  if (card.baths) specs.push(`${card.baths} bath`);
+  if (card.sqft) specs.push(`${card.sqft.toLocaleString()} sqft`);
+  const specLine = specs.join(" &bull; ");
+  const typeLabel = card.propertyType ? escapeHtml(card.propertyType) : "";
+
+  return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;border:1px solid #e4e4e7;border-radius:8px;overflow:hidden;">
+  ${card.imageUrl ? `<tr><td><img src="${escapeHtml(card.imageUrl)}" alt="Property" style="width:100%;height:180px;object-fit:cover;display:block;" /></td></tr>` : ""}
+  <tr><td style="padding:12px 16px;">
+    ${price ? `<p style="margin:0 0 4px;font-size:18px;font-weight:700;color:#18181b;">${price}</p>` : ""}
+    ${specLine ? `<p style="margin:0 0 4px;font-size:13px;color:#71717a;">${specLine}</p>` : ""}
+    ${address ? `<p style="margin:0 0 2px;font-size:13px;color:#3f3f46;">${address}</p>` : ""}
+    ${typeLabel ? `<p style="margin:0;font-size:11px;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.5px;">${typeLabel}</p>` : ""}
+  </td></tr>
+</table>`;
+}
+
 function buildEmailHtml(params: {
   title: string;
   message: string;
   type: string;
   linkUrl?: string | null;
   recipientName?: string;
+  propertyCard?: PropertyCardData | null;
 }): string {
-  const { type, linkUrl } = params;
+  const { type, linkUrl, propertyCard } = params;
   const title = escapeHtml(params.title);
   const message = escapeHtml(params.message);
   const recipientName = params.recipientName ? escapeHtml(params.recipientName) : undefined;
@@ -183,6 +214,7 @@ function buildEmailHtml(params: {
             <h1 style="margin:12px 0 8px;font-size:20px;font-weight:700;color:#18181b;line-height:1.3;">${title}</h1>
             <p style="margin:0 0 16px;color:#71717a;font-size:14px;">${greeting}</p>
             <p style="margin:0 0 24px;color:#3f3f46;font-size:15px;line-height:1.6;">${message}</p>
+            ${propertyCard ? buildPropertyCardHtml(propertyCard) : ""}
             ${fullLink ? `<a href="${fullLink}" style="display:inline-block;padding:12px 24px;background-color:${BRAND.primaryColor};color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">View Details</a>` : ""}
           </td></tr></table>
         </td></tr>
@@ -240,12 +272,13 @@ export interface SendNotificationEmailParams {
   message: string;
   linkUrl?: string | null;
   propertyId?: number | null;
+  propertyCard?: PropertyCardData | null;
   userId: string;
   emailsSentToday: number;
 }
 
 export async function sendNotificationEmail(params: SendNotificationEmailParams): Promise<{ sent: boolean; reason?: string }> {
-  const { to, recipientName, type, title, message, linkUrl, propertyId, userId, emailsSentToday } = params;
+  const { to, recipientName, type, title, message, linkUrl, propertyId, propertyCard, userId, emailsSentToday } = params;
 
   const configured = await isEmailConfigured();
   if (!configured) {
@@ -262,7 +295,7 @@ export async function sendNotificationEmail(params: SendNotificationEmailParams)
 
   try {
     const subject = `${title} \u2014 ${BRAND.name}`;
-    const html = buildEmailHtml({ title, message, type, linkUrl, recipientName });
+    const html = buildEmailHtml({ title, message, type, linkUrl, recipientName, propertyCard: propertyCard || null });
     await sendViaGmail(to, subject, html);
 
     recordEmail(userId, type, propertyId);

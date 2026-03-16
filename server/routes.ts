@@ -2569,11 +2569,31 @@ export async function registerRoutes(
       const targetUser = await storage.getUser(targetUserId);
       if (!targetUser?.email) return;
 
+      let propertyCard = null;
+      if (propertyId && (type === "new_listing" || type === "price_drop" || type === "open_house")) {
+        try {
+          const property = await storage.getProperty(propertyId);
+          if (property) {
+            const formatPrice = (p: number) => p >= 1000000 ? `$${(p / 1000000).toFixed(1)}M` : p >= 1000 ? `$${Math.round(p / 1000)}K` : `$${p}`;
+            propertyCard = {
+              address: property.title || `${property.addressStreetNumber || ""} ${property.addressStreetName || ""}`.trim(),
+              price: formatPrice(property.price),
+              beds: property.beds || undefined,
+              baths: property.baths || undefined,
+              sqft: property.sqft || undefined,
+              imageUrl: property.imageUrl || null,
+              propertyType: property.propertyType || undefined,
+            };
+          }
+        } catch { }
+      }
+
       const result = await sendNotificationEmail({
         to: targetUser.email,
         recipientName: targetUser.firstName || targetUser.email,
         type, title, message, linkUrl,
         propertyId: propertyId ?? null,
+        propertyCard,
         userId: targetUserId,
         emailsSentToday: emailsToday,
       });
@@ -2784,6 +2804,22 @@ export async function registerRoutes(
       const user = await storage.getUser(userId);
       if (!user?.email) return res.status(400).json({ error: "No email on file" });
       const result = await sendTestEmail(user.email, user.firstName || user.email);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/test-email", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      const isAdminUser = user?.email === process.env.ADMIN_EMAIL;
+      if (!isAdminUser) return res.status(403).json({ error: "Admin only" });
+      const testEmailSchema = z.object({ to: z.string().email().optional() });
+      const parsed = testEmailSchema.safeParse(req.body);
+      const targetEmail = parsed.success && parsed.data.to ? parsed.data.to : user!.email;
+      const result = await sendTestEmail(targetEmail!, user?.firstName || targetEmail!);
       res.json(result);
     } catch (err) {
       res.status(500).json({ error: "Internal server error" });
