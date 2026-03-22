@@ -245,10 +245,13 @@ export interface IStorage {
   getBuyerInterestForBuyer(buyerUserId: string): Promise<(BuyerInterest & { property: Property })[]>;
 
   // Conversations
-  getOrCreateConversation(propertyId: number, buyerUserId: string, agentUserId: string): Promise<Conversation>;
+  getOrCreateConversation(propertyId: number, buyerUserId: string, agentUserId: string, initiatedBy?: string): Promise<Conversation>;
   getConversation(id: number): Promise<(Conversation & { property: Property; buyer: any; agent: any }) | undefined>;
   getConversationsForUser(userId: string): Promise<(Conversation & { property: Property; buyer: any; agent: any; lastMessage: Message | null; unreadCount: number })[]>;
   updateConversationReadAt(conversationId: number, userId: string, role: 'buyer' | 'agent'): Promise<void>;
+  getAllConversations(filters?: { search?: string; status?: string; limit?: number; offset?: number }): Promise<{ conversations: (Conversation & { property: Property; buyer: any; agent: any; lastMessage: Message | null; messageCount: number })[]; total: number }>;
+  getConversationWithMessages(id: number): Promise<{ conversation: Conversation & { property: Property; buyer: any; agent: any }; messages: (Message & { sender: any })[] } | undefined>;
+  updateBuyerMatchConversationId(matchId: number, conversationId: number): Promise<void>;
 
   // Messages
   createMessage(message: InsertMessage): Promise<Message>;
@@ -1432,6 +1435,69 @@ export class DatabaseStorage implements IStorage {
     } else {
       await db.update(conversations).set({ agentLastReadAt: now }).where(eq(conversations.id, conversationId));
     }
+  }
+
+  async getAllConversations(filters?: { search?: string; status?: string; limit?: number; offset?: number }): Promise<{ conversations: (Conversation & { property: Property; buyer: any; agent: any; lastMessage: Message | null; messageCount: number })[]; total: number }> {
+    const conditions: any[] = [];
+    if (filters?.status && filters.status !== "all") {
+      conditions.push(eq(conversations.status, filters.status));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    const safeLimit = Math.min(Math.max((filters?.limit || 50), 1), 200);
+    const safeOffset = Math.max((filters?.offset || 0), 0);
+
+    const rows = await db.select().from(conversations)
+      .innerJoin(properties, eq(conversations.propertyId, properties.id))
+      .where(whereClause)
+      .orderBy(desc(sql`COALESCE(${conversations.lastMessageAt}, ${conversations.updatedAt})`));
+
+    const allResults: (Conversation & { property: Property; buyer: any; agent: any; lastMessage: Message | null; messageCount: number })[] = [];
+
+    for (const row of rows) {
+      const conv = row.conversations;
+      const buyer = await this.getUser(conv.buyerUserId);
+      const agent = await this.getUser(conv.agentUserId);
+
+      if (filters?.search) {
+        const q = filters.search.toLowerCase();
+        const buyerName = `${buyer?.firstName || ""} ${buyer?.lastName || ""}`.trim().toLowerCase();
+        const agentName = `${agent?.firstName || ""} ${agent?.lastName || ""}`.trim().toLowerCase();
+        const buyerEmail = (buyer?.email || "").toLowerCase();
+        const agentEmail = (agent?.email || "").toLowerCase();
+        if (!buyerName.includes(q) && !agentName.includes(q) && !buyerEmail.includes(q) && !agentEmail.includes(q)) {
+          continue;
+        }
+      }
+
+      const lastMsgs = await db.select().from(messages)
+        .where(eq(messages.conversationId, conv.id))
+        .orderBy(desc(messages.createdAt))
+        .limit(1);
+      const lastMessage = lastMsgs.length > 0 ? lastMsgs[0] : null;
+
+      const msgCountRows = await db.select({ count: count() }).from(messages)
+        .where(eq(messages.conversationId, conv.id));
+      const messageCount = Number(msgCountRows[0]?.count || 0);
+
+      allResults.push({ ...conv, property: row.properties, buyer, agent, lastMessage, messageCount });
+    }
+
+    const total = allResults.length;
+    const paginatedResults = allResults.slice(safeOffset, safeOffset + safeLimit);
+
+    return { conversations: paginatedResults, total };
+  }
+
+  async getConversationWithMessages(id: number): Promise<{ conversation: Conversation & { property: Property; buyer: any; agent: any }; messages: (Message & { sender: any })[] } | undefined> {
+    const convo = await this.getConversation(id);
+    if (!convo) return undefined;
+    const msgs = await this.getMessagesForConversation(id, 10000);
+    return { conversation: convo, messages: msgs };
+  }
+
+  async updateBuyerMatchConversationId(matchId: number, conversationId: number): Promise<void> {
+    await db.update(buyerMatches).set({ conversationId }).where(eq(buyerMatches.id, matchId));
   }
 
   // ── Messages ────────────────────────────────────────────────────────────────

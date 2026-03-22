@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import ConversationThreadComponent from "@/pages/ConversationThread";
 import {
   Shield, Users, Home, TrendingUp, Mail, Phone, MapPin,
   Clock, BedDouble, Bath, Maximize2, DollarSign, Eye,
@@ -12,6 +13,7 @@ import {
   User, ExternalLink, UserCog, Ban, Trash2, Edit3, Save,
   Activity, Crown, ShieldCheck, UserX, MoreVertical,
   Handshake, AlertTriangle, Archive, Download, FolderOpen,
+  ArrowLeft,
 } from "lucide-react";
 
 
@@ -823,7 +825,12 @@ function ErrorReportCard({ report, onUpdateStatus, onResolve, onDelete, onAddNot
 export default function Admin() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals" | "buyers" | "users" | "representation" | "errors">("overview");
+  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals" | "buyers" | "users" | "representation" | "errors" | "conversations">("overview");
+  const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
+  const [convoSearch, setConvoSearch] = useState("");
+  const [convoStatusFilter, setConvoStatusFilter] = useState("all");
+  const [convoPage, setConvoPage] = useState(0);
+  const CONVO_PAGE_SIZE = 20;
 
   const isAdminUser = isAuthenticated && (user as any)?.isAdmin;
 
@@ -967,6 +974,21 @@ export default function Admin() {
 
   const [showArchive, setShowArchive] = useState(false);
 
+  const { data: adminConversations, isLoading: convoListLoading } = useQuery<any>({
+    queryKey: ["/api/admin/conversations", convoSearch, convoStatusFilter, convoPage],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (convoSearch) params.set("search", convoSearch);
+      if (convoStatusFilter !== "all") params.set("status", convoStatusFilter);
+      params.set("limit", String(CONVO_PAGE_SIZE));
+      params.set("offset", String(convoPage * CONVO_PAGE_SIZE));
+      const res = await fetch(`/api/admin/conversations?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to fetch conversations");
+      return res.json();
+    },
+    enabled: isAdminUser && activeTab === "conversations",
+  });
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted/30">
@@ -1074,10 +1096,10 @@ export default function Admin() {
         </div>
 
         <div className="flex gap-1 mb-6 bg-muted/30 rounded-xl p-1 overflow-x-auto" data-testid="section-admin-tabs">
-          {(["overview", "users", "pitches", "leads", "buyers", "referrals", "representation", "errors"] as const).map(tab => (
+          {(["overview", "users", "pitches", "leads", "buyers", "conversations", "referrals", "representation", "errors"] as const).map(tab => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => { setActiveTab(tab); if (tab === "conversations") setSelectedConversationId(null); }}
               className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                 activeTab === tab ? "bg-white shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
@@ -1088,6 +1110,7 @@ export default function Admin() {
                 : tab === "pitches" ? `Pitches (${pitches?.length || 0})`
                 : tab === "leads" ? `Leads (${sellLeads?.length || 0})`
                 : tab === "buyers" ? `Buyers (${allBuyerProfiles?.length || 0})`
+                : tab === "conversations" ? "Conversations"
                 : tab === "referrals" ? `Referrals (${(referrals?.length || 0) + (sellerReferrals?.length || 0)})`
                 : tab === "errors" ? `Errors (${errorReports?.filter((e: any) => !e.resolved).length || 0})`
                 : `Representation (${swipeNotifications?.length || 0})`}
@@ -1730,6 +1753,164 @@ export default function Admin() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {activeTab === "conversations" && (
+          <div className="space-y-4" data-testid="section-admin-conversations">
+            {selectedConversationId ? (
+              <div>
+                <button
+                  onClick={() => setSelectedConversationId(null)}
+                  className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline mb-4"
+                  data-testid="button-back-to-conversations"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Back to all conversations
+                </button>
+                <div className="bg-white rounded-xl border overflow-hidden">
+                  <ConversationThreadComponent adminMode={true} adminConversationId={selectedConversationId} />
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="relative flex-1 min-w-[200px]">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Search by participant name or email..."
+                      value={convoSearch}
+                      onChange={e => { setConvoSearch(e.target.value); setConvoPage(0); }}
+                      className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      data-testid="input-convo-search"
+                    />
+                  </div>
+                  <div className="flex gap-1.5">
+                    {["all", "active", "archived", "closed"].map(s => (
+                      <button
+                        key={s}
+                        onClick={() => { setConvoStatusFilter(s); setConvoPage(0); }}
+                        className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
+                          convoStatusFilter === s ? "bg-primary text-white border-primary" : "bg-white hover:bg-muted border-border"
+                        }`}
+                        data-testid={`button-convo-filter-${s}`}
+                      >
+                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {convoListLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map(i => (
+                      <div key={i} className="bg-white rounded-xl border p-5 animate-pulse">
+                        <div className="h-4 bg-muted rounded w-1/3 mb-2" />
+                        <div className="h-3 bg-muted rounded w-1/2" />
+                      </div>
+                    ))}
+                  </div>
+                ) : adminConversations?.conversations?.length > 0 ? (
+                  <div className="space-y-2">
+                    {adminConversations.conversations.map((convo: any) => {
+                      const buyerName = convo.buyer?.firstName
+                        ? `${convo.buyer.firstName} ${convo.buyer.lastName || ""}`.trim()
+                        : convo.buyer?.email || "Unknown";
+                      const agentName = convo.agent?.firstName
+                        ? `${convo.agent.firstName} ${convo.agent.lastName || ""}`.trim()
+                        : convo.agent?.email || "Unknown";
+                      const isPitch = convo.initiatedBy === "seller";
+
+                      return (
+                        <button
+                          key={convo.id}
+                          onClick={() => setSelectedConversationId(convo.id)}
+                          className="w-full text-left bg-white rounded-xl border border-border/60 shadow-sm p-4 hover:border-primary/30 transition-colors"
+                          data-testid={`card-admin-conversation-${convo.id}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-muted overflow-hidden flex-shrink-0">
+                              {convo.property?.imageUrl ? (
+                                <img src={convo.property.imageUrl} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center"><Home className="w-4 h-4 text-muted-foreground/40" /></div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                                <span className="text-sm font-semibold truncate">{buyerName}</span>
+                                <span className="text-muted-foreground text-xs">↔</span>
+                                <span className="text-sm font-semibold truncate">{agentName}</span>
+                                {isPitch && (
+                                  <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full">Pitch</span>
+                                )}
+                                <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full ${
+                                  convo.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+                                }`}>
+                                  {convo.status}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <span className="truncate">{convo.property?.title || "—"}</span>
+                                <span>·</span>
+                                <span>{convo.messageCount} msg{convo.messageCount !== 1 ? "s" : ""}</span>
+                                {convo.lastMessage && (
+                                  <>
+                                    <span>·</span>
+                                    <span className="truncate max-w-[200px]">{convo.lastMessage.content?.substring(0, 50)}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-right text-xs text-muted-foreground flex-shrink-0">
+                              {convo.lastMessageAt
+                                ? new Date(convo.lastMessageAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                                : new Date(convo.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl border p-12 text-center">
+                    <MessageSquare className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+                    <h3 className="font-semibold mb-1">No conversations found</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {convoSearch ? "Try a different search term." : "No conversations have been started yet."}
+                    </p>
+                  </div>
+                )}
+
+                {/* Pagination controls */}
+                {adminConversations?.total > 0 && (
+                  <div className="flex items-center justify-between mt-4" data-testid="convo-pagination">
+                    <span className="text-xs text-muted-foreground">
+                      Showing {Math.min(convoPage * CONVO_PAGE_SIZE + 1, adminConversations.total)}–{Math.min((convoPage + 1) * CONVO_PAGE_SIZE, adminConversations.total)} of {adminConversations.total}
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setConvoPage(p => Math.max(0, p - 1))}
+                        disabled={convoPage === 0}
+                        className="px-3 py-1.5 text-xs rounded-lg border disabled:opacity-40 hover:bg-muted"
+                        data-testid="button-convo-prev"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        onClick={() => setConvoPage(p => p + 1)}
+                        disabled={(convoPage + 1) * CONVO_PAGE_SIZE >= adminConversations.total}
+                        className="px-3 py-1.5 text-xs rounded-lg border disabled:opacity-40 hover:bg-muted"
+                        data-testid="button-convo-next"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 

@@ -2078,6 +2078,33 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/conversations", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const search = req.query.search as string | undefined;
+      const status = req.query.status as string | undefined;
+      const rawLimit = parseInt(req.query.limit as string);
+      const rawOffset = parseInt(req.query.offset as string);
+      const limit = Math.min(Math.max(isNaN(rawLimit) ? 50 : rawLimit, 1), 200);
+      const offset = Math.max(isNaN(rawOffset) ? 0 : rawOffset, 0);
+      const result = await storage.getAllConversations({ search, status, limit, offset });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/conversations/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid conversation ID" });
+      const result = await storage.getConversationWithMessages(id);
+      if (!result) return res.status(404).json({ message: "Conversation not found" });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/admin/property-offers", isAuthenticated, isAdmin, async (_req, res) => {
     try {
       const rows = await db
@@ -2517,14 +2544,71 @@ export async function registerRoutes(
   app.post("/api/buyer-matches", isAuthenticated, async (req, res) => {
     try {
       const { insertBuyerMatchSchema } = await import("@shared/schema");
-      const parsed = insertBuyerMatchSchema.omit({ senderId: true }).safeParse(req.body);
+      const parsed = insertBuyerMatchSchema.omit({ senderId: true, conversationId: true }).safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid data", errors: parsed.error.flatten() });
       if (parsed.data.message) {
         const violation = checkFairHousing(parsed.data.message);
         if (violation) return res.status(400).json({ message: violation });
       }
-      const data = { ...parsed.data, senderId: req.user!.claims.sub };
+      const userId = req.user!.claims.sub;
+
+      if (parsed.data.propertyId) {
+        const property = await storage.getProperty(parsed.data.propertyId);
+        if (!property) return res.status(404).json({ message: "Property not found" });
+        if (property.agentId !== userId) {
+          const user = await storage.getUser(userId);
+          const isAdmin = !!(process.env.ADMIN_EMAIL && user?.email && user.email.toLowerCase() === process.env.ADMIN_EMAIL.toLowerCase());
+          if (!isAdmin) {
+            return res.status(403).json({ message: "You can only pitch properties you own" });
+          }
+        }
+      }
+
+      const data = { ...parsed.data, senderId: userId };
       const match = await storage.createBuyerMatch(data);
+
+      const profile = await storage.getBuyerProfile(parsed.data.buyerProfileId);
+      if (profile && parsed.data.propertyId && parsed.data.message) {
+        const buyerUserId = profile.userId;
+        const convo = await storage.getOrCreateConversation(parsed.data.propertyId, buyerUserId, userId, "seller");
+        await storage.createMessage({
+          conversationId: convo.id,
+          senderUserId: userId,
+          type: "pitch",
+          content: parsed.data.message,
+        });
+        await storage.updateBuyerMatchConversationId(match.id, convo.id);
+
+        const senderUser = await storage.getUser(userId);
+        const senderName = senderUser?.firstName ? `${senderUser.firstName} ${senderUser.lastName || ""}`.trim() : "A seller";
+
+        await storage.createNotification({
+          userId: buyerUserId,
+          type: "message_received",
+          title: `New pitch from ${senderName}`,
+          message: (parsed.data.message || "").substring(0, 200),
+          propertyId: parsed.data.propertyId,
+          linkUrl: `/conversations/${convo.id}`,
+          read: false,
+          archived: false,
+        });
+        trySendNotificationEmail(buyerUserId, "message_received", `New pitch from ${senderName}`, (parsed.data.message || "").substring(0, 200), `/conversations/${convo.id}`, parsed.data.propertyId, convo.id);
+
+        if (profile.agentId) {
+          await storage.createNotification({
+            userId: profile.agentId,
+            type: "message_received",
+            title: `Seller pitch to your client ${profile.displayName}`,
+            message: `${senderName} pitched a property to your client. ${(parsed.data.message || "").substring(0, 100)}`,
+            propertyId: parsed.data.propertyId,
+            linkUrl: `/conversations/${convo.id}`,
+            read: false,
+            archived: false,
+          });
+          trySendNotificationEmail(profile.agentId, "message_received", `Seller pitch to your client ${profile.displayName}`, `${senderName} pitched a property to your client.`, `/conversations/${convo.id}`, parsed.data.propertyId, convo.id);
+        }
+      }
+
       res.status(201).json(match);
     } catch (err: any) {
       res.status(500).json({ message: err.message });

@@ -1571,6 +1571,7 @@ function offerStatusColor(status: string): string {
 }
 
 function MessagesSection() {
+  const { user } = useAuth();
   const { data: conversations = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/conversations"],
     refetchInterval: 30000,
@@ -1580,7 +1581,7 @@ function MessagesSection() {
     <div className="space-y-4">
       <div className="border-b border-border pb-4">
         <h2 className="text-xl font-display font-bold">Messages</h2>
-        <p className="text-sm text-muted-foreground">Your conversations with agents about properties</p>
+        <p className="text-sm text-muted-foreground">Your conversations about properties</p>
       </div>
 
       {isLoading ? (
@@ -1594,41 +1595,54 @@ function MessagesSection() {
           </div>
           <h3 className="font-display font-bold text-xl mb-2" data-testid="text-no-messages">No messages yet</h3>
           <p className="text-muted-foreground text-sm max-w-sm mx-auto">
-            When you ask questions or request showings on properties, conversations will appear here.
+            When you ask questions, request showings, or receive pitches on properties, conversations will appear here.
           </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {conversations.map((convo: any) => (
-            <Link
-              key={convo.id}
-              href={`/conversations/${convo.id}`}
-              className="block bg-card border border-border rounded-2xl p-4 shadow-sm hover:border-primary/30 transition-colors"
-              data-testid={`card-conversation-${convo.id}`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-muted overflow-hidden flex-shrink-0">
-                  {convo.property?.imageUrl ? (
-                    <img src={convo.property.imageUrl} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center"><Home className="w-5 h-5 text-muted-foreground/40" /></div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-sm truncate">{convo.property?.title || "Property"}</h4>
-                    {convo.unreadCount > 0 && (
-                      <span className="bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full font-bold ml-2">{convo.unreadCount}</span>
+          {conversations.map((convo: any) => {
+            const isBuyer = convo.buyerUserId === user?.id;
+            const otherParty = isBuyer ? convo.agent : convo.buyer;
+            const otherName = otherParty?.firstName
+              ? `${otherParty.firstName} ${otherParty.lastName || ""}`.trim()
+              : otherParty?.email || "User";
+            const isPitch = convo.initiatedBy === "seller";
+            return (
+              <Link
+                key={convo.id}
+                href={`/conversations/${convo.id}`}
+                className="block bg-card border border-border rounded-2xl p-4 shadow-sm hover:border-primary/30 transition-colors"
+                data-testid={`card-conversation-${convo.id}`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-muted overflow-hidden flex-shrink-0">
+                    {convo.property?.imageUrl ? (
+                      <img src={convo.property.imageUrl} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center"><Home className="w-5 h-5 text-muted-foreground/40" /></div>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {convo.agent?.firstName || "Agent"} · {convo.lastMessage?.content?.substring(0, 60) || "No messages yet"}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h4 className="font-bold text-sm truncate">{convo.property?.title || "Property"}</h4>
+                        {isPitch && (
+                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full flex-shrink-0" data-testid={`badge-pitch-${convo.id}`}>Pitch</span>
+                        )}
+                      </div>
+                      {convo.unreadCount > 0 && (
+                        <span className="bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full font-bold ml-2">{convo.unreadCount}</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {otherName} · {convo.lastMessage?.content?.substring(0, 60) || "No messages yet"}
+                    </p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                 </div>
-                <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

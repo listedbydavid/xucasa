@@ -259,6 +259,7 @@ export const buyerMatches = pgTable("buyer_matches", {
   senderId: varchar("sender_id").references(() => users.id).notNull(),
   message: text("message"),
   status: text("status").default("pending").notNull(),
+  conversationId: integer("conversation_id").references(() => conversations.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
