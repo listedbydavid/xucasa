@@ -1314,9 +1314,20 @@ export default function PropertyDetail() {
   const [showCopied, setShowCopied] = useState(false);
   const [showAskModal, setShowAskModal] = useState(false);
   const [showShowingModal, setShowShowingModal] = useState(false);
+  const [showRequestInfoModal, setShowRequestInfoModal] = useState(false);
   const [questionText, setQuestionText] = useState("");
   const [showingDates, setShowingDates] = useState<string[]>([""]);
   const [showingNotes, setShowingNotes] = useState("");
+  const [requestInfoChecks, setRequestInfoChecks] = useState({
+    disclosures: false,
+    hoaDetails: false,
+    additionalPhotos: false,
+    floorPlan: false,
+    priceHistory: false,
+    neighborhoodInfo: false,
+    inspectionReports: false,
+  });
+  const [requestInfoNote, setRequestInfoNote] = useState("");
   const { toast } = useToast();
 
   const askMutation = useMutation({
@@ -1532,9 +1543,45 @@ export default function PropertyDetail() {
 
   const handleRequestInfo = () => {
     if (!isAuthenticated) { setShowAuthPrompt(true); return; }
-    setQuestionText("I'd like to request more information about this property, including any disclosures, HOA details, and additional photos.");
-    setShowAskModal(true);
+    setShowRequestInfoModal(true);
   };
+
+  const requestInfoMutation = useMutation({
+    mutationFn: async () => {
+      const items = Object.entries(requestInfoChecks)
+        .filter(([, v]) => v)
+        .map(([k]) => {
+          const labels: Record<string, string> = {
+            disclosures: "Property disclosures",
+            hoaDetails: "HOA details & fees",
+            additionalPhotos: "Additional photos",
+            floorPlan: "Floor plan",
+            priceHistory: "Price history",
+            neighborhoodInfo: "Neighborhood info",
+            inspectionReports: "Inspection reports",
+          };
+          return labels[k] || k;
+        });
+      const message = `I'd like to request more information about this property:\n\n${items.map(i => `• ${i}`).join("\n")}${requestInfoNote ? `\n\nAdditional notes: ${requestInfoNote}` : ""}`;
+      const res = await apiRequest("POST", "/api/conversations", {
+        propertyId: property.id,
+        initialMessage: message,
+        type: "info_request",
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setShowRequestInfoModal(false);
+      setRequestInfoChecks({ disclosures: false, hoaDetails: false, additionalPhotos: false, floorPlan: false, priceHistory: false, neighborhoodInfo: false, inspectionReports: false });
+      setRequestInfoNote("");
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      toast({ title: "Info request sent!", description: "The agent will respond in your Messages." });
+      navigate(`/conversations/${data.id}`);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to send request.", variant: "destructive" });
+    },
+  });
 
   return (
     <>
@@ -1651,6 +1698,67 @@ export default function PropertyDetail() {
           </div>
         </div>
       )}
+
+      {showRequestInfoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" data-testid="modal-request-info">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h3 className="font-display font-bold text-lg">Request More Info</h3>
+              <button onClick={() => setShowRequestInfoModal(false)} className="p-1.5 hover:bg-muted rounded-lg" data-testid="button-close-request-info">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-sm text-muted-foreground">Select what you'd like to know about {property.title}:</p>
+              <div className="space-y-2">
+                {[
+                  { key: "disclosures", label: "Property disclosures" },
+                  { key: "hoaDetails", label: "HOA details & fees" },
+                  { key: "additionalPhotos", label: "Additional photos" },
+                  { key: "floorPlan", label: "Floor plan" },
+                  { key: "priceHistory", label: "Price history" },
+                  { key: "neighborhoodInfo", label: "Neighborhood info" },
+                  { key: "inspectionReports", label: "Inspection reports" },
+                ].map(({ key, label }) => (
+                  <label key={key} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted cursor-pointer" data-testid={`checkbox-${key}`}>
+                    <input
+                      type="checkbox"
+                      checked={requestInfoChecks[key as keyof typeof requestInfoChecks]}
+                      onChange={e => setRequestInfoChecks(prev => ({ ...prev, [key]: e.target.checked }))}
+                      className="w-4 h-4 rounded border-border text-primary focus:ring-primary/30"
+                    />
+                    <span className="text-sm">{label}</span>
+                  </label>
+                ))}
+              </div>
+              <div>
+                <label className="text-xs font-bold text-muted-foreground mb-1 block">Additional notes (optional)</label>
+                <textarea
+                  value={requestInfoNote}
+                  onChange={e => setRequestInfoNote(e.target.value)}
+                  placeholder="Any specific questions or details..."
+                  rows={2}
+                  className="w-full bg-muted border border-border rounded-xl px-4 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  data-testid="input-request-info-note"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
+              <button onClick={() => setShowRequestInfoModal(false)} className="px-4 py-2 text-sm font-medium text-muted-foreground">Cancel</button>
+              <button
+                onClick={() => requestInfoMutation.mutate()}
+                disabled={!Object.values(requestInfoChecks).some(v => v) || requestInfoMutation.isPending}
+                className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2 rounded-lg text-sm font-bold disabled:opacity-50"
+                data-testid="button-submit-request-info"
+              >
+                {requestInfoMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                Send Request
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     <div className="min-h-screen bg-background pb-24 md:pb-20 relative">
 
       {prevListing && (

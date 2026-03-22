@@ -1909,30 +1909,66 @@ export async function registerRoutes(
       const { status, adminNotes } = req.body;
       if (!status) return res.status(400).json({ message: "status required" });
 
-      const validStatuses = ["pending_agent_review", "sent_to_buyer", "viewed", "accepted", "rejected", "expired", "pending_admin"];
+      const validStatuses = ["pending_agent_review", "sent_to_buyer", "viewed", "accepted", "rejected", "countered", "declined", "expired", "pending_admin"];
       if (!validStatuses.includes(status)) {
         return res.status(400).json({ message: "Invalid status" });
       }
 
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-      const isAdmin = user?.email === process.env.ADMIN_EMAIL;
+      const isAdminUser = user?.email === process.env.ADMIN_EMAIL;
 
       const offers = await db.select().from(propertyOffers).where(eq(propertyOffers.id, id));
       const offer = offers[0];
       if (!offer) return res.status(404).json({ message: "Offer not found" });
 
-      const buyerStatuses = ["accepted", "rejected", "viewed"];
+      const buyerStatuses = ["accepted", "rejected", "declined", "countered", "viewed"];
       const agentStatuses = ["sent_to_buyer", "pending_agent_review", "expired"];
 
-      if (buyerStatuses.includes(status) && offer.buyerUserId !== userId && !isAdmin) {
-        return res.status(403).json({ message: "Only the buyer can accept or reject an offer" });
+      if (buyerStatuses.includes(status) && offer.buyerUserId !== userId && !isAdminUser) {
+        return res.status(403).json({ message: "Only the buyer can respond to this offer" });
       }
-      if (agentStatuses.includes(status) && offer.listingAgentId !== userId && !isAdmin) {
+      if (agentStatuses.includes(status) && offer.listingAgentId !== userId && !isAdminUser) {
         return res.status(403).json({ message: "Only the listing agent or admin can update this status" });
       }
 
       const updated = await storage.updatePropertyOfferStatus(id, status, adminNotes);
+
+      const offerResponseStatuses = ["accepted", "rejected", "declined", "countered"];
+      if (offerResponseStatuses.includes(status) && offer.propertyId) {
+        const statusLabel = status === "countered" ? "counter-offered" : status;
+        const buyerUser = await storage.getUser(offer.buyerUserId!);
+        const buyerName = buyerUser?.firstName ? `${buyerUser.firstName} ${buyerUser.lastName || ""}`.trim() : "Buyer";
+        const agentId = offer.listingAgentId;
+
+        if (agentId) {
+          const convo = await storage.getOrCreateConversation(offer.propertyId, offer.buyerUserId!, agentId);
+          await storage.createMessage({
+            conversationId: convo.id,
+            senderUserId: userId,
+            type: "system",
+            content: `${buyerName} has ${statusLabel} the offer.`,
+          });
+
+          const now = new Date();
+          await db.update(buyerInterest)
+            .set({ stage: "offer", lastActivityAt: now, updatedAt: now })
+            .where(and(eq(buyerInterest.propertyId, offer.propertyId), eq(buyerInterest.buyerUserId, offer.buyerUserId!)));
+
+          const recipientId = userId === offer.buyerUserId ? agentId : offer.buyerUserId!;
+          await storage.createNotification({
+            userId: recipientId,
+            type: "offer_response",
+            title: `Offer ${statusLabel}`,
+            message: `${buyerName} has ${statusLabel} the offer on the property.`,
+            propertyId: offer.propertyId,
+            linkUrl: `/conversations/${convo.id}`,
+            read: false,
+            archived: false,
+          });
+        }
+      }
+
       res.json(updated);
     } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
@@ -3349,6 +3385,13 @@ export async function registerRoutes(
         status,
         confirmedDate ? new Date(confirmedDate) : undefined,
       );
+
+      if (status === "confirmed") {
+        const now = new Date();
+        await db.update(buyerInterest)
+          .set({ stage: "showing", lastActivityAt: now, updatedAt: now })
+          .where(and(eq(buyerInterest.propertyId, updated.propertyId), eq(buyerInterest.buyerUserId, updated.buyerUserId)));
+      }
 
       const recipientId = updated.buyerUserId === userId ? updated.agentUserId : updated.buyerUserId;
       const sender = await storage.getUser(userId);
