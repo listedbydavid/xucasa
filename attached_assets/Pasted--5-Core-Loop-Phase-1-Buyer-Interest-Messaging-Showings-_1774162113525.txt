@@ -1,0 +1,71 @@
+#5 - Core Loop Phase 1: Buyer Interest, Messaging, Showings
+What & Why
+xucasa has strong signal generation (swipe, save, search) and strong data infrastructure (MLS, buyer profiles, agent verification), but the core engagement loop is broken after notification. When a buyer swipes right, the agent's only response option is a full Reverse Offer form (contract terms with escrow, contingencies, concessions). There is no lightweight engagement path, no in-platform messaging, no showing request flow, and no way for buyers to respond to offers without leaving the platform.
+
+This task builds the minimum viable engagement loop:
+
+Buyer expresses interest (swipe, save, message, showing request)
+Agent is notified with context
+Agent engages inside the platform (message, confirm showing, or send offer)
+Buyer responds inside the platform (reply, accept/decline offer)
+Both sides see status and progress
+Done looks like
+Swiping right on a property creates/updates a buyer_interest record (NOT a conversation). The record tracks the interest source, stage, and linked agents.
+The existing swipe_notifications table is still populated for backward compatibility but buyer_interest becomes the primary lead-tracking table.
+Property detail pages show three new CTAs alongside existing Call/Text/Email: "Request a Showing", "Request Info", and "Ask a Question". All three require authentication (show auth prompt if logged out).
+"Request a Showing" opens a modal where the buyer picks 2-3 preferred date/time windows with an optional note. Creates a showing_request record and a conversation between buyer and listing agent.
+"Request Info" opens a modal with pre-filled structured questions (e.g., "Is this still available?", "What are the HOA details?", "Any upcoming open houses?") plus a free-text field. Creates a conversation.
+"Ask a Question" opens a simple text input modal. Creates a conversation.
+All three actions also create/update the buyer_interest record for that buyer+property, advancing the stage appropriately.
+Conversations are threaded message streams between a buyer and an agent, optionally tied to a property. Messages support types: text, showing_request (structured), reverse_offer (reference to existing offer), and system (automated status updates).
+No read receipts. Unread state tracked via lastReadAt timestamp per participant vs. conversation's lastMessageAt.
+Agent Dashboard: "Buyer Interest" tab is reworked into a "Leads" tab showing buyer_interest records with stage, source, and a "Message" button alongside the existing "Send Reverse Offer" button. Clicking "Message" opens/creates a conversation.
+Buyer Dashboard: new "Messages" section listing active conversations. New "Showings" section listing requested/confirmed showings with status badges.
+Incoming Offers section on buyer dashboard adds "Accept", "Decline", and "Counter" action buttons. "Counter" sends a message in the associated conversation. "Accept" and "Decline" update the offer status and post a system message.
+Reverse Offer form now optionally associates with a conversation. When sent from within a conversation, the offer appears as a message card in the thread. When sent from the Leads tab without an existing conversation, a conversation is auto-created.
+All notifications deep-link to specific conversation threads or showing detail views, not generic pages.
+New notification types: message_received, showing_requested, showing_confirmed, showing_declined, offer_response.
+Showing request flow: buyer proposes 2-3 time windows with optional note. Agent can confirm (picks one window), decline (with reason), or suggest alternate (proposes new times). Status visible to both sides: requested, confirmed, completed, cancelled, declined.
+Admin can view all conversations (read-only) and sees new metrics on overview: total conversations, total showing requests, and active leads.
+Out of scope
+Read receipts (V1 uses unread counts and timestamps only)
+Real-time WebSocket messaging (V1 uses polling; WebSocket is Phase 2)
+Full negotiation state machine / counter-offer chains (Phase 3)
+Deal pipeline / kanban board (Phase 3)
+Engagement tracking / lead scoring / heat scores (Phase 2)
+Post-showing feedback (Phase 2)
+Beacon "Start Conversation" integration (Phase 2)
+Auto-conversation stubs on every swipe (explicitly excluded)
+Payment integration
+Tasks
+Database schema: new tables — Add buyer_interest, conversations, messages, and showing_requests tables to shared/schema.ts. Add conversationId nullable FK and expiresAt to existing property_offers table. Create Drizzle insert schemas and TypeScript types for all new tables. Push schema to database.
+
+Storage layer: CRUD operations — Add methods to IStorage interface and DatabaseStorage class for all new tables: create/get/list/update for buyer_interest, conversations, messages, and showing_requests. Include filtered queries: conversations by userId, messages by conversationId, buyer_interest by agentUserId, showing_requests by buyerUserId or agentUserId.
+
+API routes: buyer interest and conversations — Add endpoints: POST /api/buyer-interest (create/update on swipe, upsert by buyer+property), GET /api/buyer-interest (list for agent, filtered by stage), PATCH /api/buyer-interest/:id (update stage). Add conversation endpoints: POST /api/conversations (create with initial message), GET /api/conversations (list for current user), GET /api/conversations/:id (get with messages), POST /api/conversations/:id/messages (send message), PATCH /api/conversations/:id/read (update lastReadAt). Refactor POST /api/swipe-interest to also upsert a buyer_interest record.
+
+API routes: showing requests and offer responses — Add endpoints: POST /api/showing-requests (buyer creates, linked to conversation), PATCH /api/showing-requests/:id (agent confirms/declines/suggests alternate), GET /api/showing-requests (list for current user by role). Modify PATCH /api/property-offers/:id/status to support accepted, declined, countered statuses from buyer, post system messages to linked conversation, and create notification for the agent.
+
+Notification system updates — Add new notification types: message_received, showing_requested, showing_confirmed, showing_declined, offer_response. All new notifications include linkUrl pointing to /conversations/:id or /dashboard?section=showings. Update email templates with appropriate content for each type. Add rate limiting: max 1 message_received email per conversation per 5 minutes.
+
+Property detail page: new CTAs — Add "Request a Showing", "Request Info", and "Ask a Question" buttons to both desktop ContactCard sidebar and mobile bottom bar. Each opens a modal: ShowingRequestModal (date/time picker for 2-3 windows + note), RequestInfoModal (checkbox quick-questions + free text), AskQuestionModal (free text). All require auth. All create a conversation and upsert buyer_interest. Add data-testid attributes to all interactive elements.
+
+Conversation thread component — Build ConversationThread component: message list with timestamps, sender avatars, message type rendering (plain text, showing request card, offer card, system message). Input bar with send button. Unread indicator based on lastReadAt vs message timestamps. Accessible from agent dashboard, buyer dashboard, and notification deep links. New route: /conversations/:id.
+
+Agent dashboard: Leads tab rework — Replace "Buyer Interest" tab content with a "Leads" view backed by buyer_interest records. Show lead cards with: property thumbnail, buyer name, interest source badge, stage badge, last activity timestamp. Action buttons per lead: "Message" (opens/creates conversation), "Send Reverse Offer" (existing form, now links to conversation). Filter/sort by stage and recency. Integrate existing ReverseOfferForm to optionally attach to a conversation.
+
+Buyer dashboard: Messages and Showings sections — Add "Messages" sidebar item showing conversation list with unread counts. Add "Showings" sidebar item showing showing requests with status badges (requested/confirmed/completed/cancelled/declined). Rework "Incoming Offers" section to add Accept/Decline/Counter buttons. "Accept" updates offer status + posts system message. "Decline" updates status + posts system message. "Counter" opens the conversation thread where buyer can message the agent.
+
+Admin dashboard updates — Add conversation count and showing request count to admin Overview stats. Add ability for admin to view any conversation (read-only) from user management. Integrate buyer_interest data into the existing Representation tab.
+
+Relevant files
+shared/schema.ts
+server/storage.ts
+server/routes.ts
+server/emailService.ts
+client/src/pages/PropertyDetail.tsx:76-180
+client/src/pages/AgentDashboard.tsx:223-375
+client/src/pages/Dashboard.tsx
+client/src/pages/Swipe.tsx
+client/src/components/ReverseOfferForm.tsx
+client/src/components/NotificationBell.tsx
