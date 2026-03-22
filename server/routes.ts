@@ -3751,6 +3751,48 @@ export async function registerRoutes(
         ? `Showing confirmed${confirmedDate ? ` for ${new Date(confirmedDate).toLocaleDateString()}` : ""}`
         : `Showing ${(status || "").replace(/_/g, " ")}`;
 
+      if (isAssignedAgent && status === "sent_to_listing_agent" && prop?.agentId && prop.agentId !== userId) {
+        const listingAgentId = prop.agentId;
+        const coordConvo = await storage.getOrCreateConversation(
+          updated.propertyId, userId, listingAgentId, "agent", "agent_coordination", updated.buyerUserId
+        );
+
+        const agentUser = await storage.getUser(userId);
+        const agentName = agentUser?.firstName ? `${agentUser.firstName} ${agentUser.lastName || ""}`.trim() : "Buyer's agent";
+        const dateStr = existing.requestedDates
+          ? (Array.isArray(existing.requestedDates) ? (existing.requestedDates as string[]).slice(0, 2).join(", ") : "")
+          : "";
+        await storage.createMessage({
+          conversationId: coordConvo.id,
+          senderUserId: userId,
+          type: "showing_request",
+          content: `Showing request from ${agentName} for a buyer — Requested dates: ${dateStr}${existing.notes ? ` — ${existing.notes}` : ""}`,
+          metadata: { showingRequestId: id, requestedDates: existing.requestedDates },
+        });
+
+        await storage.createNotification({
+          userId: listingAgentId,
+          type: "showing_request",
+          title: `New showing request from ${agentName}`,
+          message: `Requested dates: ${dateStr}`,
+          propertyId: updated.propertyId,
+          linkUrl: `/conversations/${coordConvo.id}`,
+          read: false,
+          archived: false,
+        });
+        trySendNotificationEmail(listingAgentId, "showing_request", `New showing request from ${agentName}`, `Requested dates: ${dateStr}`, `/conversations/${coordConvo.id}`, updated.propertyId, coordConvo.id);
+
+        const buyerConvoId = updated.conversationId;
+        if (buyerConvoId) {
+          await storage.createMessage({
+            conversationId: buyerConvoId,
+            senderUserId: userId,
+            type: "system",
+            content: "Your agent is coordinating with the listing agent for this showing",
+          });
+        }
+      }
+
       if (isListingAgent && !isAssignedAgent) {
         const biRecord = await db.select().from(buyerInterest)
           .where(and(eq(buyerInterest.propertyId, updated.propertyId), eq(buyerInterest.buyerUserId, updated.buyerUserId)))

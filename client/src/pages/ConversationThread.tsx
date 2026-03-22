@@ -187,6 +187,7 @@ export default function ConversationThread({ adminMode = false, adminConversatio
       const assignedAgentCanAct = isAgentViewer && !isCoordinationThread && ["requested"].includes(showingStatus);
       const listingAgentCanAct = isAgentViewer && isCoordinationThread && ["sent_to_listing_agent"].includes(showingStatus);
       const assignedAgentCanForward = isAgentViewer && !isCoordinationThread && showingStatus === "under_review";
+      const isDualRoleCanConfirm = isAgentViewer && !isCoordinationThread && showingStatus === "sent_to_listing_agent" && conversation?.property?.agentId === user?.id;
 
       const statusColors: Record<string, string> = {
         requested: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
@@ -233,6 +234,28 @@ export default function ConversationThread({ adminMode = false, adminConversatio
                 >
                   <Send className="w-3 h-3" />
                   Send to Listing Agent
+                </button>
+              </div>
+            )}
+            {isDualRoleCanConfirm && (
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={() => showingMutation.mutate({ id: showingReqId, status: "confirmed", confirmedDate: msg.metadata?.requestedDates?.[0] })}
+                  disabled={showingMutation.isPending}
+                  className="flex items-center gap-1 bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  data-testid={`button-confirm-showing-dual-${showingReqId}`}
+                >
+                  <Check className="w-3 h-3" />
+                  Confirm Showing
+                </button>
+                <button
+                  onClick={() => showingMutation.mutate({ id: showingReqId, status: "declined" })}
+                  disabled={showingMutation.isPending}
+                  className="flex items-center gap-1 bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  data-testid={`button-decline-showing-dual-${showingReqId}`}
+                >
+                  <X className="w-3 h-3" />
+                  Decline
                 </button>
               </div>
             )}
