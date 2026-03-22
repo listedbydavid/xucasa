@@ -25,7 +25,7 @@ import {
   FolderPlus, FolderOpen, MoreHorizontal, Pencil, List,
   Briefcase, ShieldCheck, BadgeCheck,
   FileText, DollarSign, ThumbsUp, ThumbsDown, Eye,
-  ArrowRightLeft, Shield, Banknote,
+  ArrowRightLeft, Shield, Banknote, MessageSquare,
   Bell, Archive, CheckCheck, Info, TrendingDown, Settings, Send,
 } from "lucide-react";
 import { Autocomplete } from "@react-google-maps/api";
@@ -36,13 +36,13 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { BuyerProfile } from "@shared/schema";
 
-type Section = "profile" | "myhome" | "favorites" | "searches" | "history" | "agent" | "openhouses" | "offers" | "notifications";
+type Section = "profile" | "myhome" | "favorites" | "searches" | "history" | "agent" | "openhouses" | "offers" | "notifications" | "messages" | "showings";
 
 export default function Dashboard() {
   const { user, isAuthenticated } = useAuth();
   const urlSection = new URLSearchParams(window.location.search).get("section");
   const [activeSection, setActiveSection] = useState<Section>(
-    urlSection && ["profile","myhome","favorites","searches","history","agent","openhouses","offers","notifications"].includes(urlSection) ? urlSection as Section : "profile"
+    urlSection && ["profile","myhome","favorites","searches","history","agent","openhouses","offers","notifications","messages","showings"].includes(urlSection) ? urlSection as Section : "profile"
   );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -66,6 +66,8 @@ export default function Dashboard() {
     { id: "myhome",     label: "My Home",          icon: Home },
     { id: "favorites",  label: "Favorites",        icon: Heart },
     { id: "searches",   label: "Saved Searches",   icon: BookmarkCheck },
+    { id: "messages",   label: "Messages",         icon: MessageSquare },
+    { id: "showings",   label: "Showings",         icon: CalendarDays },
     { id: "offers",     label: "Incoming Offers",  icon: FileText },
     { id: "agent",      label: "My Agent",         icon: UserPlus },
     { id: "openhouses", label: "Open Houses",      icon: CalendarDays },
@@ -136,6 +138,8 @@ export default function Dashboard() {
             {activeSection === "myhome"     && <MyHomeSection />}
             {activeSection === "favorites"  && <FavoritesSection />}
             {activeSection === "searches"   && <SavedSearchesSection />}
+            {activeSection === "messages"   && <MessagesSection />}
+            {activeSection === "showings"   && <ShowingsSection />}
             {activeSection === "offers"     && <IncomingOffersSection />}
             {activeSection === "agent"      && <MyAgentSection />}
             {activeSection === "openhouses" && <OpenHousesSection />}
@@ -1564,6 +1568,145 @@ function offerStatusColor(status: string): string {
     rejected: "bg-red-100 dark:bg-red-950/30 text-red-700 dark:text-red-400",
   };
   return map[status] || "bg-muted text-muted-foreground";
+}
+
+function MessagesSection() {
+  const { data: conversations = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/conversations"],
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="border-b border-border pb-4">
+        <h2 className="text-xl font-display font-bold">Messages</h2>
+        <p className="text-sm text-muted-foreground">Your conversations with agents about properties</p>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => <div key={i} className="h-20 bg-muted animate-pulse rounded-2xl" />)}
+        </div>
+      ) : conversations.length === 0 ? (
+        <div className="text-center py-16 bg-card border border-border rounded-3xl">
+          <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+            <MessageSquare className="w-7 h-7 text-muted-foreground opacity-40" />
+          </div>
+          <h3 className="font-display font-bold text-xl mb-2" data-testid="text-no-messages">No messages yet</h3>
+          <p className="text-muted-foreground text-sm max-w-sm mx-auto">
+            When you ask questions or request showings on properties, conversations will appear here.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {conversations.map((convo: any) => (
+            <Link
+              key={convo.id}
+              href={`/conversations/${convo.id}`}
+              className="block bg-card border border-border rounded-2xl p-4 shadow-sm hover:border-primary/30 transition-colors"
+              data-testid={`card-conversation-${convo.id}`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-muted overflow-hidden flex-shrink-0">
+                  {convo.property?.imageUrl ? (
+                    <img src={convo.property.imageUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center"><Home className="w-5 h-5 text-muted-foreground/40" /></div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-sm truncate">{convo.property?.title || "Property"}</h4>
+                    {convo.unreadCount > 0 && (
+                      <span className="bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full font-bold ml-2">{convo.unreadCount}</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {convo.agent?.firstName || "Agent"} · {convo.lastMessage?.content?.substring(0, 60) || "No messages yet"}
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ShowingsSection() {
+  const { data: showings = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/showing-requests"],
+  });
+
+  const statusColors: Record<string, string> = {
+    pending: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300",
+    confirmed: "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300",
+    cancelled: "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300",
+    completed: "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300",
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="border-b border-border pb-4">
+        <h2 className="text-xl font-display font-bold">Showing Requests</h2>
+        <p className="text-sm text-muted-foreground">Your requested property showings</p>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => <div key={i} className="h-20 bg-muted animate-pulse rounded-2xl" />)}
+        </div>
+      ) : showings.length === 0 ? (
+        <div className="text-center py-16 bg-card border border-border rounded-3xl">
+          <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+            <CalendarDays className="w-7 h-7 text-muted-foreground opacity-40" />
+          </div>
+          <h3 className="font-display font-bold text-xl mb-2" data-testid="text-no-showings">No showings yet</h3>
+          <p className="text-muted-foreground text-sm max-w-sm mx-auto">
+            Request a showing on any property detail page to get started.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {showings.map((showing: any) => (
+            <div
+              key={showing.id}
+              className="bg-card border border-border rounded-2xl p-4 shadow-sm"
+              data-testid={`card-showing-${showing.id}`}
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-12 h-12 rounded-xl bg-muted overflow-hidden flex-shrink-0">
+                  {showing.property?.imageUrl ? (
+                    <img src={showing.property.imageUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center"><Home className="w-5 h-5 text-muted-foreground/40" /></div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="font-bold text-sm truncate">{showing.property?.title || "Property"}</h4>
+                    <span className={`${statusColors[showing.status] || statusColors.pending} px-2.5 py-0.5 rounded-full text-xs font-bold capitalize`}>
+                      {showing.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Dates: {(showing.requestedDates || []).join(", ")}
+                  </p>
+                  {showing.confirmedDate && (
+                    <p className="text-xs text-green-600 dark:text-green-400 font-semibold mt-0.5">
+                      Confirmed: {new Date(showing.confirmedDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                    </p>
+                  )}
+                  {showing.notes && <p className="text-xs text-muted-foreground mt-0.5 italic truncate">"{showing.notes}"</p>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function IncomingOffersSection() {

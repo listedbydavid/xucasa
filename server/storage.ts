@@ -54,9 +54,21 @@ import {
   notifications,
   notificationPreferences,
   type NotificationPreference,
+  buyerInterest,
+  conversations,
+  messages,
+  showingRequests,
+  type BuyerInterest,
+  type InsertBuyerInterest,
+  type Conversation,
+  type InsertConversation,
+  type Message,
+  type InsertMessage,
+  type ShowingRequest,
+  type InsertShowingRequest,
   users,
 } from "@shared/schema";
-import { eq, and, desc, sql, gte, count } from "drizzle-orm";
+import { eq, and, desc, asc, sql, gte, count } from "drizzle-orm";
 import { authStorage } from "./replit_integrations/auth/storage";
 
 export interface IStorage {
@@ -226,6 +238,27 @@ export interface IStorage {
   upsertNotificationPreferences(userId: string, prefs: Partial<NotificationPreference>): Promise<NotificationPreference>;
   incrementEmailCount(userId: string): Promise<void>;
   resetDailyEmailCount(userId: string): Promise<void>;
+
+  // Buyer Interest
+  upsertBuyerInterest(propertyId: number, buyerUserId: string, source?: string): Promise<BuyerInterest>;
+  getBuyerInterestForAgent(agentUserId: string): Promise<(BuyerInterest & { property: Property; buyer: any })[]>;
+  getBuyerInterestForBuyer(buyerUserId: string): Promise<(BuyerInterest & { property: Property })[]>;
+
+  // Conversations
+  getOrCreateConversation(propertyId: number, buyerUserId: string, agentUserId: string): Promise<Conversation>;
+  getConversation(id: number): Promise<(Conversation & { property: Property; buyer: any; agent: any }) | undefined>;
+  getConversationsForUser(userId: string): Promise<(Conversation & { property: Property; buyer: any; agent: any; lastMessage: Message | null; unreadCount: number })[]>;
+  updateConversationReadAt(conversationId: number, userId: string, role: 'buyer' | 'agent'): Promise<void>;
+
+  // Messages
+  createMessage(message: InsertMessage): Promise<Message>;
+  getMessagesForConversation(conversationId: number, limit?: number, before?: number): Promise<(Message & { sender: any })[]>;
+
+  // Showing Requests
+  createShowingRequest(request: InsertShowingRequest): Promise<ShowingRequest>;
+  getShowingRequest?(id: number): Promise<ShowingRequest | undefined>;
+  getShowingRequestsForUser(userId: string): Promise<(ShowingRequest & { property: Property; buyer: any; agent: any })[]>;
+  updateShowingRequestStatus(id: number, status: string, confirmedDate?: Date): Promise<ShowingRequest>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1257,6 +1290,164 @@ export class DatabaseStorage implements IStorage {
     await db.update(notificationPreferences)
       .set({ emailsSentToday: 0, lastEmailResetDate: new Date().toISOString().split("T")[0] })
       .where(eq(notificationPreferences.userId, userId));
+  }
+
+  // ── Buyer Interest ──────────────────────────────────────────────────────────
+
+  async upsertBuyerInterest(propertyId: number, buyerUserId: string, source: string = "swipe"): Promise<BuyerInterest> {
+    const existing = await db.select().from(buyerInterest)
+      .where(and(eq(buyerInterest.propertyId, propertyId), eq(buyerInterest.buyerUserId, buyerUserId)))
+      .limit(1);
+    if (existing.length > 0) return existing[0];
+    const [created] = await db.insert(buyerInterest).values({ propertyId, buyerUserId, source }).returning();
+    return created;
+  }
+
+  async getBuyerInterestForAgent(agentUserId: string): Promise<(BuyerInterest & { property: Property; buyer: any })[]> {
+    const rows = await db.select().from(buyerInterest)
+      .innerJoin(properties, eq(buyerInterest.propertyId, properties.id))
+      .where(eq(properties.agentId, agentUserId))
+      .orderBy(desc(buyerInterest.createdAt));
+    const results: (BuyerInterest & { property: Property; buyer: any })[] = [];
+    for (const row of rows) {
+      const buyer = await this.getUser(row.buyer_interest.buyerUserId);
+      results.push({ ...row.buyer_interest, property: row.properties, buyer });
+    }
+    return results;
+  }
+
+  async getBuyerInterestForBuyer(buyerUserId: string): Promise<(BuyerInterest & { property: Property })[]> {
+    const rows = await db.select().from(buyerInterest)
+      .innerJoin(properties, eq(buyerInterest.propertyId, properties.id))
+      .where(eq(buyerInterest.buyerUserId, buyerUserId))
+      .orderBy(desc(buyerInterest.createdAt));
+    return rows.map(row => ({ ...row.buyer_interest, property: row.properties }));
+  }
+
+  // ── Conversations ───────────────────────────────────────────────────────────
+
+  async getOrCreateConversation(propertyId: number, buyerUserId: string, agentUserId: string): Promise<Conversation> {
+    const existing = await db.select().from(conversations)
+      .where(and(
+        eq(conversations.propertyId, propertyId),
+        eq(conversations.buyerUserId, buyerUserId),
+        eq(conversations.agentUserId, agentUserId),
+      ))
+      .limit(1);
+    if (existing.length > 0) return existing[0];
+    const [created] = await db.insert(conversations).values({
+      propertyId, buyerUserId, agentUserId,
+      buyerLastReadAt: new Date(),
+      agentLastReadAt: new Date(),
+    }).returning();
+    return created;
+  }
+
+  async getConversation(id: number): Promise<(Conversation & { property: Property; buyer: any; agent: any }) | undefined> {
+    const rows = await db.select().from(conversations)
+      .innerJoin(properties, eq(conversations.propertyId, properties.id))
+      .where(eq(conversations.id, id))
+      .limit(1);
+    if (rows.length === 0) return undefined;
+    const row = rows[0];
+    const buyer = await this.getUser(row.conversations.buyerUserId);
+    const agent = await this.getUser(row.conversations.agentUserId);
+    return { ...row.conversations, property: row.properties, buyer, agent };
+  }
+
+  async getConversationsForUser(userId: string): Promise<(Conversation & { property: Property; buyer: any; agent: any; lastMessage: Message | null; unreadCount: number })[]> {
+    const rows = await db.select().from(conversations)
+      .innerJoin(properties, eq(conversations.propertyId, properties.id))
+      .where(sql`${conversations.buyerUserId} = ${userId} OR ${conversations.agentUserId} = ${userId}`)
+      .orderBy(desc(conversations.updatedAt));
+    const results: (Conversation & { property: Property; buyer: any; agent: any; lastMessage: Message | null; unreadCount: number })[] = [];
+    for (const row of rows) {
+      const conv = row.conversations;
+      const buyer = await this.getUser(conv.buyerUserId);
+      const agent = await this.getUser(conv.agentUserId);
+      const lastMsgs = await db.select().from(messages)
+        .where(eq(messages.conversationId, conv.id))
+        .orderBy(desc(messages.createdAt))
+        .limit(1);
+      const lastMessage = lastMsgs.length > 0 ? lastMsgs[0] : null;
+      const isBuyer = conv.buyerUserId === userId;
+      const readAt = isBuyer ? conv.buyerLastReadAt : conv.agentLastReadAt;
+      const unreadRows = await db.select({ count: count() }).from(messages)
+        .where(and(
+          eq(messages.conversationId, conv.id),
+          sql`${messages.senderUserId} != ${userId}`,
+          readAt ? sql`${messages.createdAt} > ${readAt}` : sql`1=1`,
+        ));
+      const unreadCount = Number(unreadRows[0]?.count || 0);
+      results.push({ ...conv, property: row.properties, buyer, agent, lastMessage, unreadCount });
+    }
+    return results;
+  }
+
+  async updateConversationReadAt(conversationId: number, userId: string, role: 'buyer' | 'agent'): Promise<void> {
+    const now = new Date();
+    if (role === 'buyer') {
+      await db.update(conversations).set({ buyerLastReadAt: now }).where(eq(conversations.id, conversationId));
+    } else {
+      await db.update(conversations).set({ agentLastReadAt: now }).where(eq(conversations.id, conversationId));
+    }
+  }
+
+  // ── Messages ────────────────────────────────────────────────────────────────
+
+  async createMessage(message: InsertMessage): Promise<Message> {
+    const [created] = await db.insert(messages).values(message).returning();
+    await db.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, message.conversationId));
+    return created;
+  }
+
+  async getMessagesForConversation(conversationId: number, limit: number = 50, before?: number): Promise<(Message & { sender: any })[]> {
+    let query = db.select().from(messages)
+      .where(before
+        ? and(eq(messages.conversationId, conversationId), sql`${messages.id} < ${before}`)
+        : eq(messages.conversationId, conversationId))
+      .orderBy(desc(messages.createdAt))
+      .limit(limit);
+    const rows = await query;
+    const results: (Message & { sender: any })[] = [];
+    for (const msg of rows) {
+      const sender = await this.getUser(msg.senderUserId);
+      results.push({ ...msg, sender });
+    }
+    return results.reverse();
+  }
+
+  // ── Showing Requests ────────────────────────────────────────────────────────
+
+  async createShowingRequest(request: InsertShowingRequest): Promise<ShowingRequest> {
+    const [created] = await db.insert(showingRequests).values(request).returning();
+    return created;
+  }
+
+  async getShowingRequest(id: number): Promise<ShowingRequest | undefined> {
+    const [row] = await db.select().from(showingRequests).where(eq(showingRequests.id, id));
+    return row;
+  }
+
+  async getShowingRequestsForUser(userId: string): Promise<(ShowingRequest & { property: Property; buyer: any; agent: any })[]> {
+    const rows = await db.select().from(showingRequests)
+      .innerJoin(properties, eq(showingRequests.propertyId, properties.id))
+      .where(sql`${showingRequests.buyerUserId} = ${userId} OR ${showingRequests.agentUserId} = ${userId}`)
+      .orderBy(desc(showingRequests.createdAt));
+    const results: (ShowingRequest & { property: Property; buyer: any; agent: any })[] = [];
+    for (const row of rows) {
+      const buyer = await this.getUser(row.showing_requests.buyerUserId);
+      const agent = await this.getUser(row.showing_requests.agentUserId);
+      results.push({ ...row.showing_requests, property: row.properties, buyer, agent });
+    }
+    return results;
+  }
+
+  async updateShowingRequestStatus(id: number, status: string, confirmedDate?: Date): Promise<ShowingRequest> {
+    const updates: any = { status, updatedAt: new Date() };
+    if (confirmedDate) updates.confirmedDate = confirmedDate;
+    const [updated] = await db.update(showingRequests).set(updates).where(eq(showingRequests.id, id)).returning();
+    return updated;
   }
 }
 

@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
 import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar, Send, Eye, ContactRound } from "lucide-react";
@@ -221,141 +222,177 @@ export default function AgentDashboard() {
 // ── Buyer Interest Section ────────────────────────────────────────────────────
 
 function BuyerInterestSection() {
-  const { data: notifications = [], isLoading: notifLoading } = useQuery<any[]>({
-    queryKey: ["/api/swipe-notifications/agent"],
+  const [, navigate] = useLocation();
+  const { data: interests = [], isLoading: interestLoading } = useQuery<any[]>({
+    queryKey: ["/api/buyer-interest/agent"],
+  });
+  const { data: conversations = [] } = useQuery<any[]>({
+    queryKey: ["/api/conversations"],
+  });
+  const { data: showingRequests = [] } = useQuery<any[]>({
+    queryKey: ["/api/showing-requests"],
   });
   const { data: offers = [] } = useQuery<any[]>({
     queryKey: ["/api/property-offers/agent"],
   });
 
   const [selectedNotification, setSelectedNotification] = useState<any | null>(null);
+  const [subTab, setSubTab] = useState<"leads" | "conversations" | "showings">("leads");
 
-  const getNotificationStatus = (notif: any) => {
-    const hasOffer = offers.some(
-      (o: any) => o.propertyId === notif.propertyId && o.buyerUserId === notif.buyerUserId
-    );
-    return hasOffer ? "offer_created" : notif.status || "notified";
+  const getLeadStatus = (interest: any) => {
+    const hasConvo = conversations.some((c: any) => c.propertyId === interest.propertyId && c.buyerUserId === interest.buyerUserId);
+    const hasOffer = offers.some((o: any) => o.propertyId === interest.propertyId && o.buyerUserId === interest.buyerUserId);
+    const hasShowing = showingRequests.some((s: any) => s.propertyId === interest.propertyId && s.buyerUserId === interest.buyerUserId);
+    if (hasOffer) return "offer_created";
+    if (hasShowing) return "showing_requested";
+    if (hasConvo) return "in_conversation";
+    return interest.source || "swipe_right";
+  };
+
+  const getConvoForLead = (interest: any) => {
+    return conversations.find((c: any) => c.propertyId === interest.propertyId && c.buyerUserId === interest.buyerUserId);
+  };
+
+  const statusBadge = (status: string) => {
+    const map: Record<string, { bg: string; text: string; label: string }> = {
+      offer_created: { bg: "bg-green-100 dark:bg-green-900/30", text: "text-green-800 dark:text-green-300", label: "Offer Sent" },
+      showing_requested: { bg: "bg-purple-100 dark:bg-purple-900/30", text: "text-purple-800 dark:text-purple-300", label: "Showing" },
+      in_conversation: { bg: "bg-blue-100 dark:bg-blue-900/30", text: "text-blue-800 dark:text-blue-300", label: "Chatting" },
+      inquiry: { bg: "bg-yellow-100 dark:bg-yellow-900/30", text: "text-yellow-800 dark:text-yellow-300", label: "Inquiry" },
+      swipe_right: { bg: "bg-pink-100 dark:bg-pink-900/30", text: "text-pink-800 dark:text-pink-300", label: "Swiped" },
+      swipe: { bg: "bg-pink-100 dark:bg-pink-900/30", text: "text-pink-800 dark:text-pink-300", label: "Swiped" },
+      showing_request: { bg: "bg-purple-100 dark:bg-purple-900/30", text: "text-purple-800 dark:text-purple-300", label: "Showing" },
+    };
+    const s = map[status] || map.swipe_right;
+    return <span className={`${s.bg} ${s.text} px-3 py-1 rounded-full text-xs font-bold`}>{s.label}</span>;
   };
 
   return (
     <div className="space-y-4" data-testid="section-buyer-interest">
       <div className="flex items-center gap-3 pb-4 border-b border-border">
         <div>
-          <h2 className="text-xl font-display font-bold text-foreground">Buyer Interest</h2>
-          <p className="text-sm text-muted-foreground">Buyers who swiped right on your listings</p>
+          <h2 className="text-xl font-display font-bold text-foreground">Leads & Messages</h2>
+          <p className="text-sm text-muted-foreground">Buyer interest, conversations, and showing requests</p>
         </div>
       </div>
 
-      {notifLoading ? (
-        <div className="space-y-4">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="h-24 bg-muted animate-pulse rounded-2xl" />
-          ))}
-        </div>
-      ) : notifications.length === 0 ? (
-        <div className="text-center py-16 bg-card border border-border rounded-3xl">
-          <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-            <Heart className="w-7 h-7 text-muted-foreground opacity-40" />
-          </div>
-          <h3 className="font-display font-bold text-xl mb-2" data-testid="text-no-interest">No buyer interest yet</h3>
-          <p className="text-muted-foreground text-sm max-w-sm mx-auto">
-            When buyers swipe right on your listings, notifications will appear here so you can send reverse offers.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {notifications.map((notif: any) => {
-            const status = getNotificationStatus(notif);
-            const property = notif.property;
-            const buyer = notif.buyer;
+      <div className="flex gap-2 border-b border-border pb-2">
+        {(["leads", "conversations", "showings"] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setSubTab(t)}
+            className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${subTab === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+            data-testid={`tab-${t}`}
+          >
+            {t === "leads" ? `Leads (${interests.length})` : t === "conversations" ? `Messages (${conversations.length})` : `Showings (${showingRequests.length})`}
+          </button>
+        ))}
+      </div>
 
-            return (
-              <div
-                key={notif.id}
-                className="bg-card border border-border rounded-2xl p-5 shadow-sm"
-                data-testid={`card-buyer-interest-${notif.id}`}
-              >
-                <div className="flex items-start gap-4">
-                  <div className="w-20 h-20 rounded-xl bg-muted overflow-hidden flex-shrink-0">
-                    {property?.imageUrl ? (
-                      <img
-                        src={property.imageUrl}
-                        alt={property.title}
-                        className="w-full h-full object-cover"
-                        data-testid={`img-property-${notif.id}`}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <ImageOff className="w-5 h-5 text-muted-foreground/40" />
+      {subTab === "leads" && (
+        <>
+          {interestLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-24 bg-muted animate-pulse rounded-2xl" />
+              ))}
+            </div>
+          ) : interests.length === 0 ? (
+            <div className="text-center py-16 bg-card border border-border rounded-3xl">
+              <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                <Heart className="w-7 h-7 text-muted-foreground opacity-40" />
+              </div>
+              <h3 className="font-display font-bold text-xl mb-2" data-testid="text-no-interest">No buyer interest yet</h3>
+              <p className="text-muted-foreground text-sm max-w-sm mx-auto">
+                When buyers express interest in your listings, leads will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {interests.map((interest: any) => {
+                const status = getLeadStatus(interest);
+                const property = interest.property;
+                const buyer = interest.buyer;
+                const convo = getConvoForLead(interest);
+
+                return (
+                  <div
+                    key={interest.id}
+                    className="bg-card border border-border rounded-2xl p-5 shadow-sm"
+                    data-testid={`card-buyer-interest-${interest.id}`}
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="w-20 h-20 rounded-xl bg-muted overflow-hidden flex-shrink-0">
+                        {property?.imageUrl ? (
+                          <img src={property.imageUrl} alt={property.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <ImageOff className="w-5 h-5 text-muted-foreground/40" />
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-3 flex-wrap">
-                      <div>
-                        <h3 className="font-bold text-foreground text-base" data-testid={`text-property-title-${notif.id}`}>
-                          {property?.title || "Property"}
-                        </h3>
-                        <p className="text-sm font-semibold text-foreground" data-testid={`text-property-price-${notif.id}`}>
-                          ${property?.price?.toLocaleString()}
-                        </p>
-                        <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
-                          {property?.beds != null && <span>{property.beds} beds</span>}
-                          {property?.baths != null && <span>{property.baths} baths</span>}
-                          {property?.sqft != null && <span>{property.sqft.toLocaleString()} sqft</span>}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                          <div>
+                            <h3 className="font-bold text-foreground text-base">{property?.title || "Property"}</h3>
+                            <p className="text-sm font-semibold text-foreground">${property?.price?.toLocaleString()}</p>
+                            <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
+                              {property?.beds != null && <span>{property.beds} beds</span>}
+                              {property?.baths != null && <span>{property.baths} baths</span>}
+                              {property?.sqft != null && <span>{property.sqft.toLocaleString()} sqft</span>}
+                            </div>
+                          </div>
+                          {statusBadge(status)}
+                        </div>
+
+                        <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Eye className="w-4 h-4" />
+                            <span>{buyer?.firstName ? `${buyer.firstName} ${buyer.lastName || ""}`.trim() : "Buyer"}</span>
+                            <span className="text-xs">·</span>
+                            <span className="text-xs">{new Date(interest.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {convo && (
+                              <button
+                                onClick={() => navigate(`/conversations/${convo.id}`)}
+                                className="flex items-center gap-1.5 bg-muted text-foreground px-3 py-1.5 rounded-lg text-xs font-semibold border border-border"
+                                data-testid={`button-open-convo-${interest.id}`}
+                              >
+                                <Users className="w-3.5 h-3.5" />
+                                Open Chat
+                              </button>
+                            )}
+                            {status !== "offer_created" && (
+                              <button
+                                onClick={() => setSelectedNotification(interest)}
+                                className="flex items-center gap-1.5 bg-primary text-primary-foreground px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 shadow-sm"
+                                data-testid={`button-send-offer-${interest.id}`}
+                              >
+                                <Send className="w-3.5 h-3.5" />
+                                Send Offer
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {status === "offer_created" ? (
-                          <span
-                            className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-bold"
-                            data-testid={`badge-status-${notif.id}`}
-                          >
-                            Offer Sent
-                          </span>
-                        ) : (
-                          <span
-                            className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-bold"
-                            data-testid={`badge-status-${notif.id}`}
-                          >
-                            Notified
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Eye className="w-4 h-4" />
-                        <span data-testid={`text-buyer-name-${notif.id}`}>
-                          Interested Buyer{buyer?.firstName ? ` — ${buyer.firstName}` : ""}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs text-muted-foreground" data-testid={`text-date-${notif.id}`}>
-                          {new Date(notif.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                        </span>
-                        {status !== "offer_created" && (
-                          <button
-                            onClick={() => setSelectedNotification(notif)}
-                            className="flex items-center gap-1.5 bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-semibold transition-all active:scale-95 shadow-sm"
-                            data-testid={`button-send-offer-${notif.id}`}
-                          >
-                            <Send className="w-3.5 h-3.5" />
-                            Send Reverse Offer
-                          </button>
-                        )}
-                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {subTab === "conversations" && (
+        <ConversationsList conversations={conversations} navigate={navigate} />
+      )}
+
+      {subTab === "showings" && (
+        <ShowingsList showings={showingRequests} navigate={navigate} />
       )}
 
       {selectedNotification && (
@@ -370,6 +407,113 @@ function BuyerInterestSection() {
           onSuccess={() => setSelectedNotification(null)}
         />
       )}
+    </div>
+  );
+}
+
+function ConversationsList({ conversations, navigate }: { conversations: any[]; navigate: (to: string) => void }) {
+  if (conversations.length === 0) {
+    return (
+      <div className="text-center py-16 bg-card border border-border rounded-3xl">
+        <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+          <Users className="w-7 h-7 text-muted-foreground opacity-40" />
+        </div>
+        <h3 className="font-display font-bold text-xl mb-2">No conversations yet</h3>
+        <p className="text-muted-foreground text-sm max-w-sm mx-auto">
+          When buyers message you, conversations will appear here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {conversations.map((convo: any) => (
+        <button
+          key={convo.id}
+          onClick={() => navigate(`/conversations/${convo.id}`)}
+          className="w-full text-left bg-card border border-border rounded-2xl p-4 shadow-sm hover:border-primary/30 transition-colors"
+          data-testid={`card-conversation-${convo.id}`}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-muted overflow-hidden flex-shrink-0">
+              {convo.property?.imageUrl ? (
+                <img src={convo.property.imageUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center"><Home className="w-5 h-5 text-muted-foreground/40" /></div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-sm truncate">{convo.property?.title || "Property"}</h4>
+                {convo.unreadCount > 0 && (
+                  <span className="bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full font-bold ml-2">{convo.unreadCount}</span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground truncate">
+                {convo.buyer?.firstName || "Buyer"} · {convo.lastMessage?.content?.substring(0, 60) || "No messages"}
+              </p>
+            </div>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ShowingsList({ showings, navigate }: { showings: any[]; navigate: (to: string) => void }) {
+  if (showings.length === 0) {
+    return (
+      <div className="text-center py-16 bg-card border border-border rounded-3xl">
+        <div className="w-14 h-14 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+          <CalendarDays className="w-7 h-7 text-muted-foreground opacity-40" />
+        </div>
+        <h3 className="font-display font-bold text-xl mb-2">No showing requests</h3>
+        <p className="text-muted-foreground text-sm max-w-sm mx-auto">
+          Showing requests from buyers will appear here.
+        </p>
+      </div>
+    );
+  }
+
+  const statusColors: Record<string, string> = {
+    pending: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300",
+    confirmed: "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300",
+    cancelled: "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300",
+    completed: "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300",
+  };
+
+  return (
+    <div className="space-y-3">
+      {showings.map((showing: any) => (
+        <div
+          key={showing.id}
+          className="bg-card border border-border rounded-2xl p-4 shadow-sm"
+          data-testid={`card-showing-${showing.id}`}
+        >
+          <div className="flex items-start gap-3">
+            <div className="w-12 h-12 rounded-xl bg-muted overflow-hidden flex-shrink-0">
+              {showing.property?.imageUrl ? (
+                <img src={showing.property.imageUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center"><Home className="w-5 h-5 text-muted-foreground/40" /></div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="font-bold text-sm truncate">{showing.property?.title || "Property"}</h4>
+                <span className={`${statusColors[showing.status] || statusColors.pending} px-2.5 py-0.5 rounded-full text-xs font-bold`}>
+                  {showing.status}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {showing.buyer?.firstName || "Buyer"} · Dates: {(showing.requestedDates || []).join(", ")}
+              </p>
+              {showing.notes && <p className="text-xs text-muted-foreground mt-0.5 truncate italic">"{showing.notes}"</p>}
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

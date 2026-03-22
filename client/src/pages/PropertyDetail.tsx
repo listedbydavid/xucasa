@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useRef, Component, type ReactNode, type ErrorInfo } from "react";
 import { useParams, useLocation, Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useProperty, useProperties } from "@/hooks/use-properties";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
-import { BedDouble, Bath, Maximize, MapPin, Heart, Sparkles, Building, Briefcase, ChevronLeft, ChevronRight, Phone, Mail, MessageSquare, Camera, Home, LandPlot, Clock, TrendingUp, CalendarDays, Activity, Calculator, ChevronDown, DollarSign, Percent, Share2, Printer, Check, Link2, School, Trees, Hospital, Bus, ShoppingCart, Navigation, View, ExternalLink, GraduationCap, BookOpen, Globe } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { BedDouble, Bath, Maximize, MapPin, Heart, Sparkles, Building, Briefcase, ChevronLeft, ChevronRight, Phone, Mail, MessageSquare, Camera, Home, LandPlot, Clock, TrendingUp, CalendarDays, Activity, Calculator, ChevronDown, DollarSign, Percent, Share2, Printer, Check, Link2, School, Trees, Hospital, Bus, ShoppingCart, Navigation, View, ExternalLink, GraduationCap, BookOpen, Globe, Loader2, Send, X } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { MapView } from "@/components/MapView";
 import { PublicRecordsPanel } from "@/components/PublicRecordsPanel";
@@ -61,6 +63,10 @@ function ContactCard({
   contactBrokerage,
   contactImage,
   propertyAddress,
+  propertyId,
+  onAskQuestion,
+  onRequestShowing,
+  onRequestInfo,
 }: {
   contactName: string;
   contactPhone: string | null;
@@ -69,6 +75,10 @@ function ContactCard({
   contactBrokerage?: string;
   contactImage?: string | null;
   propertyAddress: string;
+  propertyId?: number;
+  onAskQuestion?: () => void;
+  onRequestShowing?: () => void;
+  onRequestInfo?: () => void;
 }) {
   const subject = encodeURIComponent(`Inquiry about ${propertyAddress}`);
   const body = encodeURIComponent(`Hi ${contactName.split(" ")[0]},\n\nI'm interested in learning more about the property at ${propertyAddress}.\n\nPlease get back to me at your earliest convenience.\n\nThank you!`);
@@ -124,6 +134,29 @@ function ContactCard({
             Email
           </a>
         )}
+
+        <div className="border-t border-border pt-3 mt-1 space-y-2">
+          {onAskQuestion && (
+            <button
+              onClick={onAskQuestion}
+              className="flex items-center gap-3 w-full bg-primary/10 text-primary py-3 px-4 rounded-xl font-semibold hover:bg-primary/20 transition-colors border border-primary/20 active:scale-[0.98]"
+              data-testid="button-ask-question"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Ask a Question
+            </button>
+          )}
+          {onRequestShowing && (
+            <button
+              onClick={onRequestShowing}
+              className="flex items-center gap-3 w-full bg-primary/10 text-primary py-3 px-4 rounded-xl font-semibold hover:bg-primary/20 transition-colors border border-primary/20 active:scale-[0.98]"
+              data-testid="button-request-showing"
+            >
+              <CalendarDays className="w-4 h-4" />
+              Request a Showing
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -134,11 +167,15 @@ function MobileContactBar({
   contactPhone,
   contactEmail,
   propertyAddress,
+  onAskQuestion,
+  onRequestShowing,
 }: {
   contactName: string;
   contactPhone: string | null;
   contactEmail: string | null;
   propertyAddress: string;
+  onAskQuestion?: () => void;
+  onRequestShowing?: () => void;
 }) {
   const subject = encodeURIComponent(`Inquiry about ${propertyAddress}`);
   const body = encodeURIComponent(`Hi ${contactName.split(" ")[0]},\n\nI'm interested in learning more about the property at ${propertyAddress}.\n\nPlease get back to me at your earliest convenience.\n\nThank you!`);
@@ -175,6 +212,16 @@ function MobileContactBar({
             <Mail className="w-4 h-4" />
             Email
           </a>
+        )}
+        {onAskQuestion && (
+          <button
+            onClick={onAskQuestion}
+            className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground py-3 px-4 rounded-xl font-semibold active:scale-[0.98] transition-transform"
+            data-testid="mobile-button-ask"
+          >
+            <MessageSquare className="w-4 h-4" />
+            Ask
+          </button>
         )}
       </div>
     </div>
@@ -1243,6 +1290,55 @@ export default function PropertyDetail() {
   const { user, isAuthenticated } = useAuth();
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const [showCopied, setShowCopied] = useState(false);
+  const [showAskModal, setShowAskModal] = useState(false);
+  const [showShowingModal, setShowShowingModal] = useState(false);
+  const [questionText, setQuestionText] = useState("");
+  const [showingDates, setShowingDates] = useState<string[]>([""]);
+  const [showingNotes, setShowingNotes] = useState("");
+  const { toast } = useToast();
+
+  const askMutation = useMutation({
+    mutationFn: async (data: { message: string; propertyId: number }) => {
+      const res = await apiRequest("POST", "/api/conversations", {
+        propertyId: data.propertyId,
+        initialMessage: data.message,
+        type: "text",
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setShowAskModal(false);
+      setQuestionText("");
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      toast({ title: "Message sent!", description: "The agent will respond in your Messages." });
+      navigate(`/conversations/${data.id}`);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to send message.", variant: "destructive" });
+    },
+  });
+
+  const showingMutation = useMutation({
+    mutationFn: async (params: { propertyId: number; dates: string[]; notes: string }) => {
+      const res = await apiRequest("POST", "/api/showing-requests", {
+        propertyId: params.propertyId,
+        requestedDates: params.dates.filter(Boolean),
+        notes: params.notes || undefined,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      setShowShowingModal(false);
+      setShowingDates([""]);
+      setShowingNotes("");
+      queryClient.invalidateQueries({ queryKey: ["/api/showing-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      toast({ title: "Showing requested!", description: "The agent will confirm a date in your Messages." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to request showing.", variant: "destructive" });
+    },
+  });
 
   const { data: agentLink } = useQuery<{ agentId: string; agentEmail: string; status: string } | null>({
     queryKey: ["/api/agent-invite"],
@@ -1402,10 +1498,130 @@ export default function PropertyDetail() {
 
   const propertyAddress = `${property.title}, ${property.location}`;
 
+  const handleAskQuestion = () => {
+    if (!isAuthenticated) { setShowAuthPrompt(true); return; }
+    setShowAskModal(true);
+  };
+
+  const handleRequestShowing = () => {
+    if (!isAuthenticated) { setShowAuthPrompt(true); return; }
+    setShowShowingModal(true);
+  };
+
   return (
     <>
       {showAuthPrompt && (
         <AuthPromptModal feature="favorite" onClose={() => setShowAuthPrompt(false)} />
+      )}
+
+      {showAskModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" data-testid="modal-ask-question">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h3 className="font-display font-bold text-lg">Ask a Question</h3>
+              <button onClick={() => setShowAskModal(false)} className="p-1.5 hover:bg-muted rounded-lg" data-testid="button-close-ask">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-sm text-muted-foreground">About: {property.title}</p>
+              <textarea
+                value={questionText}
+                onChange={e => setQuestionText(e.target.value)}
+                placeholder="What would you like to know about this property?"
+                rows={4}
+                className="w-full bg-muted border border-border rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+                data-testid="input-question"
+              />
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
+              <button onClick={() => setShowAskModal(false)} className="px-4 py-2 text-sm font-medium text-muted-foreground">Cancel</button>
+              <button
+                onClick={() => askMutation.mutate({ message: questionText, propertyId: property.id })}
+                disabled={!questionText.trim() || askMutation.isPending}
+                className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2 rounded-lg text-sm font-bold disabled:opacity-50"
+                data-testid="button-send-question"
+              >
+                {askMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showShowingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" data-testid="modal-request-showing">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h3 className="font-display font-bold text-lg">Request a Showing</h3>
+              <button onClick={() => setShowShowingModal(false)} className="p-1.5 hover:bg-muted rounded-lg" data-testid="button-close-showing">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-muted-foreground">Property: {property.title}</p>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-muted-foreground">Preferred Dates</label>
+                {showingDates.map((date, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={date}
+                      onChange={e => {
+                        const newDates = [...showingDates];
+                        newDates[i] = e.target.value;
+                        setShowingDates(newDates);
+                      }}
+                      className="flex-1 bg-muted border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      data-testid={`input-showing-date-${i}`}
+                    />
+                    {showingDates.length > 1 && (
+                      <button
+                        onClick={() => setShowingDates(showingDates.filter((_, j) => j !== i))}
+                        className="p-1.5 text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {showingDates.length < 3 && (
+                  <button
+                    onClick={() => setShowingDates([...showingDates, ""])}
+                    className="text-xs font-bold text-primary hover:text-primary/80"
+                    data-testid="button-add-date"
+                  >
+                    + Add another date
+                  </button>
+                )}
+              </div>
+              <div>
+                <label className="text-xs font-bold text-muted-foreground mb-1 block">Notes (optional)</label>
+                <textarea
+                  value={showingNotes}
+                  onChange={e => setShowingNotes(e.target.value)}
+                  placeholder="Any special requests or notes..."
+                  rows={2}
+                  className="w-full bg-muted border border-border rounded-xl px-4 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  data-testid="input-showing-notes"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
+              <button onClick={() => setShowShowingModal(false)} className="px-4 py-2 text-sm font-medium text-muted-foreground">Cancel</button>
+              <button
+                onClick={() => showingMutation.mutate({ propertyId: property.id, dates: showingDates, notes: showingNotes })}
+                disabled={!showingDates.some(d => !!d) || showingMutation.isPending}
+                className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2 rounded-lg text-sm font-bold disabled:opacity-50"
+                data-testid="button-submit-showing"
+              >
+                {showingMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarDays className="w-4 h-4" />}
+                Request Showing
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     <div className="min-h-screen bg-background pb-24 md:pb-20 relative">
 
@@ -1624,6 +1840,9 @@ export default function PropertyDetail() {
                 contactBrokerage={contactBrokerage}
                 contactImage={contactImage}
                 propertyAddress={propertyAddress}
+                propertyId={property.id}
+                onAskQuestion={handleAskQuestion}
+                onRequestShowing={handleRequestShowing}
               />
 
               <SectionErrorBoundary name="MapView">
@@ -1701,6 +1920,8 @@ export default function PropertyDetail() {
         contactPhone={contactPhone}
         contactEmail={contactEmail}
         propertyAddress={propertyAddress}
+        onAskQuestion={handleAskQuestion}
+        onRequestShowing={handleRequestShowing}
       />
     </div>
     </>

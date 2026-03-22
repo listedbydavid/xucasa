@@ -326,6 +326,8 @@ export const propertyOffers = pgTable("property_offers", {
   status: text("status").default("pending_agent_review").notNull(),
   adminNotes: text("admin_notes"),
   triggeredBySwipe: boolean("triggered_by_swipe").default(true),
+  conversationId: integer("conversation_id"),
+  expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -501,6 +503,95 @@ export const notificationPreferences = pgTable("notification_preferences", {
 });
 
 export const insertNotificationPreferencesSchema = createInsertSchema(notificationPreferences).omit({ id: true, updatedAt: true });
+
+// Buyer Interest (swipe right upsert — no conversation created)
+export const buyerInterest = pgTable("buyer_interest", {
+  id: serial("id").primaryKey(),
+  propertyId: integer("property_id").references(() => properties.id).notNull(),
+  buyerUserId: varchar("buyer_user_id").references(() => users.id).notNull(),
+  source: text("source").default("swipe").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Conversations between buyer and agent
+export const conversations = pgTable("conversations", {
+  id: serial("id").primaryKey(),
+  propertyId: integer("property_id").references(() => properties.id).notNull(),
+  buyerUserId: varchar("buyer_user_id").references(() => users.id).notNull(),
+  agentUserId: varchar("agent_user_id").references(() => users.id).notNull(),
+  status: text("status").default("active").notNull(),
+  buyerLastReadAt: timestamp("buyer_last_read_at"),
+  agentLastReadAt: timestamp("agent_last_read_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Messages within a conversation
+export const messages = pgTable("messages", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id").references(() => conversations.id).notNull(),
+  senderUserId: varchar("sender_user_id").references(() => users.id).notNull(),
+  type: text("type").default("text").notNull(),
+  content: text("content").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Showing requests
+export const showingRequests = pgTable("showing_requests", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id").references(() => conversations.id).notNull(),
+  propertyId: integer("property_id").references(() => properties.id).notNull(),
+  buyerUserId: varchar("buyer_user_id").references(() => users.id).notNull(),
+  agentUserId: varchar("agent_user_id").references(() => users.id).notNull(),
+  requestedDates: jsonb("requested_dates").notNull(),
+  confirmedDate: timestamp("confirmed_date"),
+  status: text("status").default("pending").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const buyerInterestRelations = relations(buyerInterest, ({ one }) => ({
+  property: one(properties, { fields: [buyerInterest.propertyId], references: [properties.id] }),
+  buyer: one(users, { fields: [buyerInterest.buyerUserId], references: [users.id] }),
+}));
+
+export const conversationsRelations = relations(conversations, ({ one, many }) => ({
+  property: one(properties, { fields: [conversations.propertyId], references: [properties.id] }),
+  buyer: one(users, { fields: [conversations.buyerUserId], references: [users.id] }),
+  agent: one(users, { fields: [conversations.agentUserId], references: [users.id] }),
+  messages: many(messages),
+  showingRequests: many(showingRequests),
+}));
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  conversation: one(conversations, { fields: [messages.conversationId], references: [conversations.id] }),
+  sender: one(users, { fields: [messages.senderUserId], references: [users.id] }),
+}));
+
+export const showingRequestsRelations = relations(showingRequests, ({ one }) => ({
+  conversation: one(conversations, { fields: [showingRequests.conversationId], references: [conversations.id] }),
+  property: one(properties, { fields: [showingRequests.propertyId], references: [properties.id] }),
+  buyer: one(users, { fields: [showingRequests.buyerUserId], references: [users.id] }),
+  agent: one(users, { fields: [showingRequests.agentUserId], references: [users.id] }),
+}));
+
+// Insert schemas for new tables
+export const insertBuyerInterestSchema = createInsertSchema(buyerInterest).omit({ id: true, createdAt: true });
+export const insertConversationSchema = createInsertSchema(conversations).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true });
+export const insertShowingRequestSchema = createInsertSchema(showingRequests).omit({ id: true, createdAt: true, updatedAt: true });
+
+// Types
+export type BuyerInterest = typeof buyerInterest.$inferSelect;
+export type InsertBuyerInterest = z.infer<typeof insertBuyerInterestSchema>;
+export type Conversation = typeof conversations.$inferSelect;
+export type InsertConversation = z.infer<typeof insertConversationSchema>;
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type ShowingRequest = typeof showingRequests.$inferSelect;
+export type InsertShowingRequest = z.infer<typeof insertShowingRequestSchema>;
 
 // Types
 export type Property = typeof properties.$inferSelect;

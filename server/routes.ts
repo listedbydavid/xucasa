@@ -1697,6 +1697,8 @@ export async function registerRoutes(
       const { propertyId } = req.body;
       if (!propertyId) return res.status(400).json({ message: "propertyId required" });
 
+      await storage.upsertBuyerInterest(propertyId, buyerUserId, "swipe");
+
       const existing = await storage.getExistingSwipeNotification(buyerUserId, propertyId);
       if (existing) return res.status(200).json({ message: "Already notified", notification: existing });
 
@@ -3019,6 +3021,280 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ── Buyer Interest API ────────────────────────────────────────────────────
+
+  app.get("/api/buyer-interest/agent", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const interests = await storage.getBuyerInterestForAgent(userId);
+      res.json(interests);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.get("/api/buyer-interest/mine", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const interests = await storage.getBuyerInterestForBuyer(userId);
+      res.json(interests);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  // ── Conversations API ───────────────────────────────────────────────────
+
+  app.get("/api/conversations", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const convos = await storage.getConversationsForUser(userId);
+      res.json(convos);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.get("/api/conversations/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const convo = await storage.getConversation(parseInt(req.params.id));
+      if (!convo) return res.status(404).json({ message: "Conversation not found" });
+      if (convo.buyerUserId !== userId && convo.agentUserId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      res.json(convo);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.post("/api/conversations", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { propertyId, agentUserId, initialMessage, type } = req.body;
+      if (!propertyId) return res.status(400).json({ message: "propertyId required" });
+
+      const prop = await storage.getProperty(propertyId);
+      if (!prop) return res.status(404).json({ message: "Property not found" });
+
+      const resolvedAgentId = agentUserId || prop.agentId;
+      if (!resolvedAgentId) return res.status(400).json({ message: "No agent associated with this property" });
+
+      await storage.upsertBuyerInterest(propertyId, userId, type || "inquiry");
+
+      const convo = await storage.getOrCreateConversation(propertyId, userId, resolvedAgentId);
+
+      if (initialMessage) {
+        await storage.createMessage({
+          conversationId: convo.id,
+          senderUserId: userId,
+          type: type || "text",
+          content: initialMessage,
+        });
+
+        const agent = await storage.getUser(resolvedAgentId);
+        if (agent?.email) {
+          const buyer = await storage.getUser(userId);
+          const buyerName = buyer?.firstName ? `${buyer.firstName} ${buyer.lastName || ""}`.trim() : "A buyer";
+          await storage.createNotification({
+            userId: resolvedAgentId,
+            type: "message_received",
+            title: `New message from ${buyerName}`,
+            message: initialMessage.substring(0, 200),
+            propertyId,
+            linkUrl: `/conversations/${convo.id}`,
+            read: false,
+            archived: false,
+          });
+        }
+      }
+
+      res.status(201).json(convo);
+    } catch (err) {
+      console.error("Create conversation error:", err);
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  // ── Messages API ────────────────────────────────────────────────────────
+
+  app.get("/api/conversations/:id/messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const conversationId = parseInt(req.params.id);
+      const convo = await storage.getConversation(conversationId);
+      if (!convo) return res.status(404).json({ message: "Conversation not found" });
+      if (convo.buyerUserId !== userId && convo.agentUserId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const limit = parseInt(req.query.limit as string) || 50;
+      const before = req.query.before ? parseInt(req.query.before as string) : undefined;
+      const msgs = await storage.getMessagesForConversation(conversationId, limit, before);
+
+      const role = convo.buyerUserId === userId ? 'buyer' : 'agent';
+      await storage.updateConversationReadAt(conversationId, userId, role);
+
+      res.json(msgs);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.post("/api/conversations/:id/messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const conversationId = parseInt(req.params.id);
+      const convo = await storage.getConversation(conversationId);
+      if (!convo) return res.status(404).json({ message: "Conversation not found" });
+      if (convo.buyerUserId !== userId && convo.agentUserId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const { content, type } = req.body;
+      if (!content) return res.status(400).json({ message: "content required" });
+
+      const msg = await storage.createMessage({
+        conversationId,
+        senderUserId: userId,
+        type: type || "text",
+        content,
+      });
+
+      const role = convo.buyerUserId === userId ? 'buyer' : 'agent';
+      await storage.updateConversationReadAt(conversationId, userId, role);
+
+      const recipientId = convo.buyerUserId === userId ? convo.agentUserId : convo.buyerUserId;
+      const sender = await storage.getUser(userId);
+      const senderName = sender?.firstName ? `${sender.firstName} ${sender.lastName || ""}`.trim() : "Someone";
+      await storage.createNotification({
+        userId: recipientId,
+        type: "message_received",
+        title: `New message from ${senderName}`,
+        message: content.substring(0, 200),
+        propertyId: convo.propertyId,
+        linkUrl: `/conversations/${conversationId}`,
+        read: false,
+        archived: false,
+      });
+
+      const msgWithSender = { ...msg, sender };
+      res.status(201).json(msgWithSender);
+    } catch (err) {
+      console.error("Send message error:", err);
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  // ── Showing Requests API ────────────────────────────────────────────────
+
+  app.get("/api/showing-requests", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const requests = await storage.getShowingRequestsForUser(userId);
+      res.json(requests);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.post("/api/showing-requests", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { propertyId, requestedDates, notes } = req.body;
+      if (!propertyId || !requestedDates || !Array.isArray(requestedDates) || requestedDates.length === 0) {
+        return res.status(400).json({ message: "propertyId and requestedDates required" });
+      }
+
+      const prop = await storage.getProperty(propertyId);
+      if (!prop) return res.status(404).json({ message: "Property not found" });
+
+      const agentId = prop.agentId;
+      if (!agentId) return res.status(400).json({ message: "No agent for this property" });
+
+      await storage.upsertBuyerInterest(propertyId, userId, "showing_request");
+
+      const convo = await storage.getOrCreateConversation(propertyId, userId, agentId);
+
+      const request = await storage.createShowingRequest({
+        conversationId: convo.id,
+        propertyId,
+        buyerUserId: userId,
+        agentUserId: agentId,
+        requestedDates,
+        notes: notes || null,
+      });
+
+      const buyer = await storage.getUser(userId);
+      const buyerName = buyer?.firstName ? `${buyer.firstName} ${buyer.lastName || ""}`.trim() : "A buyer";
+      const dateStr = requestedDates.slice(0, 2).join(", ");
+      await storage.createMessage({
+        conversationId: convo.id,
+        senderUserId: userId,
+        type: "showing_request",
+        content: `Showing request for ${dateStr}${notes ? ` — ${notes}` : ""}`,
+        metadata: { showingRequestId: request.id, requestedDates },
+      });
+
+      await storage.createNotification({
+        userId: agentId,
+        type: "showing_request",
+        title: `Showing request from ${buyerName}`,
+        message: `Requested dates: ${dateStr}`,
+        propertyId,
+        linkUrl: `/conversations/${convo.id}`,
+        read: false,
+        archived: false,
+      });
+
+      res.status(201).json(request);
+    } catch (err) {
+      console.error("Create showing request error:", err);
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.patch("/api/showing-requests/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const { status, confirmedDate } = req.body;
+      if (!status) return res.status(400).json({ message: "status required" });
+
+      const existing = await storage.getShowingRequest?.(id);
+      if (!existing) return res.status(404).json({ message: "Showing request not found" });
+      if (existing.buyerUserId !== userId && existing.agentUserId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const updated = await storage.updateShowingRequestStatus(
+        id,
+        status,
+        confirmedDate ? new Date(confirmedDate) : undefined,
+      );
+
+      const recipientId = updated.buyerUserId === userId ? updated.agentUserId : updated.buyerUserId;
+      const sender = await storage.getUser(userId);
+      const senderName = sender?.firstName || "Agent";
+      const statusLabel = status === "confirmed" ? "confirmed" : status === "declined" ? "declined" : status;
+      await storage.createNotification({
+        userId: recipientId,
+        type: "showing_update",
+        title: `Showing ${statusLabel} by ${senderName}`,
+        message: confirmedDate ? `Confirmed for ${new Date(confirmedDate).toLocaleDateString()}` : `Showing has been ${statusLabel}`,
+        propertyId: updated.propertyId,
+        linkUrl: `/conversations/${updated.conversationId}`,
+        read: false,
+        archived: false,
+      });
+
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
     }
   });
 

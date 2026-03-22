@@ -28,6 +28,7 @@ Preferred communication style: Simple, everyday language.
     - **Home Report**: Comprehensive property analysis tool inspired by Homebot, including valuation, equity, nearby sales, and financial calculators.
     - **Sell Page Auto-Populate**: Auto-fills property details from MLS records when an address is entered.
     - **Reverse Offer / Swipe Interest System**: Facilitates buyer interest and reverse offers with notification triggers.
+    - **Core Loop (Buyer-Agent Messaging)**: In-platform messaging via conversations, Ask a Question / Request Showing CTAs on property detail pages, agent Leads tab with sub-tabs for leads/conversations/showings, buyer dashboard Messages and Showings sections. Schema: `buyer_interest`, `conversations`, `messages`, `showing_requests` tables.
     - **Property Ratings & Reviews**: Users can rate and review properties, with visibility toggled by agents/admins.
     - **Error Tracking & Crash Reporting**: Automated frontend and backend error monitoring with an admin dashboard for management and archiving.
     - **Notification System**: In-app notifications with unread counts, a dropdown panel, and full dashboard management.

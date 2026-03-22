@@ -52,6 +52,7 @@ import Buyers from "@/pages/Buyers";
 import Admin from "@/pages/Admin";
 import HomeReport from "@/pages/HomeReport";
 import AuthPage from "@/pages/AuthPage";
+import ConversationThread from "@/pages/ConversationThread";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsOfService from "@/pages/TermsOfService";
 import { CookieConsent } from "@/components/CookieConsent";
@@ -67,6 +68,7 @@ function Router() {
       <Route path="/swipe" component={Swipe} />
       <Route path="/property/:id" component={PropertyDetail} />
       <Route path="/dashboard" component={Dashboard} />
+      <Route path="/conversations/:id" component={ConversationThread} />
       <Route path="/agent" component={AgentDashboard} />
       <Route path="/buyers" component={Buyers} />
       <Route path="/admin" component={Admin} />
