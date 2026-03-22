@@ -5,7 +5,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   ArrowLeft, Send, Loader2, MapPin, Calendar, Home,
-  MessageSquare, Eye, Clock, Check, X, Shield,
+  MessageSquare, Eye, Clock, Check, X, Shield, DollarSign,
 } from "lucide-react";
 
 export default function ConversationThread({ adminMode = false, adminConversationId }: { adminMode?: boolean; adminConversationId?: number } = {}) {
@@ -13,6 +13,8 @@ export default function ConversationThread({ adminMode = false, adminConversatio
   const conversationId = adminConversationId || (params?.id ? parseInt(params.id) : null);
   const { user, isAuthenticated } = useAuth();
   const [newMessage, setNewMessage] = useState("");
+  const [counterOfferId, setCounterOfferId] = useState<number | null>(null);
+  const [counterText, setCounterText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -59,6 +61,18 @@ export default function ConversationThread({ adminMode = false, adminConversatio
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/showing-requests"] });
       queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversationId, "messages"] });
+    },
+  });
+
+  const offerResponseMutation = useMutation({
+    mutationFn: async ({ offerId, action, counterMessage }: { offerId: number; action: string; counterMessage?: string }) => {
+      return apiRequest("POST", `/api/property-offers/${offerId}/buyer-response`, { action, counterMessage });
+    },
+    onSuccess: () => {
+      setCounterOfferId(null);
+      setCounterText("");
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversationId, "messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
     },
   });
 
@@ -290,13 +304,82 @@ export default function ConversationThread({ adminMode = false, adminConversatio
     }
 
     if (isReverseOffer) {
+      const offerId = msg.metadata?.offerId;
+      const canBuyerRespond = isBuyer && !isMe && offerId;
+      const isCounteringThis = counterOfferId === offerId;
       return (
         <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
           <div className={`max-w-[80%] rounded-2xl px-4 py-3 border-2 border-amber-400/40 ${isMe ? "bg-amber-600 text-white" : "bg-amber-50 dark:bg-amber-900/20 text-foreground"}`} data-testid={`message-${msg.id}`}>
             <div className="flex items-center gap-1.5 mb-1">
+              <DollarSign className="w-3.5 h-3.5" />
               <span className="text-xs font-bold">Reverse Offer</span>
             </div>
             <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+            {canBuyerRespond && !isCounteringThis && (
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={() => offerResponseMutation.mutate({ offerId, action: "accept" })}
+                  disabled={offerResponseMutation.isPending}
+                  className="flex items-center gap-1 bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  data-testid={`button-accept-offer-${offerId}`}
+                >
+                  <Check className="w-3 h-3" />
+                  Accept
+                </button>
+                <button
+                  onClick={() => offerResponseMutation.mutate({ offerId, action: "decline" })}
+                  disabled={offerResponseMutation.isPending}
+                  className="flex items-center gap-1 bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  data-testid={`button-decline-offer-${offerId}`}
+                >
+                  <X className="w-3 h-3" />
+                  Decline
+                </button>
+                <button
+                  onClick={() => setCounterOfferId(offerId)}
+                  disabled={offerResponseMutation.isPending}
+                  className="flex items-center gap-1 bg-amber-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  data-testid={`button-counter-offer-${offerId}`}
+                >
+                  <MessageSquare className="w-3 h-3" />
+                  Counter
+                </button>
+              </div>
+            )}
+            {isCounteringThis && (
+              <div className="mt-2 space-y-2">
+                <textarea
+                  value={counterText}
+                  onChange={e => setCounterText(e.target.value)}
+                  placeholder="Describe your counter-offer..."
+                  rows={2}
+                  className="w-full bg-white dark:bg-gray-800 border border-amber-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-400/50 text-foreground"
+                  data-testid={`input-counter-offer-${offerId}`}
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (counterText.trim()) {
+                        offerResponseMutation.mutate({ offerId, action: "counter", counterMessage: counterText.trim() });
+                      }
+                    }}
+                    disabled={!counterText.trim() || offerResponseMutation.isPending}
+                    className="flex items-center gap-1 bg-amber-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-40"
+                    data-testid={`button-submit-counter-${offerId}`}
+                  >
+                    {offerResponseMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                    Send Counter
+                  </button>
+                  <button
+                    onClick={() => { setCounterOfferId(null); setCounterText(""); }}
+                    className="text-xs text-muted-foreground hover:text-foreground px-2 py-1.5"
+                    data-testid={`button-cancel-counter-${offerId}`}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
             <p className={`text-xs mt-1 ${isMe ? "text-white/60" : "text-muted-foreground"}`}>
               {new Date(msg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
             </p>

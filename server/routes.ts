@@ -2009,6 +2009,128 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/property-offers/:id/buyer-response", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+
+      const { action, counterMessage } = req.body;
+      if (!action || !["accept", "decline", "counter"].includes(action)) {
+        return res.status(400).json({ message: "action must be accept, decline, or counter" });
+      }
+      if (action === "counter" && !counterMessage) {
+        return res.status(400).json({ message: "counterMessage required for counter action" });
+      }
+
+      const offers = await db.select().from(propertyOffers).where(eq(propertyOffers.id, id));
+      const offer = offers[0];
+      if (!offer) return res.status(404).json({ message: "Offer not found" });
+
+      if (offer.buyerUserId !== userId) {
+        return res.status(403).json({ message: "Only the buyer can respond to this offer" });
+      }
+
+      const respondableStatuses = ["sent_to_buyer", "viewed"];
+      if (!respondableStatuses.includes(offer.status)) {
+        return res.status(400).json({ message: `Cannot respond to offer with status '${offer.status}'` });
+      }
+
+      const statusMap: Record<string, string> = { accept: "accepted", decline: "declined", counter: "countered" };
+      const newStatus = statusMap[action];
+      const statusLabel = action === "counter" ? "counter-offered" : newStatus;
+
+      const updated = await storage.updatePropertyOfferStatus(id, newStatus);
+
+      const assignedAgent = await storage.lookupAssignedAgent(userId);
+      if (!assignedAgent) return res.status(400).json({ message: "No agent assigned" });
+      const agentId = assignedAgent.id;
+
+      const buyerUser = await storage.getUser(userId);
+      const buyerName = buyerUser?.firstName ? `${buyerUser.firstName} ${buyerUser.lastName || ""}`.trim() : "Buyer";
+
+      const now = new Date();
+      await db.update(buyerInterest)
+        .set({ stage: "offer_stage", lastActivityAt: now, updatedAt: now })
+        .where(and(eq(buyerInterest.propertyId, offer.propertyId), eq(buyerInterest.buyerUserId, userId)));
+
+      const buyerConvo = await storage.getOrCreateConversation(offer.propertyId, userId, agentId, "buyer", "buyer");
+
+      if (action === "counter") {
+        await storage.createMessage({
+          conversationId: buyerConvo.id,
+          senderUserId: userId,
+          type: "text",
+          content: counterMessage,
+        });
+        await storage.createMessage({
+          conversationId: buyerConvo.id,
+          senderUserId: userId,
+          type: "system",
+          content: `${buyerName} has counter-offered.`,
+        });
+      } else {
+        await storage.createMessage({
+          conversationId: buyerConvo.id,
+          senderUserId: userId,
+          type: "system",
+          content: `${buyerName} has ${statusLabel} the offer.`,
+        });
+      }
+
+      await storage.createNotification({
+        userId: agentId,
+        type: "offer_response",
+        title: `${buyerName} ${statusLabel} the offer`,
+        message: action === "counter" ? counterMessage.substring(0, 200) : `The offer has been ${statusLabel}.`,
+        propertyId: offer.propertyId,
+        linkUrl: `/conversations/${buyerConvo.id}`,
+        read: false,
+        archived: false,
+      });
+      trySendNotificationEmail(agentId, "offer_response", `${buyerName} ${statusLabel} the offer`, action === "counter" ? counterMessage.substring(0, 200) : `The offer has been ${statusLabel}.`, `/conversations/${buyerConvo.id}`, offer.propertyId, buyerConvo.id);
+
+      const listingAgentId = offer.listingAgentId;
+      if (listingAgentId && listingAgentId !== agentId) {
+        const coordConvo = await storage.getOrCreateConversation(offer.propertyId, agentId, listingAgentId, "agent", "agent_coordination", userId);
+        const agentName = assignedAgent.firstName ? `${assignedAgent.firstName} ${assignedAgent.lastName || ""}`.trim() : "Buyer's agent";
+
+        if (action === "counter") {
+          await storage.createMessage({
+            conversationId: coordConvo.id,
+            senderUserId: agentId,
+            type: "system",
+            content: `${agentName}'s client has counter-offered: ${counterMessage.substring(0, 300)}`,
+          });
+        } else {
+          await storage.createMessage({
+            conversationId: coordConvo.id,
+            senderUserId: agentId,
+            type: "system",
+            content: `${agentName}'s client has ${statusLabel} the offer.`,
+          });
+        }
+
+        await storage.createNotification({
+          userId: listingAgentId,
+          type: "offer_response",
+          title: `Buyer has ${statusLabel} the offer`,
+          message: action === "counter" ? `Counter: ${counterMessage.substring(0, 200)}` : `The offer has been ${statusLabel}.`,
+          propertyId: offer.propertyId,
+          linkUrl: `/conversations/${coordConvo.id}`,
+          read: false,
+          archived: false,
+        });
+        trySendNotificationEmail(listingAgentId, "offer_response", `Buyer has ${statusLabel} the offer`, action === "counter" ? `Counter: ${counterMessage.substring(0, 200)}` : `The offer has been ${statusLabel}.`, `/conversations/${coordConvo.id}`, offer.propertyId, coordConvo.id);
+      }
+
+      res.json({ success: true, status: newStatus });
+    } catch (err) {
+      console.error("Buyer offer response error:", err);
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
   // ── Seller Pitches ─────────────────────────────────────────────────────────
 
   const isAdmin = async (req: any, res: any, next: any) => {
