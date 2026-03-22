@@ -909,7 +909,19 @@ export async function registerRoutes(
       const parsed = buyerSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid buyer data" });
 
-      const budgetAmount = parsed.data.budget ? parseInt(parsed.data.budget.replace(/\D/g, '')) || 0 : 0;
+      function parseBudgetString(s: string): number {
+        const matches = s.match(/\$?([\d.]+)\s*([KkMm])?/g);
+        if (!matches || matches.length === 0) return 0;
+        const last = matches[matches.length - 1];
+        const m = last.match(/\$?([\d.]+)\s*([KkMm])?/);
+        if (!m) return 0;
+        const num = parseFloat(m[1]);
+        const unit = (m[2] || '').toUpperCase();
+        if (unit === 'M') return Math.round(num * 1000000);
+        if (unit === 'K') return Math.round(num * 1000);
+        return Math.round(num);
+      }
+      const budgetAmount = parsed.data.budget ? parseBudgetString(parsed.data.budget) : 0;
       const profileData = {
         preApprovalAmount: budgetAmount,
         preferredCities: parsed.data.areas || [],
