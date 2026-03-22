@@ -1595,7 +1595,7 @@ function MessagesSection() {
           </div>
           <h3 className="font-display font-bold text-xl mb-2" data-testid="text-no-messages">No messages yet</h3>
           <p className="text-muted-foreground text-sm max-w-sm mx-auto">
-            When you ask questions, request showings, or receive pitches on properties, conversations will appear here.
+            When you ask questions or request showings on properties, your agent will respond here.
           </p>
         </div>
       ) : (
@@ -1606,7 +1606,6 @@ function MessagesSection() {
             const otherName = otherParty?.firstName
               ? `${otherParty.firstName} ${otherParty.lastName || ""}`.trim()
               : otherParty?.email || "User";
-            const isPitch = convo.initiatedBy === "seller";
             return (
               <Link
                 key={convo.id}
@@ -1626,16 +1625,13 @@ function MessagesSection() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 min-w-0">
                         <h4 className="font-bold text-sm truncate">{convo.property?.title || "Property"}</h4>
-                        {isPitch && (
-                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full flex-shrink-0" data-testid={`badge-pitch-${convo.id}`}>Pitch</span>
-                        )}
                       </div>
                       {convo.unreadCount > 0 && (
                         <span className="bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full font-bold ml-2">{convo.unreadCount}</span>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground truncate">
-                      {otherName} · {convo.lastMessage?.content?.substring(0, 60) || "No messages yet"}
+                      Your Agent: {otherName} · {convo.lastMessage?.content?.substring(0, 60) || "No messages yet"}
                     </p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />

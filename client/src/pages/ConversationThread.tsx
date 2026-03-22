@@ -5,7 +5,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   ArrowLeft, Send, Loader2, MapPin, Calendar, Home,
-  MessageSquare, Eye, Clock, Check, X, Shield, Megaphone,
+  MessageSquare, Eye, Clock, Check, X, Shield,
 } from "lucide-react";
 
 export default function ConversationThread({ adminMode = false, adminConversationId }: { adminMode?: boolean; adminConversationId?: number } = {}) {
@@ -167,34 +167,12 @@ export default function ConversationThread({ adminMode = false, adminConversatio
     const isSystem = msg.type === "system";
     const isShowingRequest = msg.type === "showing_request";
     const isReverseOffer = msg.type === "reverse_offer";
-    const isPitch = msg.type === "pitch";
-
     if (isSystem) {
       return (
         <div key={msg.id} className="text-center">
           <span className="inline-block bg-muted text-muted-foreground text-xs px-3 py-1 rounded-full">
             {msg.content}
           </span>
-        </div>
-      );
-    }
-
-    if (isPitch) {
-      return (
-        <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-          <div className={`max-w-[80%] rounded-2xl px-4 py-3 border-2 border-amber-400/40 ${isMe ? "bg-amber-600 text-white" : "bg-amber-50 dark:bg-amber-900/20 text-foreground"}`} data-testid={`message-${msg.id}`}>
-            <div className="flex items-center gap-1.5 mb-1">
-              <Megaphone className="w-3.5 h-3.5" />
-              <span className="text-xs font-bold">Property Pitch</span>
-            </div>
-            {!isMe && (
-              <p className="text-xs font-bold mb-0.5">{senderName}</p>
-            )}
-            <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-            <p className={`text-xs mt-1 ${isMe ? "text-white/60" : "text-muted-foreground"}`}>
-              {new Date(msg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-            </p>
-          </div>
         </div>
       );
     }

@@ -68,7 +68,7 @@ import {
   type InsertShowingRequest,
   users,
 } from "@shared/schema";
-import { eq, and, desc, asc, sql, gte, count, inArray } from "drizzle-orm";
+import { eq, and, desc, asc, sql, gte, count, inArray, isNull } from "drizzle-orm";
 import { authStorage } from "./replit_integrations/auth/storage";
 
 export interface IStorage {

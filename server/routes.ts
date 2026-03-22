@@ -1797,6 +1797,54 @@ export async function registerRoutes(
         await storage.updateSwipeNotificationStatus(swipeNotificationId, "offer_created", offer.id);
       }
 
+      const assignedAgent = await storage.resolveAndAssignAgent(buyerUserId);
+      if (assignedAgent) {
+        await storage.upsertBuyerInterest(propertyId, buyerUserId, "reverse_offer", assignedAgent.id, prop.agentId || null);
+        const creatorName = creator?.firstName ? `${creator.firstName} ${creator.lastName || ""}`.trim() : "Listing Agent";
+
+        if (assignedAgent.id === creatorId) {
+          const buyerConvo = await storage.getOrCreateConversation(propertyId, buyerUserId, assignedAgent.id, "agent", "buyer");
+          await storage.createMessage({
+            conversationId: buyerConvo.id,
+            senderUserId: creatorId,
+            type: "reverse_offer",
+            content: `Reverse offer: $${(offerPrice || prop.price).toLocaleString()}`,
+            metadata: { offerId: offer.id },
+          });
+          await storage.createNotification({
+            userId: buyerUserId,
+            type: "message_received",
+            title: `Reverse offer from ${creatorName}`,
+            message: `You received a reverse offer for $${(offerPrice || prop.price).toLocaleString()}`,
+            propertyId,
+            linkUrl: `/conversations/${buyerConvo.id}`,
+            read: false,
+            archived: false,
+          });
+          trySendNotificationEmail(buyerUserId, "message_received", `Reverse offer from ${creatorName}`, `You received a reverse offer for $${(offerPrice || prop.price).toLocaleString()}`, `/conversations/${buyerConvo.id}`, propertyId, buyerConvo.id);
+        } else {
+          const coordConvo = await storage.getOrCreateConversation(propertyId, assignedAgent.id, creatorId, "agent", "agent_coordination", buyerUserId);
+          await storage.createMessage({
+            conversationId: coordConvo.id,
+            senderUserId: creatorId,
+            type: "reverse_offer",
+            content: `Reverse offer for buyer: $${(offerPrice || prop.price).toLocaleString()}`,
+            metadata: { offerId: offer.id },
+          });
+          await storage.createNotification({
+            userId: assignedAgent.id,
+            type: "message_received",
+            title: `Reverse offer from ${creatorName}`,
+            message: `${creatorName} sent a reverse offer of $${(offerPrice || prop.price).toLocaleString()} for your client`,
+            propertyId,
+            linkUrl: `/conversations/${coordConvo.id}`,
+            read: false,
+            archived: false,
+          });
+          trySendNotificationEmail(assignedAgent.id, "message_received", `Reverse offer from ${creatorName}`, `Reverse offer for your client`, `/conversations/${coordConvo.id}`, propertyId, coordConvo.id);
+        }
+      }
+
       res.status(201).json(offer);
     } catch (err) {
       console.error("Create property offer error:", err);
@@ -2553,42 +2601,57 @@ export async function registerRoutes(
       const profile = await storage.getBuyerProfile(parsed.data.buyerProfileId);
       if (profile && parsed.data.propertyId && parsed.data.message) {
         const buyerUserId = profile.userId;
-        const convo = await storage.getOrCreateConversation(parsed.data.propertyId, buyerUserId, userId, "seller");
-        await storage.createMessage({
-          conversationId: convo.id,
-          senderUserId: userId,
-          type: "pitch",
-          content: parsed.data.message,
-        });
-        await storage.updateBuyerMatchConversationId(match.id, convo.id);
-
         const senderUser = await storage.getUser(userId);
         const senderName = senderUser?.firstName ? `${senderUser.firstName} ${senderUser.lastName || ""}`.trim() : "A seller";
 
-        await storage.createNotification({
-          userId: buyerUserId,
-          type: "message_received",
-          title: `New pitch from ${senderName}`,
-          message: (parsed.data.message || "").substring(0, 200),
-          propertyId: parsed.data.propertyId,
-          linkUrl: `/conversations/${convo.id}`,
-          read: false,
-          archived: false,
-        });
-        trySendNotificationEmail(buyerUserId, "message_received", `New pitch from ${senderName}`, (parsed.data.message || "").substring(0, 200), `/conversations/${convo.id}`, parsed.data.propertyId, convo.id);
+        const assignedAgent = await storage.resolveAndAssignAgent(buyerUserId);
+        if (assignedAgent) {
+          const prop = await storage.getProperty(parsed.data.propertyId);
+          await storage.upsertBuyerInterest(parsed.data.propertyId, buyerUserId, "reverse_offer", assignedAgent.id, prop?.agentId || null);
 
-        if (profile.agentId) {
-          await storage.createNotification({
-            userId: profile.agentId,
-            type: "message_received",
-            title: `Seller pitch to your client ${profile.displayName}`,
-            message: `${senderName} pitched a property to your client. ${(parsed.data.message || "").substring(0, 100)}`,
-            propertyId: parsed.data.propertyId,
-            linkUrl: `/conversations/${convo.id}`,
-            read: false,
-            archived: false,
-          });
-          trySendNotificationEmail(profile.agentId, "message_received", `Seller pitch to your client ${profile.displayName}`, `${senderName} pitched a property to your client.`, `/conversations/${convo.id}`, parsed.data.propertyId, convo.id);
+          if (assignedAgent.id === userId) {
+            const buyerConvo = await storage.getOrCreateConversation(parsed.data.propertyId, buyerUserId, assignedAgent.id, "agent", "buyer");
+            await storage.createMessage({
+              conversationId: buyerConvo.id,
+              senderUserId: userId,
+              type: "text",
+              content: `Property pitch: ${parsed.data.message}`,
+              metadata: { pitchId: match.id },
+            });
+            await storage.updateBuyerMatchConversationId(match.id, buyerConvo.id);
+            await storage.createNotification({
+              userId: buyerUserId,
+              type: "message_received",
+              title: `Property pitch from ${senderName}`,
+              message: (parsed.data.message || "").substring(0, 200),
+              propertyId: parsed.data.propertyId,
+              linkUrl: `/conversations/${buyerConvo.id}`,
+              read: false,
+              archived: false,
+            });
+            trySendNotificationEmail(buyerUserId, "message_received", `Property pitch from ${senderName}`, (parsed.data.message || "").substring(0, 200), `/conversations/${buyerConvo.id}`, parsed.data.propertyId, buyerConvo.id);
+          } else {
+            const coordConvo = await storage.getOrCreateConversation(parsed.data.propertyId, assignedAgent.id, userId, "agent", "agent_coordination", buyerUserId);
+            await storage.createMessage({
+              conversationId: coordConvo.id,
+              senderUserId: userId,
+              type: "text",
+              content: `Property pitch for ${profile.displayName || "a buyer"}: ${parsed.data.message}`,
+              metadata: { pitchId: match.id },
+            });
+            await storage.updateBuyerMatchConversationId(match.id, coordConvo.id);
+            await storage.createNotification({
+              userId: assignedAgent.id,
+              type: "message_received",
+              title: `Property pitch from ${senderName}`,
+              message: `${senderName} pitched a property to your client. ${(parsed.data.message || "").substring(0, 100)}`,
+              propertyId: parsed.data.propertyId,
+              linkUrl: `/conversations/${coordConvo.id}`,
+              read: false,
+              archived: false,
+            });
+            trySendNotificationEmail(assignedAgent.id, "message_received", `Property pitch from ${senderName}`, `${senderName} pitched a property to your client.`, `/conversations/${coordConvo.id}`, parsed.data.propertyId, coordConvo.id);
+          }
         }
       }
 

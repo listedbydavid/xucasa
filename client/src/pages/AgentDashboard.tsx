@@ -436,7 +436,7 @@ function BuyerInterestSection() {
       )}
 
       {subTab === "conversations" && (
-        <ConversationsList conversations={conversations} navigate={navigate} />
+        <ConversationsList conversations={conversations} navigate={navigate} user={user} />
       )}
 
       {subTab === "showings" && (
@@ -459,7 +459,14 @@ function BuyerInterestSection() {
   );
 }
 
-function ConversationsList({ conversations, navigate }: { conversations: any[]; navigate: (to: string) => void }) {
+function ConversationsList({ conversations, navigate, user }: { conversations: any[]; navigate: (to: string) => void; user: any }) {
+  const [convoFilter, setConvoFilter] = useState<"all" | "buyer" | "agent_coordination">("all");
+  const buyerThreads = conversations.filter((c: any) => c.type === "buyer");
+  const coordThreads = conversations.filter((c: any) => c.type === "agent_coordination");
+  const filtered = convoFilter === "all" ? conversations : conversations.filter((c: any) => c.type === convoFilter);
+  const buyerUnread = buyerThreads.reduce((sum: number, c: any) => sum + (c.unreadCount || 0), 0);
+  const coordUnread = coordThreads.reduce((sum: number, c: any) => sum + (c.unreadCount || 0), 0);
+
   if (conversations.length === 0) {
     return (
       <div className="text-center py-16 bg-card border border-border rounded-3xl">
@@ -476,40 +483,75 @@ function ConversationsList({ conversations, navigate }: { conversations: any[]; 
 
   return (
     <div className="space-y-3">
-      {conversations.map((convo: any) => (
+      <div className="flex gap-2 mb-4">
         <button
-          key={convo.id}
-          onClick={() => navigate(`/conversations/${convo.id}`)}
-          className="w-full text-left bg-card border border-border rounded-2xl p-4 shadow-sm hover:border-primary/30 transition-colors"
-          data-testid={`card-conversation-${convo.id}`}
+          onClick={() => setConvoFilter("all")}
+          className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${convoFilter === "all" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+          data-testid="filter-convos-all"
         >
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-muted overflow-hidden flex-shrink-0">
-              {convo.property?.imageUrl ? (
-                <img src={convo.property.imageUrl} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center"><Home className="w-5 h-5 text-muted-foreground/40" /></div>
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 min-w-0">
-                  <h4 className="font-bold text-sm truncate">{convo.property?.title || "Property"}</h4>
-                  {convo.type === "agent_coordination" && (
-                    <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-[10px] px-1.5 py-0.5 rounded-full font-bold flex-shrink-0">Agent</span>
+          All ({conversations.length})
+        </button>
+        <button
+          onClick={() => setConvoFilter("buyer")}
+          className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors flex items-center gap-1 ${convoFilter === "buyer" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+          data-testid="filter-convos-buyer"
+        >
+          Buyer Threads ({buyerThreads.length})
+          {buyerUnread > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{buyerUnread}</span>}
+        </button>
+        <button
+          onClick={() => setConvoFilter("agent_coordination")}
+          className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors flex items-center gap-1 ${convoFilter === "agent_coordination" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+          data-testid="filter-convos-coordination"
+        >
+          Agent Coordination ({coordThreads.length})
+          {coordUnread > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{coordUnread}</span>}
+        </button>
+      </div>
+      {filtered.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground text-sm">No conversations in this category</div>
+      ) : (
+        filtered.map((convo: any) => {
+          const isCoord = convo.type === "agent_coordination";
+          const otherPartyName = isCoord
+            ? (convo.agentUserId === user?.id ? (convo.buyer?.firstName || "Agent") : (convo.agent?.firstName || "Listing Agent"))
+            : (convo.buyer?.firstName || "Buyer");
+          return (
+            <button
+              key={convo.id}
+              onClick={() => navigate(`/conversations/${convo.id}`)}
+              className="w-full text-left bg-card border border-border rounded-2xl p-4 shadow-sm hover:border-primary/30 transition-colors"
+              data-testid={`card-conversation-${convo.id}`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-muted overflow-hidden flex-shrink-0">
+                  {convo.property?.imageUrl ? (
+                    <img src={convo.property.imageUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center"><Home className="w-5 h-5 text-muted-foreground/40" /></div>
                   )}
                 </div>
-                {convo.unreadCount > 0 && (
-                  <span className="bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full font-bold ml-2">{convo.unreadCount}</span>
-                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <h4 className="font-bold text-sm truncate">{convo.property?.title || "Property"}</h4>
+                      {isCoord && (
+                        <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-[10px] px-1.5 py-0.5 rounded-full font-bold flex-shrink-0">Agent-to-Agent</span>
+                      )}
+                    </div>
+                    {convo.unreadCount > 0 && (
+                      <span className="bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full font-bold ml-2">{convo.unreadCount}</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {otherPartyName} · {convo.lastMessage?.content?.substring(0, 60) || "No messages"}
+                  </p>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground truncate">
-                {convo.type === "agent_coordination" ? "Listing Agent" : (convo.buyer?.firstName || "Buyer")} · {convo.lastMessage?.content?.substring(0, 60) || "No messages"}
-              </p>
-            </div>
-          </div>
-        </button>
-      ))}
+            </button>
+          );
+        })
+      )}
     </div>
   );
 }
