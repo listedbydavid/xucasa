@@ -18,7 +18,7 @@ const FALLBACK = "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w
 const ADMIN_CONTACT = {
   name: "David Hussain",
   phone: "6198886283",
-  email: "david@listedbydavid.com",
+  email: "david@xucasa.com",
   brokerage: "Listed by David",
   title: "Realtor | DRE# 02008317",
 };

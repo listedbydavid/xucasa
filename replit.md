@@ -43,7 +43,7 @@ Preferred communication style: Simple, everyday language.
 
 - **Providers**: Google OAuth 2.0 SSO via `passport-google-oauth20` AND email/password via bcryptjs.
 - **Sessions**: `express-session` backed by PostgreSQL (`connect-pg-simple`) with secure/httpOnly cookies and a "Remember Me" option.
-- **Roles**: Admin and Agent roles are supported. Admin account has email/password login (david@listedbydavid.com / 12345678) for testing without Google SSO.
+- **Roles**: Admin and Agent roles are supported. Admin account has email/password login (david@xucasa.com / 12345678) for testing without Google SSO.
 
 ### Core Features
 
