@@ -1573,6 +1573,7 @@ function offerStatusColor(status: string): string {
 function MessagesSection() {
   const { data: conversations = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/conversations"],
+    refetchInterval: 30000,
   });
 
   return (
@@ -1637,6 +1638,7 @@ function MessagesSection() {
 function ShowingsSection() {
   const { data: showings = [], isLoading } = useQuery<any[]>({
     queryKey: ["/api/showing-requests"],
+    refetchInterval: 30000,
   });
 
   const statusColors: Record<string, string> = {

@@ -228,9 +228,11 @@ function BuyerInterestSection() {
   });
   const { data: conversations = [] } = useQuery<any[]>({
     queryKey: ["/api/conversations"],
+    refetchInterval: 30000,
   });
   const { data: showingRequests = [] } = useQuery<any[]>({
     queryKey: ["/api/showing-requests"],
+    refetchInterval: 30000,
   });
   const { data: offers = [] } = useQuery<any[]>({
     queryKey: ["/api/property-offers/agent"],
