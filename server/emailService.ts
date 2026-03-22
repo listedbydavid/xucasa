@@ -79,27 +79,36 @@ export function resetEmailConfigCache() {
   connectionSettings = null;
 }
 
-// --- Deduplication: keyed by userId + type + propertyId, 1-hour window ---
+// --- Deduplication: keyed by userId + type + propertyId (or conversationId), window varies by type ---
 const recentEmails = new Map<string, number[]>();
 
-function deduplicationKey(userId: string, type: string, propertyId: number | null | undefined): string {
-  return `${userId}:${type}:${propertyId ?? "none"}`;
+const DEDUP_WINDOWS: Record<string, number> = {
+  message_received: 5 * 60 * 1000,
+  showing_confirmed: 60 * 60 * 1000,
+  showing_declined: 60 * 60 * 1000,
+  offer_response: 60 * 60 * 1000,
+};
+const DEFAULT_DEDUP_WINDOW = 60 * 60 * 1000;
+
+function deduplicationKey(userId: string, type: string, scopeId: number | string | null | undefined): string {
+  return `${userId}:${type}:${scopeId ?? "none"}`;
 }
 
-function isDuplicate(userId: string, type: string, propertyId: number | null | undefined): boolean {
-  const key = deduplicationKey(userId, type, propertyId);
+function isDuplicate(userId: string, type: string, scopeId: number | string | null | undefined): boolean {
+  const key = deduplicationKey(userId, type, scopeId);
   const timestamps = recentEmails.get(key);
   if (!timestamps) return false;
 
-  const oneHourAgo = Date.now() - 60 * 60 * 1000;
-  const valid = timestamps.filter(ts => ts > oneHourAgo);
+  const window = DEDUP_WINDOWS[type] || DEFAULT_DEDUP_WINDOW;
+  const cutoff = Date.now() - window;
+  const valid = timestamps.filter(ts => ts > cutoff);
   recentEmails.set(key, valid);
 
   return valid.length > 0;
 }
 
-function recordEmail(userId: string, type: string, propertyId: number | null | undefined) {
-  const key = deduplicationKey(userId, type, propertyId);
+function recordEmail(userId: string, type: string, scopeId: number | string | null | undefined) {
+  const key = deduplicationKey(userId, type, scopeId);
   const existing = recentEmails.get(key) || [];
   existing.push(Date.now());
   recentEmails.set(key, existing);
@@ -165,6 +174,12 @@ function buildEmailHtml(params: {
     agent_match: "Agent Match",
     open_house: "Open House",
     system: "System",
+    message_received: "New Message",
+    showing_request: "Showing Request",
+    showing_confirmed: "Showing Confirmed",
+    showing_declined: "Showing Declined",
+    showing_update: "Showing Update",
+    offer_response: "Offer Update",
   };
 
   const typeColors: Record<string, string> = {
@@ -173,6 +188,12 @@ function buildEmailHtml(params: {
     agent_match: "#2563eb",
     open_house: "#9333ea",
     system: "#6b7280",
+    message_received: "#2563eb",
+    showing_request: "#9333ea",
+    showing_confirmed: "#16a34a",
+    showing_declined: "#dc2626",
+    showing_update: "#ea580c",
+    offer_response: "#ca8a04",
   };
 
   const typeEmoji: Record<string, string> = {
@@ -181,6 +202,12 @@ function buildEmailHtml(params: {
     agent_match: "\u{1F91D}",
     open_house: "\u{1F4C5}",
     system: "\u{2139}\u{FE0F}",
+    message_received: "\u{1F4AC}",
+    showing_request: "\u{1F4C5}",
+    showing_confirmed: "\u{2705}",
+    showing_declined: "\u{274C}",
+    showing_update: "\u{1F504}",
+    offer_response: "\u{1F4B0}",
   };
 
   const label = typeLabels[type] || "Notification";
@@ -272,13 +299,14 @@ export interface SendNotificationEmailParams {
   message: string;
   linkUrl?: string | null;
   propertyId?: number | null;
+  conversationId?: number | null;
   propertyCard?: PropertyCardData | null;
   userId: string;
   emailsSentToday: number;
 }
 
 export async function sendNotificationEmail(params: SendNotificationEmailParams): Promise<{ sent: boolean; reason?: string }> {
-  const { to, recipientName, type, title, message, linkUrl, propertyId, propertyCard, userId, emailsSentToday } = params;
+  const { to, recipientName, type, title, message, linkUrl, propertyId, conversationId, propertyCard, userId, emailsSentToday } = params;
 
   const configured = await isEmailConfigured();
   if (!configured) {
@@ -289,7 +317,8 @@ export async function sendNotificationEmail(params: SendNotificationEmailParams)
     return { sent: false, reason: `Daily limit reached (${DAILY_EMAIL_LIMIT})` };
   }
 
-  if (isDuplicate(userId, type, propertyId)) {
+  const dedupScope = type === "message_received" ? `conv:${conversationId}` : propertyId;
+  if (isDuplicate(userId, type, dedupScope)) {
     return { sent: false, reason: "Duplicate email suppressed" };
   }
 
@@ -298,7 +327,7 @@ export async function sendNotificationEmail(params: SendNotificationEmailParams)
     const html = buildEmailHtml({ title, message, type, linkUrl, recipientName, propertyCard: propertyCard || null });
     await sendViaGmail(to, subject, html);
 
-    recordEmail(userId, type, propertyId);
+    recordEmail(userId, type, dedupScope);
     console.log(`[Email] Sent ${type} notification to ${to}`);
     return { sent: true };
   } catch (err: any) {

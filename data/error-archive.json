@@ -1,0 +1,374 @@
+[
+  {
+    "archivedAt": "2026-03-14T16:58:45.236Z",
+    "count": 7,
+    "reports": [
+      {
+        "id": 8,
+        "type": "api_error",
+        "message": "GET /api/properties/51826/reviews/all returned 500",
+        "stack": null,
+        "componentStack": null,
+        "url": "https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/property/51826",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+        "userId": null,
+        "sessionId": "1773506550578-5jp2pmxj",
+        "breadcrumbs": [
+          {
+            "type": "navigation",
+            "message": "Page load: /search",
+            "timestamp": 1773506499888
+          },
+          {
+            "type": "click",
+            "message": "Click [button-map-layers]",
+            "timestamp": 1773506531961
+          },
+          {
+            "type": "click",
+            "message": "Click [button-map-layers]",
+            "timestamp": 1773506541482
+          },
+          {
+            "type": "navigation",
+            "message": "Navigate to /property/51826",
+            "timestamp": 1773506550344
+          },
+          {
+            "type": "network",
+            "message": "GET /api/profile/completeness → 500",
+            "timestamp": 1773506550578
+          },
+          {
+            "type": "network",
+            "message": "GET /api/properties/51826/reviews/all → 500",
+            "timestamp": 1773506550584
+          }
+        ],
+        "metadata": {
+          "memory": {
+            "used": 70876625,
+            "total": 113364065
+          },
+          "online": true,
+          "viewport": {
+            "width": 1280,
+            "height": 720
+          },
+          "timestamp": "2026-03-14T16:42:30.584Z"
+        },
+        "status": "resolved",
+        "adminNotes": null,
+        "resolved": true,
+        "occurrences": 1,
+        "firstSeen": "2026-03-14T16:42:32.595Z",
+        "lastSeen": "2026-03-14T16:42:32.595Z"
+      },
+      {
+        "id": 7,
+        "type": "api_error",
+        "message": "GET /api/profile/completeness returned 500",
+        "stack": null,
+        "componentStack": null,
+        "url": "https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/property/51826",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+        "userId": null,
+        "sessionId": "1773506550578-5jp2pmxj",
+        "breadcrumbs": [
+          {
+            "type": "navigation",
+            "message": "Page load: /search",
+            "timestamp": 1773506499888
+          },
+          {
+            "type": "click",
+            "message": "Click [button-map-layers]",
+            "timestamp": 1773506531961
+          },
+          {
+            "type": "click",
+            "message": "Click [button-map-layers]",
+            "timestamp": 1773506541482
+          },
+          {
+            "type": "navigation",
+            "message": "Navigate to /property/51826",
+            "timestamp": 1773506550344
+          },
+          {
+            "type": "network",
+            "message": "GET /api/profile/completeness → 500",
+            "timestamp": 1773506550578
+          }
+        ],
+        "metadata": {
+          "memory": {
+            "used": 70876625,
+            "total": 113364065
+          },
+          "online": true,
+          "viewport": {
+            "width": 1280,
+            "height": 720
+          },
+          "timestamp": "2026-03-14T16:42:30.579Z"
+        },
+        "status": "resolved",
+        "adminNotes": null,
+        "resolved": true,
+        "occurrences": 1,
+        "firstSeen": "2026-03-14T16:42:32.592Z",
+        "lastSeen": "2026-03-14T16:42:32.592Z"
+      },
+      {
+        "id": 5,
+        "type": "react_error",
+        "message": "displayReviews.map is not a function",
+        "stack": "TypeError: displayReviews.map is not a function\n    at PropertyReviewSection (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/src/components/PropertyReviewSection.tsx:406:22)\n    at renderWithHooks (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-LPF6KSF2.js?v=03a9f0f5:11596:26)\n    at updateFunctionComponent (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-LPF6KSF2.js?v=03a9f0f5:14630:28)\n    at beginWork (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-LPF6KSF2.js?v=03a9f0f5:15972:22)\n    at beginWork$1 (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-LPF6KSF2.js?v=03a9f0f5:19806:22)\n    at performUnitOfWork (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-LPF6KSF2.js?v=03a9f0f5:19251:20)\n    at workLoopSync (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-LPF6KSF2.js?v=03a9f0f5:19190:13)\n    at renderRootSync (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-LPF6KSF2.js?v=03a9f0f5:19169:15)\n    at recoverFromConcurrentError (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-LPF6KSF2.js?v=03a9f0f5:18786:28)\n    at performSyncWorkOnRoot (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-LPF6KSF2.js?v=03a9f0f5:18932:28)",
+        "componentStack": "\n    at PropertyReviewSection (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/src/components/PropertyReviewSection.tsx:303:3)\n    at div\n    at div\n    at div\n    at PropertyDetail (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/src/pages/PropertyDetail.tsx:2008:18)\n    at Route (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=03a9f0f5:322:16)\n    at Switch (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=03a9f0f5:378:17)\n    at Router\n    at ErrorBoundary (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/src/App.tsx:30:5)\n    at main\n    at div\n    at Provider (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-PWGSEKUG.js?v=03a9f0f5:41:15)\n    at TooltipProvider (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=03a9f0f5:52:5)\n    at QueryClientProvider (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=03a9f0f5:2747:3)\n    at App (https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/src/App.tsx:325:3)",
+        "url": "https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/property/51825",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+        "userId": null,
+        "sessionId": "1773506376486-f1u0k0mj",
+        "breadcrumbs": [
+          {
+            "type": "navigation",
+            "message": "Page load: /search",
+            "timestamp": 1773506312642
+          },
+          {
+            "type": "click",
+            "message": "Click [select-min-price]",
+            "timestamp": 1773506323215
+          },
+          {
+            "type": "click",
+            "message": "Click [button-map-layers]",
+            "timestamp": 1773506367397
+          },
+          {
+            "type": "navigation",
+            "message": "Navigate to /property/51825",
+            "timestamp": 1773506376338
+          },
+          {
+            "type": "network",
+            "message": "GET /api/properties/51825/reviews/all → 500",
+            "timestamp": 1773506376485
+          },
+          {
+            "type": "network",
+            "message": "GET /api/profile/completeness → 500",
+            "timestamp": 1773506376492
+          }
+        ],
+        "metadata": {
+          "memory": {
+            "used": 66963858,
+            "total": 88239874
+          },
+          "online": true,
+          "viewport": {
+            "width": 1280,
+            "height": 720
+          },
+          "timestamp": "2026-03-14T16:39:36.560Z"
+        },
+        "status": "resolved",
+        "adminNotes": null,
+        "resolved": true,
+        "occurrences": 3,
+        "firstSeen": "2026-03-14T16:39:38.506Z",
+        "lastSeen": "2026-03-14T16:39:38.526Z"
+      },
+      {
+        "id": 6,
+        "type": "api_error",
+        "message": "GET /api/properties/51825/reviews/all returned 500",
+        "stack": null,
+        "componentStack": null,
+        "url": "https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/property/51825",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+        "userId": null,
+        "sessionId": "1773506376486-f1u0k0mj",
+        "breadcrumbs": [
+          {
+            "type": "navigation",
+            "message": "Page load: /search",
+            "timestamp": 1773506312642
+          },
+          {
+            "type": "click",
+            "message": "Click [select-min-price]",
+            "timestamp": 1773506323215
+          },
+          {
+            "type": "click",
+            "message": "Click [button-map-layers]",
+            "timestamp": 1773506367397
+          },
+          {
+            "type": "navigation",
+            "message": "Navigate to /property/51825",
+            "timestamp": 1773506376338
+          },
+          {
+            "type": "network",
+            "message": "GET /api/properties/51825/reviews/all → 500",
+            "timestamp": 1773506376485
+          }
+        ],
+        "metadata": {
+          "memory": {
+            "used": 65431685,
+            "total": 87969473
+          },
+          "online": true,
+          "viewport": {
+            "width": 1280,
+            "height": 720
+          },
+          "timestamp": "2026-03-14T16:39:36.486Z"
+        },
+        "status": "resolved",
+        "adminNotes": null,
+        "resolved": true,
+        "occurrences": 1,
+        "firstSeen": "2026-03-14T16:39:38.512Z",
+        "lastSeen": "2026-03-14T16:39:38.512Z"
+      },
+      {
+        "id": 4,
+        "type": "api_error",
+        "message": "GET /api/profile/completeness returned 500",
+        "stack": null,
+        "componentStack": null,
+        "url": "https://015100f8-8eaf-44bc-85de-18d7c26087a8-00-1ey4sfmbhvszs.janeway.replit.dev/property/51825",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+        "userId": null,
+        "sessionId": "1773506376486-f1u0k0mj",
+        "breadcrumbs": [
+          {
+            "type": "navigation",
+            "message": "Page load: /search",
+            "timestamp": 1773506312642
+          },
+          {
+            "type": "click",
+            "message": "Click [select-min-price]",
+            "timestamp": 1773506323215
+          },
+          {
+            "type": "click",
+            "message": "Click [button-map-layers]",
+            "timestamp": 1773506367397
+          },
+          {
+            "type": "navigation",
+            "message": "Navigate to /property/51825",
+            "timestamp": 1773506376338
+          },
+          {
+            "type": "network",
+            "message": "GET /api/properties/51825/reviews/all → 500",
+            "timestamp": 1773506376485
+          },
+          {
+            "type": "network",
+            "message": "GET /api/profile/completeness → 500",
+            "timestamp": 1773506376492
+          }
+        ],
+        "metadata": {
+          "memory": {
+            "used": 65431685,
+            "total": 87969473
+          },
+          "online": true,
+          "viewport": {
+            "width": 1280,
+            "height": 720
+          },
+          "timestamp": "2026-03-14T16:39:36.492Z"
+        },
+        "status": "resolved",
+        "adminNotes": null,
+        "resolved": true,
+        "occurrences": 1,
+        "firstSeen": "2026-03-14T16:39:38.499Z",
+        "lastSeen": "2026-03-14T16:39:38.499Z"
+      },
+      {
+        "id": 2,
+        "type": "uncaught_error",
+        "message": "Cannot read properties of undefined (reading map)",
+        "stack": "TypeError: Cannot read properties of undefined\n    at PropertyCard.tsx:45:12\n    at renderWithHooks (react-dom.js:100)",
+        "componentStack": null,
+        "url": "http://localhost/search",
+        "userAgent": "Mozilla/5.0 Test",
+        "userId": null,
+        "sessionId": null,
+        "breadcrumbs": [
+          {
+            "type": "navigation",
+            "message": "Page load: /",
+            "timestamp": 1710000000000
+          },
+          {
+            "type": "click",
+            "message": "Click [link-search]",
+            "timestamp": 1710000001000
+          },
+          {
+            "type": "navigation",
+            "message": "Navigate to /search",
+            "timestamp": 1710000001500
+          }
+        ],
+        "metadata": {
+          "online": true,
+          "viewport": {
+            "width": 375,
+            "height": 812
+          }
+        },
+        "status": "resolved",
+        "adminNotes": null,
+        "resolved": true,
+        "occurrences": 1,
+        "firstSeen": "2026-03-14T16:25:07.170Z",
+        "lastSeen": "2026-03-14T16:25:07.170Z"
+      },
+      {
+        "id": 1,
+        "type": "test_error",
+        "message": "Test error from curl",
+        "stack": "Error: test\n    at test.js:1:1",
+        "componentStack": null,
+        "url": "http://localhost/test",
+        "userAgent": "curl/test",
+        "userId": null,
+        "sessionId": null,
+        "breadcrumbs": [
+          {
+            "type": "navigation",
+            "message": "Page load",
+            "timestamp": 1710000000000
+          }
+        ],
+        "metadata": {
+          "viewport": {
+            "width": 1920,
+            "height": 1080
+          }
+        },
+        "status": "resolved",
+        "adminNotes": null,
+        "resolved": true,
+        "occurrences": 2,
+        "firstSeen": "2026-03-14T16:24:55.689Z",
+        "lastSeen": "2026-03-14T16:24:59.999Z"
+      }
+    ]
+  }
+]

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Fragment } from "react";
 import { useRoute, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -47,6 +47,15 @@ export default function ConversationThread() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    if (conversationId && isAuthenticated) {
+      apiRequest("PATCH", `/api/conversations/${conversationId}/read`).then(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversationId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/conversations/unread-count"] });
+      }).catch(() => {});
+    }
+  }, [conversationId, isAuthenticated]);
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-[80vh] flex items-center justify-center">
@@ -94,6 +103,75 @@ export default function ConversationThread() {
     }
   };
 
+  const lastReadAt = isBuyer ? conversation.buyerLastReadAt : conversation.agentLastReadAt;
+  const lastReadTime = lastReadAt ? new Date(lastReadAt).getTime() : null;
+  let unreadSeparatorShown = false;
+
+  function renderMessage(msg: any) {
+    const isMe = msg.senderUserId === user?.id;
+    const senderName = msg.sender?.firstName || msg.sender?.email?.split("@")[0] || "User";
+    const isSystem = msg.type === "system";
+    const isShowingRequest = msg.type === "showing_request";
+    const isReverseOffer = msg.type === "reverse_offer";
+
+    if (isSystem) {
+      return (
+        <div key={msg.id} className="text-center">
+          <span className="inline-block bg-muted text-muted-foreground text-xs px-3 py-1 rounded-full">
+            {msg.content}
+          </span>
+        </div>
+      );
+    }
+
+    if (isShowingRequest) {
+      return (
+        <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+          <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${isMe ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`} data-testid={`message-${msg.id}`}>
+            <div className="flex items-center gap-1.5 mb-1">
+              <Calendar className="w-3.5 h-3.5" />
+              <span className="text-xs font-bold">Showing Request</span>
+            </div>
+            <p className="text-sm">{msg.content}</p>
+            <p className={`text-xs mt-1 ${isMe ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
+              {new Date(msg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (isReverseOffer) {
+      return (
+        <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+          <div className={`max-w-[80%] rounded-2xl px-4 py-3 border-2 border-amber-400/40 ${isMe ? "bg-amber-600 text-white" : "bg-amber-50 dark:bg-amber-900/20 text-foreground"}`} data-testid={`message-${msg.id}`}>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-xs font-bold">Reverse Offer</span>
+            </div>
+            <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+            <p className={`text-xs mt-1 ${isMe ? "text-white/60" : "text-muted-foreground"}`}>
+              {new Date(msg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+        <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${isMe ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`} data-testid={`message-${msg.id}`}>
+          {!isMe && (
+            <p className="text-xs font-bold mb-0.5 text-foreground">{senderName}</p>
+          )}
+          <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+          <p className={`text-xs mt-1 ${isMe ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
+            {new Date(msg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] max-w-4xl mx-auto" data-testid="conversation-thread">
       <div className="bg-card border-b border-border px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
@@ -140,50 +218,20 @@ export default function ConversationThread() {
           </div>
         )}
         {messages.map((msg: any) => {
-          const isMe = msg.senderUserId === user?.id;
-          const senderName = msg.sender?.firstName || msg.sender?.email?.split("@")[0] || "User";
-          const isSystem = msg.type === "system";
-          const isShowingRequest = msg.type === "showing_request";
-
-          if (isSystem) {
-            return (
-              <div key={msg.id} className="text-center">
-                <span className="inline-block bg-muted text-muted-foreground text-xs px-3 py-1 rounded-full">
-                  {msg.content}
-                </span>
-              </div>
-            );
-          }
-
-          if (isShowingRequest) {
-            return (
-              <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${isMe ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`} data-testid={`message-${msg.id}`}>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span className="text-xs font-bold">Showing Request</span>
-                  </div>
-                  <p className="text-sm">{msg.content}</p>
-                  <p className={`text-xs mt-1 ${isMe ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-                    {new Date(msg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                  </p>
-                </div>
-              </div>
-            );
-          }
-
+          const msgTime = new Date(msg.createdAt).getTime();
+          const showUnreadSep = !unreadSeparatorShown && lastReadTime && msgTime > lastReadTime && msg.senderUserId !== user?.id;
+          if (showUnreadSep) unreadSeparatorShown = true;
           return (
-            <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${isMe ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`} data-testid={`message-${msg.id}`}>
-                {!isMe && (
-                  <p className={`text-xs font-bold mb-0.5 ${isMe ? "text-primary-foreground/80" : "text-foreground"}`}>{senderName}</p>
-                )}
-                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                <p className={`text-xs mt-1 ${isMe ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-                  {new Date(msg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                </p>
-              </div>
-            </div>
+            <Fragment key={msg.id}>
+              {showUnreadSep && (
+                <div className="flex items-center gap-3 py-1" data-testid="unread-separator">
+                  <div className="flex-1 h-px bg-destructive/40" />
+                  <span className="text-xs font-bold text-destructive/70">New messages</span>
+                  <div className="flex-1 h-px bg-destructive/40" />
+                </div>
+              )}
+              {renderMessage(msg)}
+            </Fragment>
           );
         })}
         <div ref={messagesEndRef} />
