@@ -3,7 +3,7 @@ import { useParams, useLocation, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useProperty, useProperties } from "@/hooks/use-properties";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
-import { BedDouble, Bath, Maximize, MapPin, Heart, Sparkles, Building, Briefcase, ChevronLeft, ChevronRight, Phone, Mail, MessageSquare, Camera, Home, LandPlot, Clock, TrendingUp, CalendarDays, Activity, Calculator, ChevronDown, DollarSign, Percent, Share2, Printer, Check, Link2, School, Trees, Hospital, Bus, ShoppingCart, Navigation, View, ExternalLink } from "lucide-react";
+import { BedDouble, Bath, Maximize, MapPin, Heart, Sparkles, Building, Briefcase, ChevronLeft, ChevronRight, Phone, Mail, MessageSquare, Camera, Home, LandPlot, Clock, TrendingUp, CalendarDays, Activity, Calculator, ChevronDown, DollarSign, Percent, Share2, Printer, Check, Link2, School, Trees, Hospital, Bus, ShoppingCart, Navigation, View, ExternalLink, GraduationCap, BookOpen, Globe } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { MapView } from "@/components/MapView";
 import { PublicRecordsPanel } from "@/components/PublicRecordsPanel";
@@ -538,6 +538,179 @@ const AMENITY_CONFIG = [
   { key: "transit" as const, label: "Public Transit", icon: Bus, color: "bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400", accent: "text-violet-600 dark:text-violet-400" },
   { key: "hospitals" as const, label: "Healthcare", icon: Hospital, color: "bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400", accent: "text-rose-600 dark:text-rose-400" },
 ];
+
+interface SchoolData {
+  name: string;
+  level: "elementary" | "middle" | "high" | "private" | "other";
+  grades: string | null;
+  district: string | null;
+  address: string | null;
+  distanceMeters: number;
+  distanceMiles: number;
+  lat: number;
+  lng: number;
+  website: string | null;
+  phone: string | null;
+  greatSchoolsUrl: string | null;
+}
+
+interface SchoolsResponse {
+  schools: SchoolData[];
+  district: string | null;
+}
+
+const LEVEL_CONFIG: Record<string, { label: string; icon: typeof School; color: string; accent: string }> = {
+  elementary: { label: "Elementary Schools", icon: BookOpen, color: "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400", accent: "text-emerald-600 dark:text-emerald-400" },
+  middle: { label: "Middle Schools", icon: School, color: "bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400", accent: "text-blue-600 dark:text-blue-400" },
+  high: { label: "High Schools", icon: GraduationCap, color: "bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400", accent: "text-violet-600 dark:text-violet-400" },
+  private: { label: "Private Schools", icon: School, color: "bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400", accent: "text-amber-600 dark:text-amber-400" },
+};
+
+function SchoolsSection({ propertyId }: { propertyId: number }) {
+  const [isOpen, setIsOpen] = useState(true);
+  const { data, isLoading } = useQuery<SchoolsResponse>({
+    queryKey: ["/api/properties", propertyId, "schools"],
+    queryFn: async () => {
+      const res = await fetch(`/api/properties/${propertyId}/schools`);
+      if (!res.ok) throw new Error("Failed to fetch schools");
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 60,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="mt-10 pt-8 border-t border-border" data-testid="section-schools">
+        <h2 className="text-xl font-display font-bold mb-5 flex items-center gap-2">
+          <GraduationCap className="w-5 h-5 text-primary" />
+          Schools
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="rounded-xl border border-border bg-muted/30 animate-pulse h-44" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!data || data.schools.length === 0) return null;
+
+  const grouped: Record<string, SchoolData[]> = {};
+  for (const school of data.schools) {
+    const key = school.level;
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(school);
+  }
+
+  const levelOrder = ["elementary", "middle", "high", "private"];
+  const sortedLevels = levelOrder.filter(l => grouped[l]?.length > 0);
+
+  return (
+    <div className="mt-10 pt-8 border-t border-border" data-testid="section-schools">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center justify-between w-full mb-1"
+        data-testid="toggle-schools"
+      >
+        <div className="flex items-center gap-2">
+          <GraduationCap className="w-5 h-5 text-primary" />
+          <h2 className="text-xl sm:text-2xl font-display font-bold">Schools</h2>
+        </div>
+        <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {data.district && (
+        <p className="text-sm text-muted-foreground mb-4" data-testid="school-district">
+          School District: <span className="font-medium text-foreground/80">{data.district}</span>
+        </p>
+      )}
+
+      {isOpen && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
+            {sortedLevels.map(level => {
+              const config = LEVEL_CONFIG[level];
+              const schools = grouped[level].slice(0, 5);
+              const Icon = config.icon;
+              return (
+                <div
+                  key={level}
+                  className="rounded-xl border border-border bg-muted/30 p-4"
+                  data-testid={`card-schools-${level}`}
+                >
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className={`w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 ${config.color}`}>
+                      <Icon className="w-4.5 h-4.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-sm text-foreground">{config.label}</h3>
+                      <p className="text-xs text-muted-foreground">
+                        {schools.length} nearby
+                      </p>
+                    </div>
+                  </div>
+                  <ul className="space-y-0">
+                    {schools.map((school, i) => (
+                      <li
+                        key={i}
+                        className="py-2 border-b border-border/40 last:border-0"
+                        data-testid={`item-school-${level}-${i}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <span className="text-sm text-foreground font-medium leading-tight block truncate">
+                              {school.name}
+                            </span>
+                            {school.grades && (
+                              <span className="text-xs text-muted-foreground">
+                                Grades {school.grades}
+                              </span>
+                            )}
+                          </div>
+                          <span className={`text-xs font-semibold flex-shrink-0 mt-0.5 ${config.accent}`}>
+                            {school.distanceMiles} mi
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          {school.greatSchoolsUrl && (
+                            <a
+                              href={school.greatSchoolsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary/70 hover:text-primary hover:underline flex items-center gap-0.5"
+                              data-testid={`link-greatschools-${level}-${i}`}
+                            >
+                              GreatSchools
+                              <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                          {school.website && (
+                            <a
+                              href={school.website}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary/70 hover:text-primary hover:underline flex items-center gap-0.5"
+                              data-testid={`link-school-website-${level}-${i}`}
+                            >
+                              Website
+                              <Globe className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">Source: OpenStreetMap · School data is for informational purposes only</p>
+        </>
+      )}
+    </div>
+  );
+}
 
 function NeighborhoodSection({ propertyId }: { propertyId: number }) {
   const { data, isLoading } = useQuery<NeighborhoodData>({
@@ -1477,6 +1650,10 @@ export default function PropertyDetail() {
 
           <SectionErrorBoundary name="AgentMLSPanel">
             <AgentMLSPanel propertyId={property.id} isAgent={!!(user?.role === 'agent' && user?.agentVerified)} />
+          </SectionErrorBoundary>
+
+          <SectionErrorBoundary name="SchoolsSection">
+            <SchoolsSection propertyId={property.id} />
           </SectionErrorBoundary>
 
           <SectionErrorBoundary name="NeighborhoodSection">

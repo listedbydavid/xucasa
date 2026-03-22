@@ -12,6 +12,7 @@ import { z } from "zod";
 import { registerAuthRoutes } from "./replit_integrations/auth";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { getPublicRecords } from "./publicRecords";
+import { getNearbySchools } from "./schoolService";
 import { getZoningData } from "./zoningData";
 import { runIdxSync, isSyncInProgress, idxConfigured, getLastSyncLog, getSyncLogs, startIdxAutoSync, verifyAgentLicense, getRealtyFeedToken, realtyFeedODataFetch, REALTYFEED_API_BASE } from "./idxSync";
 import { sendNotificationEmail, sendTestEmail, isEmailConfigured } from "./emailService";
@@ -438,6 +439,31 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Public records error:", err);
       res.status(500).json({ message: "Failed to fetch public records" });
+    }
+  });
+
+  app.get("/api/properties/:id/schools", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+
+      const prop = await storage.getProperty(id);
+      if (!prop) return res.status(404).json({ message: "Property not found" });
+
+      const lat = prop.lat ? parseFloat(prop.lat as string) : null;
+      const lng = prop.lng ? parseFloat(prop.lng as string) : null;
+      const city = prop.addressCity || prop.location?.split(",")[0]?.trim() || "San Diego";
+      const state = prop.addressState || "CA";
+
+      if (!lat || !lng) {
+        return res.status(200).json({ schools: [], district: null });
+      }
+
+      const data = await getNearbySchools(lat, lng, city, state);
+      res.status(200).json(data);
+    } catch (err) {
+      console.error("Schools API error:", err);
+      res.status(500).json({ message: "Failed to fetch schools data" });
     }
   });
 
