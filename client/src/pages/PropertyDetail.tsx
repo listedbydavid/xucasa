@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Component, type ReactNode, type ErrorInfo } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useProperty, useProperties } from "@/hooks/use-properties";
@@ -12,6 +12,25 @@ import { AuthPromptModal } from "@/components/AuthPromptModal";
 import { SdmlsDisclaimer } from "@/components/SdmlsDisclaimer";
 import { PropertyReviewSection } from "@/components/PropertyReviewSection";
 import { AgentMLSPanel } from "@/components/AgentMLSPanel";
+
+class SectionErrorBoundary extends Component<{ children: ReactNode; name?: string }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode; name?: string }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error(`SectionErrorBoundary [${this.props.name || "unknown"}] caught:`, error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return null;
+    }
+    return this.props.children;
+  }
+}
 
 const FALLBACK = "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1600&h=900&fit=crop";
 
@@ -526,12 +545,13 @@ function NeighborhoodSection({ propertyId }: { propertyId: number }) {
     staleTime: 1000 * 60 * 60,
   });
 
-  const hasNearby = data && (
-    data.nearby.schools.length > 0 ||
-    data.nearby.parks.length > 0 ||
-    data.nearby.hospitals.length > 0 ||
-    data.nearby.transit.length > 0 ||
-    data.nearby.groceries.length > 0
+  const nearby = data?.nearby;
+  const hasNearby = nearby && (
+    (nearby.schools?.length ?? 0) > 0 ||
+    (nearby.parks?.length ?? 0) > 0 ||
+    (nearby.hospitals?.length ?? 0) > 0 ||
+    (nearby.transit?.length ?? 0) > 0 ||
+    (nearby.groceries?.length ?? 0) > 0
   );
 
   if (isLoading) {
@@ -552,7 +572,7 @@ function NeighborhoodSection({ propertyId }: { propertyId: number }) {
 
   if (!hasNearby) return null;
 
-  const categories = AMENITY_CONFIG.filter(c => data!.nearby[c.key].length > 0);
+  const categories = AMENITY_CONFIG.filter(c => (nearby![c.key]?.length ?? 0) > 0);
 
   return (
     <div className="mt-10 pt-8 border-t border-border" data-testid="section-neighborhood">
@@ -566,7 +586,7 @@ function NeighborhoodSection({ propertyId }: { propertyId: number }) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {categories.map(({ key, label, icon: Icon, color, accent }) => {
-          const places = data!.nearby[key].slice(0, 4);
+          const places = (nearby![key] || []).slice(0, 4);
           const closest = places[0];
           return (
             <div
@@ -1356,40 +1376,62 @@ export default function PropertyDetail() {
                 propertyAddress={propertyAddress}
               />
 
-              <div className="mt-8 bg-muted rounded-2xl sm:rounded-3xl border border-border overflow-hidden h-48 sm:h-64">
-                <MapView
-                  properties={[property]}
-                  center={
-                    property.lat && property.lng
-                      ? [parseFloat(property.lng as string), parseFloat(property.lat as string)]
-                      : [-122.4194, 37.7749]
-                  }
-                  zoom={15}
-                />
-              </div>
+              <SectionErrorBoundary name="MapView">
+                <div className="mt-8 bg-muted rounded-2xl sm:rounded-3xl border border-border overflow-hidden h-48 sm:h-64">
+                  <MapView
+                    properties={[property]}
+                    center={
+                      property.lat && property.lng
+                        ? [parseFloat(property.lng as string), parseFloat(property.lat as string)]
+                        : [-122.4194, 37.7749]
+                    }
+                    zoom={15}
+                  />
+                </div>
+              </SectionErrorBoundary>
             </div>
           </div>
 
-          <AgentMLSPanel propertyId={property.id} isAgent={!!(user?.role === 'agent' && user?.agentVerified)} />
+          <SectionErrorBoundary name="AgentMLSPanel">
+            <AgentMLSPanel propertyId={property.id} isAgent={!!(user?.role === 'agent' && user?.agentVerified)} />
+          </SectionErrorBoundary>
 
-          <NeighborhoodSection propertyId={property.id} />
+          <SectionErrorBoundary name="NeighborhoodSection">
+            <NeighborhoodSection propertyId={property.id} />
+          </SectionErrorBoundary>
 
-          <MortgageCalculator price={property.price} hoaFee={property.hoaFee} />
+          <SectionErrorBoundary name="MortgageCalculator">
+            <MortgageCalculator price={property.price} hoaFee={property.hoaFee} />
+          </SectionErrorBoundary>
 
-          <PropertyReviewSection
-            propertyId={property.id}
-            isListingAgent={!!(user && property.agentId && property.agentId === (user as any).id)}
-            isAdmin={!!(user && (user as any)?.isAdmin)}
-          />
+          <SectionErrorBoundary name="PropertyReviewSection">
+            <PropertyReviewSection
+              propertyId={property.id}
+              isListingAgent={!!(user && property.agentId && property.agentId === (user as any).id)}
+              isAdmin={!!(user && (user as any)?.isAdmin)}
+            />
+          </SectionErrorBoundary>
 
-          <PriceHistorySection property={property} daysOnMarket={daysOnMarket} />
-          <ListingActivitySection property={property} daysOnMarket={daysOnMarket} />
+          <SectionErrorBoundary name="PriceHistorySection">
+            <PriceHistorySection property={property} daysOnMarket={daysOnMarket} />
+          </SectionErrorBoundary>
+          <SectionErrorBoundary name="ListingActivitySection">
+            <ListingActivitySection property={property} daysOnMarket={daysOnMarket} />
+          </SectionErrorBoundary>
 
-          <SimilarHomesSection propertyId={property.id} />
-          <SoldNearbySection propertyId={property.id} />
+          <SectionErrorBoundary name="SimilarHomesSection">
+            <SimilarHomesSection propertyId={property.id} />
+          </SectionErrorBoundary>
+          <SectionErrorBoundary name="SoldNearbySection">
+            <SoldNearbySection propertyId={property.id} />
+          </SectionErrorBoundary>
 
-          <ZoningPanel propertyId={property.id} />
-          <PublicRecordsPanel propertyId={property.id} />
+          <SectionErrorBoundary name="ZoningPanel">
+            <ZoningPanel propertyId={property.id} />
+          </SectionErrorBoundary>
+          <SectionErrorBoundary name="PublicRecordsPanel">
+            <PublicRecordsPanel propertyId={property.id} />
+          </SectionErrorBoundary>
           <SdmlsDisclaimer />
         </div>
       </div>

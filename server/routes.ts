@@ -1521,6 +1521,7 @@ export async function registerRoutes(
         } : { firstName: "Anonymous", lastInitial: "", profileImageUrl: null },
       })));
     } catch (err) {
+      console.error("Error fetching all reviews for property", req.params.id, err);
       res.status(500).json({ message: "Internal Server Error" });
     }
   });
@@ -1542,6 +1543,7 @@ export async function registerRoutes(
         hasMailingAddress: !!user.mailingAddress,
       }});
     } catch (err) {
+      console.error("Error fetching profile completeness for user", req.user?.claims?.sub, err);
       res.status(500).json({ message: "Internal Server Error" });
     }
   });

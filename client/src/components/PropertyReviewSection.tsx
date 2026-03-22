@@ -205,12 +205,20 @@ export function PropertyReviewSection({ propertyId, isListingAgent, isAdmin }: {
 
   const { data: publicReviews = [], isLoading: loadingPublic } = useQuery<Review[]>({
     queryKey: ["/api/properties", propertyId, "reviews"],
-    queryFn: () => fetch(`/api/properties/${propertyId}/reviews`).then(r => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`/api/properties/${propertyId}/reviews`);
+      if (!r.ok) throw new Error(`${r.status}: ${r.statusText}`);
+      return r.json();
+    },
   });
 
   const { data: allReviews } = useQuery<Review[]>({
     queryKey: ["/api/properties", propertyId, "reviews", "all"],
-    queryFn: () => fetch(`/api/properties/${propertyId}/reviews/all`, { credentials: "include" }).then(r => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`/api/properties/${propertyId}/reviews/all`, { credentials: "include" });
+      if (!r.ok) throw new Error(`${r.status}: ${r.statusText}`);
+      return r.json();
+    },
     enabled: canModerate,
   });
 
