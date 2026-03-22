@@ -64,6 +64,18 @@ app.use((req, res, next) => {
   await setupAuth(app);
   await registerRoutes(httpServer, app);
 
+  try {
+    const { db } = await import("./db");
+    const { users } = await import("@shared/schema");
+    const { eq, and, isNull } = await import("drizzle-orm");
+    await db.update(users)
+      .set({ onboardingCompleted: true })
+      .where(and(eq(users.role, "admin"), isNull(users.onboardingCompleted)));
+    log("Admin onboarding backfill complete");
+  } catch (e) {
+    log("Admin onboarding backfill skipped: " + (e as Error).message);
+  }
+
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";

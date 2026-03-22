@@ -1,30 +1,43 @@
 import { useAuth } from "@/hooks/use-auth";
-import { useLocation } from "wouter";
-import { useEffect } from "react";
+import { Redirect } from "wouter";
+import type { ComponentType } from "react";
 
-const PUBLIC_PATHS = ["/", "/search", "/swipe", "/property", "/auth", "/privacy", "/terms"];
-
-export function useOnboardingGuard() {
+export function ProtectedRoute({ component: Component }: { component: ComponentType }) {
   const { user, isAuthenticated, isLoading } = useAuth();
-  const [location, setLocation] = useLocation();
 
-  useEffect(() => {
-    if (isLoading) return;
-
-    const isPublic = PUBLIC_PATHS.some(p =>
-      p === "/" ? location === "/" : location.startsWith(p)
+  if (isLoading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
     );
-    if (isPublic) return;
+  }
 
-    if (!isAuthenticated || !user) {
-      setLocation("/auth");
-      return;
-    }
+  if (!isAuthenticated || !user) {
+    return <Redirect to="/auth" />;
+  }
 
-    const isOnboarding = location.startsWith("/onboarding");
-    if (!user.onboardingCompleted && !isOnboarding) {
-      setLocation("/onboarding");
-      return;
-    }
-  }, [user, isAuthenticated, isLoading, location, setLocation]);
+  if (!user.onboardingCompleted) {
+    return <Redirect to="/onboarding" />;
+  }
+
+  return <Component />;
+}
+
+export function AuthOnlyRoute({ component: Component }: { component: ComponentType }) {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect to="/auth" />;
+  }
+
+  return <Component />;
 }

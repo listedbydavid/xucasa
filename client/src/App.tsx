@@ -58,10 +58,9 @@ import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsOfService from "@/pages/TermsOfService";
 import { CookieConsent } from "@/components/CookieConsent";
 import { InstallPrompt } from "@/components/InstallPrompt";
-import { useOnboardingGuard } from "@/components/OnboardingGuard";
+import { ProtectedRoute, AuthOnlyRoute } from "@/components/OnboardingGuard";
 
 function Router() {
-  useOnboardingGuard();
   return (
     <Switch>
       <Route path="/" component={Home} />
@@ -70,15 +69,15 @@ function Router() {
       <Route path="/home-report" component={HomeReport} />
       <Route path="/swipe" component={Swipe} />
       <Route path="/property/:id" component={PropertyDetail} />
-      <Route path="/onboarding" component={Onboarding} />
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/conversations/:id" component={ConversationThread} />
-      <Route path="/agent" component={AgentDashboard} />
-      <Route path="/buyers" component={Buyers} />
-      <Route path="/admin" component={Admin} />
       <Route path="/auth" component={AuthPage} />
       <Route path="/privacy" component={PrivacyPolicy} />
       <Route path="/terms" component={TermsOfService} />
+      <Route path="/onboarding">{() => <AuthOnlyRoute component={Onboarding} />}</Route>
+      <Route path="/dashboard">{() => <ProtectedRoute component={Dashboard} />}</Route>
+      <Route path="/conversations/:id">{() => <ProtectedRoute component={ConversationThread} />}</Route>
+      <Route path="/agent">{() => <ProtectedRoute component={AgentDashboard} />}</Route>
+      <Route path="/buyers">{() => <ProtectedRoute component={Buyers} />}</Route>
+      <Route path="/admin">{() => <ProtectedRoute component={Admin} />}</Route>
       <Route component={NotFound} />
     </Switch>
   );

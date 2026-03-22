@@ -879,6 +879,7 @@ export async function registerRoutes(
         const updated = await authStorage.updateOnboarding(userId, {
           primaryIntent: parsed.data.intent,
           onboardingCompleted: true,
+          currentMode: null,
         });
         res.json(updated);
         return;
