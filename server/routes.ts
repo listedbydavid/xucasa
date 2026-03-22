@@ -3062,6 +3062,34 @@ export async function registerRoutes(
 
   // ── Buyer Interest API ────────────────────────────────────────────────────
 
+  app.post("/api/buyer-interest", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { propertyId, source } = req.body;
+      if (!propertyId) return res.status(400).json({ message: "propertyId required" });
+      const result = await storage.upsertBuyerInterest(propertyId, userId, source || "swipe");
+      res.status(201).json(result);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.get("/api/buyer-interest", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const role = req.query.role;
+      if (role === "agent") {
+        const interests = await storage.getBuyerInterestForAgent(userId);
+        res.json(interests);
+      } else {
+        const interests = await storage.getBuyerInterestForBuyer(userId);
+        res.json(interests);
+      }
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
   app.get("/api/buyer-interest/agent", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;

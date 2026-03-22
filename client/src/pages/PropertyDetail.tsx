@@ -235,6 +235,16 @@ function MobileContactBar({
             Ask
           </button>
         )}
+        {onRequestShowing && (
+          <button
+            onClick={onRequestShowing}
+            className="flex-1 flex items-center justify-center gap-2 bg-primary/10 text-primary py-3 px-4 rounded-xl font-semibold border border-primary/20 active:scale-[0.98] transition-transform"
+            data-testid="mobile-button-request-showing"
+          >
+            <CalendarDays className="w-4 h-4" />
+            Tour
+          </button>
+        )}
         {onRequestInfo && (
           <button
             onClick={onRequestInfo}

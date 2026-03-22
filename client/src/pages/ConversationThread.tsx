@@ -29,7 +29,7 @@ export default function ConversationThread() {
       return res.json();
     },
     enabled: !!conversationId,
-    refetchInterval: 5000,
+    refetchInterval: 10000,
   });
 
   const sendMutation = useMutation({

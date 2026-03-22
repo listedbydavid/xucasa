@@ -1383,7 +1383,7 @@ export class DatabaseStorage implements IStorage {
     const rows = await db.select().from(conversations)
       .innerJoin(properties, eq(conversations.propertyId, properties.id))
       .where(sql`${conversations.buyerUserId} = ${userId} OR ${conversations.agentUserId} = ${userId}`)
-      .orderBy(desc(conversations.updatedAt));
+      .orderBy(desc(sql`COALESCE(${conversations.lastMessageAt}, ${conversations.updatedAt})`));
     const results: (Conversation & { property: Property; buyer: any; agent: any; lastMessage: Message | null; unreadCount: number })[] = [];
     for (const row of rows) {
       const conv = row.conversations;
