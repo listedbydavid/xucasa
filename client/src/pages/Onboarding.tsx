@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import {
   Search, Home, Briefcase, Compass, ArrowRight, ArrowLeft,
   Loader2, MapPin, DollarSign, BedDouble, Bath, Clock, Users,
@@ -25,6 +26,7 @@ const TIMELINE_OPTIONS = ["ASAP", "1–3 months", "3–6 months", "6–12 months
 export default function Onboarding() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const [step, setStep] = useState<Step>("intent");
   const [intent, setIntent] = useState<Intent | null>(null);
   const [loading, setLoading] = useState(false);
@@ -76,6 +78,7 @@ export default function Onboarding() {
       }
       setStep(selected as Step);
     } catch {
+      toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -88,6 +91,7 @@ export default function Onboarding() {
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       window.location.href = "/swipe";
     } catch {
+      toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -103,6 +107,7 @@ export default function Onboarding() {
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       window.location.href = "/home-report";
     } catch {
+      toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -118,6 +123,7 @@ export default function Onboarding() {
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       window.location.href = "/dashboard";
     } catch {
+      toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
