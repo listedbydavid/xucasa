@@ -863,6 +863,141 @@ export async function registerRoutes(
     }
   });
 
+  // ── Onboarding Endpoints ──────────────────────────────────────────────────────
+
+  app.post("/api/onboarding/intent", isAuthenticated, async (req: any, res) => {
+    try {
+      const { authStorage } = await import("./replit_integrations/auth/storage");
+      const userId = req.user.claims.sub;
+      const intentSchema = z.object({
+        intent: z.enum(["buyer", "homeowner", "agent", "explorer"]),
+      });
+      const parsed = intentSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid intent" });
+
+      const updates: any = { primaryIntent: parsed.data.intent, currentMode: parsed.data.intent };
+      if (parsed.data.intent === "explorer") {
+        updates.onboardingCompleted = true;
+      }
+      const updated = await authStorage.updateOnboarding(userId, updates);
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to save intent" });
+    }
+  });
+
+  app.post("/api/onboarding/buyer", isAuthenticated, async (req: any, res) => {
+    try {
+      const { authStorage } = await import("./replit_integrations/auth/storage");
+      const userId = req.user.claims.sub;
+      const buyerSchema = z.object({
+        budget: z.string().optional(),
+        areas: z.array(z.string()).optional(),
+        beds: z.number().optional(),
+        baths: z.number().optional(),
+        timeline: z.string().optional(),
+        hasAgent: z.boolean().optional(),
+      });
+      const parsed = buyerSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid buyer data" });
+
+      const existing = await storage.getUserBuyerProfile(userId);
+      if (!existing) {
+        await storage.createBuyerProfile({
+          userId,
+          displayName: "My Search",
+          preApprovalAmount: parsed.data.budget ? parseInt(parsed.data.budget.replace(/\D/g, '')) || null : null,
+          preferredCities: parsed.data.areas || [],
+          minBeds: parsed.data.beds || null,
+          minBaths: parsed.data.baths || null,
+          moveInTimeline: parsed.data.timeline || null,
+          hasAgent: parsed.data.hasAgent ?? false,
+          isPreApproved: false,
+          homeTypes: [],
+          mustHaves: [],
+          dealBreakers: [],
+        });
+      }
+
+      const updated = await authStorage.updateOnboarding(userId, {
+        buyerProfileCompleted: true,
+        onboardingCompleted: true,
+      });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to save buyer profile" });
+    }
+  });
+
+  app.post("/api/onboarding/homeowner", isAuthenticated, async (req: any, res) => {
+    try {
+      const { authStorage } = await import("./replit_integrations/auth/storage");
+      const userId = req.user.claims.sub;
+      const homeSchema = z.object({
+        address: z.string().min(1),
+        beds: z.number().optional(),
+        baths: z.number().optional(),
+        sqft: z.number().optional(),
+        yearBuilt: z.number().optional(),
+        sellingIntent: z.string().optional(),
+      });
+      const parsed = homeSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid homeowner data" });
+
+      await storage.createUserHome(userId, {
+        address: parsed.data.address,
+        beds: parsed.data.beds || null,
+        baths: parsed.data.baths || null,
+        sqft: parsed.data.sqft || null,
+        yearBuilt: parsed.data.yearBuilt || null,
+        propertyType: null,
+        lotSqft: null,
+        renovations: null,
+        condition: null,
+        notes: parsed.data.sellingIntent || null,
+      });
+
+      const updated = await authStorage.updateOnboarding(userId, {
+        homeownerProfileCompleted: true,
+        onboardingCompleted: true,
+      });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to save homeowner data" });
+    }
+  });
+
+  app.post("/api/onboarding/agent", isAuthenticated, async (req: any, res) => {
+    try {
+      const { authStorage } = await import("./replit_integrations/auth/storage");
+      const userId = req.user.claims.sub;
+      const agentSchema = z.object({
+        licenseNumber: z.string().min(2).max(30),
+        licenseState: z.string().default("CA"),
+        brokerageName: z.string().optional(),
+        mlsId: z.string().optional(),
+      });
+      const parsed = agentSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid agent data" });
+
+      await authStorage.updateAgentInfo(userId, {
+        licenseNumber: parsed.data.licenseNumber,
+        licenseState: parsed.data.licenseState,
+        brokerageName: parsed.data.brokerageName || null,
+        agentMlsId: parsed.data.mlsId || null,
+      });
+
+      const updated = await authStorage.updateOnboarding(userId, {
+        agentProfileCompleted: true,
+        agentVerificationStatus: "pending",
+        onboardingCompleted: true,
+      });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to save agent data" });
+    }
+  });
+
   // Agent verification
   app.post("/api/agent/verify", isAuthenticated, async (req: any, res) => {
     try {

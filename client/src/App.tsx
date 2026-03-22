@@ -53,12 +53,15 @@ import Admin from "@/pages/Admin";
 import HomeReport from "@/pages/HomeReport";
 import AuthPage from "@/pages/AuthPage";
 import ConversationThread from "@/pages/ConversationThread";
+import Onboarding from "@/pages/Onboarding";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsOfService from "@/pages/TermsOfService";
 import { CookieConsent } from "@/components/CookieConsent";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { useOnboardingGuard } from "@/components/OnboardingGuard";
 
 function Router() {
+  useOnboardingGuard();
   return (
     <Switch>
       <Route path="/" component={Home} />
@@ -67,6 +70,7 @@ function Router() {
       <Route path="/home-report" component={HomeReport} />
       <Route path="/swipe" component={Swipe} />
       <Route path="/property/:id" component={PropertyDetail} />
+      <Route path="/onboarding" component={Onboarding} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/conversations/:id" component={ConversationThread} />
       <Route path="/agent" component={AgentDashboard} />

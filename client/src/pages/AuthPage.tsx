@@ -15,7 +15,7 @@ function GoogleIcon({ className }: { className?: string }) {
 }
 
 export default function AuthPage() {
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
@@ -28,7 +28,7 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
 
   if (isAuthenticated) {
-    setLocation("/dashboard");
+    setLocation(user?.onboardingCompleted ? "/dashboard" : "/onboarding");
     return null;
   }
 
@@ -61,7 +61,7 @@ export default function AuthPage() {
         return;
       }
 
-      window.location.href = "/dashboard";
+      window.location.href = "/onboarding";
     } catch {
       setError("Network error. Please try again.");
       setLoading(false);

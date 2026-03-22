@@ -8,6 +8,7 @@ export interface IAuthStorage {
   upsertUser(user: UpsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<Pick<User, 'firstName' | 'lastName' | 'profileImageUrl' | 'phone'>>): Promise<User>;
   updateAgentInfo(id: string, updates: Partial<Pick<User, 'licenseNumber' | 'licenseState' | 'association' | 'brokerageName' | 'agentVerified' | 'agentVerifiedAt' | 'agentMlsId' | 'role'>>): Promise<User>;
+  updateOnboarding(id: string, updates: Partial<Pick<User, 'primaryIntent' | 'onboardingCompleted' | 'buyerProfileCompleted' | 'homeownerProfileCompleted' | 'agentProfileCompleted' | 'agentVerificationStatus' | 'currentMode'>>): Promise<User>;
   getAllUsers(): Promise<User[]>;
   adminUpdateUser(id: string, updates: Partial<Pick<User, 'role' | 'status' | 'adminNotes'>>): Promise<User>;
   deleteUser(id: string): Promise<void>;
@@ -71,6 +72,15 @@ class AuthStorage implements IAuthStorage {
   }
 
   async updateAgentInfo(id: string, updates: Partial<Pick<User, 'licenseNumber' | 'licenseState' | 'association' | 'brokerageName' | 'agentVerified' | 'agentVerifiedAt' | 'agentMlsId' | 'role'>>): Promise<User> {
+    const [updated] = await db
+      .update(users)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return updated;
+  }
+
+  async updateOnboarding(id: string, updates: Partial<Pick<User, 'primaryIntent' | 'onboardingCompleted' | 'buyerProfileCompleted' | 'homeownerProfileCompleted' | 'agentProfileCompleted' | 'agentVerificationStatus' | 'currentMode'>>): Promise<User> {
     const [updated] = await db
       .update(users)
       .set({ ...updates, updatedAt: new Date() })
