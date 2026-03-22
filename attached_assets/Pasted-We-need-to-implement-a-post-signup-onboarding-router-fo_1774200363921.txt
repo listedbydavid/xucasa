@@ -1,0 +1,99 @@
+We need to implement a post-signup onboarding router for xucasa so new users are automatically guided into the correct setup flow.
+
+Important product rule:
+Do NOT treat buyer, homeowner, and agent as separate account systems.
+Use one universal account with role-intent based onboarding.
+
+We need a first-run onboarding flow that asks:
+
+"What brings you to XuCasa today?"
+
+Options:
+1. I want to buy a home
+2. I want to sell or track my home
+3. I’m a real estate agent
+4. I’m just exploring
+
+Requirements:
+
+1. Add onboarding state to the user model
+Include fields such as:
+- primaryIntent
+- onboardingCompleted
+- buyerProfileCompleted
+- homeownerProfileCompleted
+- agentProfileCompleted
+- agentVerificationStatus
+- currentMode (optional but recommended)
+
+2. Build a post-signup routing flow
+After signup/login, if onboardingCompleted is false:
+- show intent selection screen
+- route user into the correct onboarding flow
+
+3. Buyer onboarding flow
+Capture only what is necessary:
+- budget
+- preferred cities
+- beds/baths
+- timeline
+- whether they already have an agent
+
+If they do not have an agent:
+- assign platform/default agent when needed by current routing rules
+
+End destination:
+- swipe/search/buyer dashboard
+
+4. Homeowner onboarding flow
+Capture:
+- property address
+- whether this is their home
+- whether they are considering selling
+- whether they already have an agent
+
+If no agent:
+- allow later assignment or assign when needed based on current communication rules
+
+End destination:
+- My Home / Home Report / seller tools
+
+5. Agent onboarding flow
+Capture:
+- license number
+- brokerage
+- MLS / association info if needed
+
+Then begin or continue existing verification flow.
+
+End destination:
+- Agent Dashboard
+
+6. Explorer flow
+Minimal friction:
+- allow browsing/searching/swiping
+- defer full onboarding until first meaningful action
+
+7. Routing enforcement
+Users should not see the wrong onboarding flow.
+Buyer flow should not ask agent setup questions.
+Agent flow should not ask buyer preference questions.
+
+8. Re-entry logic
+Users can later activate additional modes:
+- buyer can become homeowner
+- homeowner can become buyer
+- agent can still use buyer/homeowner features if appropriate
+
+9. Deliverables
+- recommended schema updates
+- onboarding state model
+- route/page flow
+- frontend components needed
+- backend changes needed
+- implementation plan
+- then begin implementation
+
+Important:
+Keep onboarding short, clean, and role-appropriate.
+This should make the app feel simple for buyers and powerful for agents without confusing either one.

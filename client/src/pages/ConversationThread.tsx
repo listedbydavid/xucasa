@@ -54,6 +54,23 @@ export default function ConversationThread({ adminMode = false, adminConversatio
     enabled: !adminMode && !!conversationId && isAuthenticated,
   });
 
+  const offerIdsInMessages = messages
+    .filter((m: any) => m.type === "reverse_offer" && m.metadata?.offerId)
+    .map((m: any) => m.metadata.offerId as number);
+  const offerIdsKey = offerIdsInMessages.sort().join(",");
+
+  const { data: offerStatuses = {} } = useQuery<Record<number, string>>({
+    queryKey: ["/api/property-offers/statuses", offerIdsKey],
+    queryFn: async () => {
+      if (!offerIdsKey) return {};
+      const res = await fetch(`/api/property-offers/statuses?ids=${offerIdsKey}`);
+      if (!res.ok) return {};
+      return res.json();
+    },
+    enabled: !adminMode && !!offerIdsKey && isAuthenticated,
+    refetchInterval: 10000,
+  });
+
   const showingMutation = useMutation({
     mutationFn: async ({ id, status, confirmedDate }: { id: number; status: string; confirmedDate?: string }) => {
       return apiRequest("PATCH", `/api/showing-requests/${id}`, { status, confirmedDate });
@@ -73,6 +90,7 @@ export default function ConversationThread({ adminMode = false, adminConversatio
       setCounterText("");
       queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversationId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/property-offers/statuses", offerIdsKey] });
     },
   });
 
@@ -305,14 +323,49 @@ export default function ConversationThread({ adminMode = false, adminConversatio
 
     if (isReverseOffer) {
       const offerId = msg.metadata?.offerId;
-      const canBuyerRespond = isBuyer && !isMe && offerId;
+      const offerStatus = offerId ? (offerStatuses as Record<number, string>)[offerId] : null;
+      const isActionable = offerStatus === "sent_to_buyer" || offerStatus === "viewed";
+      const canBuyerRespond = isBuyer && !isMe && offerId && isActionable;
       const isCounteringThis = counterOfferId === offerId;
+
+      const offerStatusColors: Record<string, string> = {
+        pending_agent_review: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+        sent_to_buyer: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+        viewed: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+        accepted: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+        declined: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+        countered: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+        rejected: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+        expired: "bg-gray-100 text-gray-500 dark:bg-gray-900/30 dark:text-gray-400",
+        pending_admin: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+      };
+
+      const offerStatusLabels: Record<string, string> = {
+        pending_agent_review: "Pending Review",
+        sent_to_buyer: "Awaiting Response",
+        viewed: "Awaiting Response",
+        accepted: "Accepted",
+        declined: "Declined",
+        countered: "Countered",
+        rejected: "Rejected",
+        expired: "Expired",
+        pending_admin: "Pending Admin",
+      };
+
       return (
         <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
           <div className={`max-w-[80%] rounded-2xl px-4 py-3 border-2 border-amber-400/40 ${isMe ? "bg-amber-600 text-white" : "bg-amber-50 dark:bg-amber-900/20 text-foreground"}`} data-testid={`message-${msg.id}`}>
             <div className="flex items-center gap-1.5 mb-1">
               <DollarSign className="w-3.5 h-3.5" />
               <span className="text-xs font-bold">Reverse Offer</span>
+              {offerStatus && (
+                <span
+                  className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ml-1 ${offerStatusColors[offerStatus] || "bg-gray-100 text-gray-700"}`}
+                  data-testid={`badge-offer-status-${offerId}`}
+                >
+                  {offerStatusLabels[offerStatus] || offerStatus.replace(/_/g, " ")}
+                </span>
+              )}
             </div>
             <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
             {canBuyerRespond && !isCounteringThis && (
@@ -344,6 +397,25 @@ export default function ConversationThread({ adminMode = false, adminConversatio
                   <MessageSquare className="w-3 h-3" />
                   Counter
                 </button>
+              </div>
+            )}
+            {offerStatus && !isActionable && !isCounteringThis && offerId && (
+              <div className="mt-2" data-testid={`offer-resolved-${offerId}`}>
+                {offerStatus === "accepted" && (
+                  <p className="text-xs font-semibold text-green-700 dark:text-green-400 flex items-center gap-1">
+                    <Check className="w-3 h-3" /> You accepted this offer
+                  </p>
+                )}
+                {offerStatus === "declined" && (
+                  <p className="text-xs font-semibold text-red-700 dark:text-red-400 flex items-center gap-1">
+                    <X className="w-3 h-3" /> You declined this offer
+                  </p>
+                )}
+                {offerStatus === "countered" && (
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                    <MessageSquare className="w-3 h-3" /> You counter-offered
+                  </p>
+                )}
               </div>
             )}
             {isCounteringThis && (

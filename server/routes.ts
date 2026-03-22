@@ -6,7 +6,7 @@ import { storage } from "./storage";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { db } from "./db";
 import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews, errorReports, notifications, buyerInterest } from "@shared/schema";
-import { eq, desc, sql, or, and, ilike } from "drizzle-orm";
+import { eq, desc, sql, or, and, ilike, inArray } from "drizzle-orm";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { registerAuthRoutes } from "./replit_integrations/auth";
@@ -1876,6 +1876,32 @@ export async function registerRoutes(
       res.status(201).json(offer);
     } catch (err) {
       console.error("Create property offer error:", err);
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.get("/api/property-offers/statuses", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const idsParam = req.query.ids as string;
+      if (!idsParam) return res.json({});
+      const ids = idsParam.split(",").map(Number).filter(n => !isNaN(n));
+      if (ids.length === 0) return res.json({});
+      const rows = await db.select().from(propertyOffers).where(inArray(propertyOffers.id, ids));
+      const results: Record<number, string> = {};
+      for (const offer of rows) {
+        if (offer.buyerUserId === userId || offer.listingAgentId === userId || offer.buyerAgentId === userId) {
+          results[offer.id] = offer.status;
+        }
+      }
+      const callerUser = await storage.getUser(userId);
+      if (callerUser?.role === "admin") {
+        for (const offer of rows) {
+          results[offer.id] = offer.status;
+        }
+      }
+      res.json(results);
+    } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
     }
   });
