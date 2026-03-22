@@ -3058,6 +3058,17 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/conversations/unread-count", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const convos = await storage.getConversationsForUser(userId);
+      const total = convos.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+      res.json({ unreadCount: total });
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
   app.get("/api/conversations/:id", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
@@ -3081,8 +3092,12 @@ export async function registerRoutes(
       const prop = await storage.getProperty(propertyId);
       if (!prop) return res.status(404).json({ message: "Property not found" });
 
-      const resolvedAgentId = agentUserId || prop.agentId;
+      const resolvedAgentId = prop.agentId || agentUserId;
       if (!resolvedAgentId) return res.status(400).json({ message: "No agent associated with this property" });
+
+      if (agentUserId && agentUserId !== prop.agentId) {
+        return res.status(403).json({ message: "Invalid agent for this property" });
+      }
 
       await storage.upsertBuyerInterest(propertyId, userId, type || "inquiry");
 
@@ -3116,6 +3131,23 @@ export async function registerRoutes(
       res.status(201).json(convo);
     } catch (err) {
       console.error("Create conversation error:", err);
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.post("/api/conversations/:id/read", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const conversationId = parseInt(req.params.id);
+      const convo = await storage.getConversation(conversationId);
+      if (!convo) return res.status(404).json({ message: "Conversation not found" });
+      if (convo.buyerUserId !== userId && convo.agentUserId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const role = convo.buyerUserId === userId ? 'buyer' : 'agent';
+      await storage.updateConversationReadAt(conversationId, userId, role);
+      res.json({ success: true });
+    } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
     }
   });

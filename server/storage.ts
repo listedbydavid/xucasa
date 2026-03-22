@@ -1298,8 +1298,28 @@ export class DatabaseStorage implements IStorage {
     const existing = await db.select().from(buyerInterest)
       .where(and(eq(buyerInterest.propertyId, propertyId), eq(buyerInterest.buyerUserId, buyerUserId)))
       .limit(1);
-    if (existing.length > 0) return existing[0];
-    const [created] = await db.insert(buyerInterest).values({ propertyId, buyerUserId, source }).returning();
+    if (existing.length > 0) {
+      const stageMap: Record<string, string> = { swipe: "new", inquiry: "engaged", showing_request: "showing", offer: "offer" };
+      const newStage = stageMap[source] || existing[0].stage;
+      const shouldUpgrade = ["new", "engaged", "showing"].indexOf(newStage) > ["new", "engaged", "showing"].indexOf(existing[0].stage);
+      const [updated] = await db.update(buyerInterest)
+        .set({
+          source,
+          stage: shouldUpgrade ? newStage : existing[0].stage,
+          lastActivityAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(buyerInterest.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+    const stageMap: Record<string, string> = { swipe: "new", inquiry: "engaged", showing_request: "showing", offer: "offer" };
+    const [created] = await db.insert(buyerInterest).values({
+      propertyId,
+      buyerUserId,
+      source,
+      stage: stageMap[source] || "new",
+    }).returning();
     return created;
   }
 
@@ -1326,7 +1346,7 @@ export class DatabaseStorage implements IStorage {
 
   // ── Conversations ───────────────────────────────────────────────────────────
 
-  async getOrCreateConversation(propertyId: number, buyerUserId: string, agentUserId: string): Promise<Conversation> {
+  async getOrCreateConversation(propertyId: number, buyerUserId: string, agentUserId: string, initiatedBy: string = "buyer"): Promise<Conversation> {
     const existing = await db.select().from(conversations)
       .where(and(
         eq(conversations.propertyId, propertyId),
@@ -1337,9 +1357,13 @@ export class DatabaseStorage implements IStorage {
     if (existing.length > 0) return existing[0];
     const [created] = await db.insert(conversations).values({
       propertyId, buyerUserId, agentUserId,
+      initiatedBy,
       buyerLastReadAt: new Date(),
       agentLastReadAt: new Date(),
     }).returning();
+    await db.update(buyerInterest)
+      .set({ conversationId: created.id, updatedAt: new Date() })
+      .where(and(eq(buyerInterest.propertyId, propertyId), eq(buyerInterest.buyerUserId, buyerUserId)));
     return created;
   }
 
@@ -1397,7 +1421,14 @@ export class DatabaseStorage implements IStorage {
 
   async createMessage(message: InsertMessage): Promise<Message> {
     const [created] = await db.insert(messages).values(message).returning();
-    await db.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, message.conversationId));
+    const now = new Date();
+    await db.update(conversations).set({ updatedAt: now, lastMessageAt: now }).where(eq(conversations.id, message.conversationId));
+    const convo = await db.select().from(conversations).where(eq(conversations.id, message.conversationId)).limit(1);
+    if (convo.length > 0) {
+      await db.update(buyerInterest)
+        .set({ lastActivityAt: now, updatedAt: now })
+        .where(and(eq(buyerInterest.propertyId, convo[0].propertyId), eq(buyerInterest.buyerUserId, convo[0].buyerUserId)));
+    }
     return created;
   }
 

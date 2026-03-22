@@ -156,6 +156,16 @@ function ContactCard({
               Request a Showing
             </button>
           )}
+          {onRequestInfo && (
+            <button
+              onClick={onRequestInfo}
+              className="flex items-center gap-3 w-full bg-muted text-foreground py-3 px-4 rounded-xl font-semibold hover:bg-muted/80 transition-colors border border-border active:scale-[0.98]"
+              data-testid="button-request-info"
+            >
+              <Mail className="w-4 h-4" />
+              Request More Info
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -169,6 +179,7 @@ function MobileContactBar({
   propertyAddress,
   onAskQuestion,
   onRequestShowing,
+  onRequestInfo,
 }: {
   contactName: string;
   contactPhone: string | null;
@@ -176,6 +187,7 @@ function MobileContactBar({
   propertyAddress: string;
   onAskQuestion?: () => void;
   onRequestShowing?: () => void;
+  onRequestInfo?: () => void;
 }) {
   const subject = encodeURIComponent(`Inquiry about ${propertyAddress}`);
   const body = encodeURIComponent(`Hi ${contactName.split(" ")[0]},\n\nI'm interested in learning more about the property at ${propertyAddress}.\n\nPlease get back to me at your earliest convenience.\n\nThank you!`);
@@ -221,6 +233,16 @@ function MobileContactBar({
           >
             <MessageSquare className="w-4 h-4" />
             Ask
+          </button>
+        )}
+        {onRequestInfo && (
+          <button
+            onClick={onRequestInfo}
+            className="flex-1 flex items-center justify-center gap-2 bg-muted text-foreground py-3 px-4 rounded-xl font-semibold border border-border active:scale-[0.98] transition-transform"
+            data-testid="mobile-button-request-info"
+          >
+            <Mail className="w-4 h-4" />
+            Info
           </button>
         )}
       </div>
@@ -1508,6 +1530,12 @@ export default function PropertyDetail() {
     setShowShowingModal(true);
   };
 
+  const handleRequestInfo = () => {
+    if (!isAuthenticated) { setShowAuthPrompt(true); return; }
+    setQuestionText("I'd like to request more information about this property, including any disclosures, HOA details, and additional photos.");
+    setShowAskModal(true);
+  };
+
   return (
     <>
       {showAuthPrompt && (
@@ -1843,6 +1871,7 @@ export default function PropertyDetail() {
                 propertyId={property.id}
                 onAskQuestion={handleAskQuestion}
                 onRequestShowing={handleRequestShowing}
+                onRequestInfo={handleRequestInfo}
               />
 
               <SectionErrorBoundary name="MapView">
@@ -1922,6 +1951,7 @@ export default function PropertyDetail() {
         propertyAddress={propertyAddress}
         onAskQuestion={handleAskQuestion}
         onRequestShowing={handleRequestShowing}
+        onRequestInfo={handleRequestInfo}
       />
     </div>
     </>

@@ -510,7 +510,12 @@ export const buyerInterest = pgTable("buyer_interest", {
   propertyId: integer("property_id").references(() => properties.id).notNull(),
   buyerUserId: varchar("buyer_user_id").references(() => users.id).notNull(),
   source: text("source").default("swipe").notNull(),
+  stage: text("stage").default("new").notNull(),
+  initiatedBy: text("initiated_by").default("buyer").notNull(),
+  conversationId: integer("conversation_id"),
+  lastActivityAt: timestamp("last_activity_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 // Conversations between buyer and agent
@@ -520,6 +525,8 @@ export const conversations = pgTable("conversations", {
   buyerUserId: varchar("buyer_user_id").references(() => users.id).notNull(),
   agentUserId: varchar("agent_user_id").references(() => users.id).notNull(),
   status: text("status").default("active").notNull(),
+  initiatedBy: text("initiated_by").default("buyer").notNull(),
+  lastMessageAt: timestamp("last_message_at"),
   buyerLastReadAt: timestamp("buyer_last_read_at"),
   agentLastReadAt: timestamp("agent_last_read_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
