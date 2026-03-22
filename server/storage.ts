@@ -68,7 +68,7 @@ import {
   type InsertShowingRequest,
   users,
 } from "@shared/schema";
-import { eq, and, desc, asc, sql, gte, count } from "drizzle-orm";
+import { eq, and, desc, asc, sql, gte, count, inArray } from "drizzle-orm";
 import { authStorage } from "./replit_integrations/auth/storage";
 
 export interface IStorage {
@@ -1298,10 +1298,18 @@ export class DatabaseStorage implements IStorage {
     const existing = await db.select().from(buyerInterest)
       .where(and(eq(buyerInterest.propertyId, propertyId), eq(buyerInterest.buyerUserId, buyerUserId)))
       .limit(1);
+    const stageMap: Record<string, string> = {
+      swipe: "new",
+      inquiry: "engaged",
+      text: "engaged",
+      info_request: "engaged",
+      showing_request: "showing",
+      offer: "offer",
+    };
+    const stageOrder = ["new", "engaged", "showing", "offer"];
     if (existing.length > 0) {
-      const stageMap: Record<string, string> = { swipe: "new", inquiry: "engaged", showing_request: "showing", offer: "offer" };
       const newStage = stageMap[source] || existing[0].stage;
-      const shouldUpgrade = ["new", "engaged", "showing"].indexOf(newStage) > ["new", "engaged", "showing"].indexOf(existing[0].stage);
+      const shouldUpgrade = stageOrder.indexOf(newStage) > stageOrder.indexOf(existing[0].stage);
       const [updated] = await db.update(buyerInterest)
         .set({
           source,
@@ -1313,7 +1321,6 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return updated;
     }
-    const stageMap: Record<string, string> = { swipe: "new", inquiry: "engaged", showing_request: "showing", offer: "offer" };
     const [created] = await db.insert(buyerInterest).values({
       propertyId,
       buyerUserId,
@@ -1327,7 +1334,7 @@ export class DatabaseStorage implements IStorage {
     const rows = await db.select().from(buyerInterest)
       .innerJoin(properties, eq(buyerInterest.propertyId, properties.id))
       .where(eq(properties.agentId, agentUserId))
-      .orderBy(desc(buyerInterest.createdAt));
+      .orderBy(desc(buyerInterest.lastActivityAt));
     const results: (BuyerInterest & { property: Property; buyer: any })[] = [];
     for (const row of rows) {
       const buyer = await this.getUser(row.buyer_interest.buyerUserId);
@@ -1340,7 +1347,7 @@ export class DatabaseStorage implements IStorage {
     const rows = await db.select().from(buyerInterest)
       .innerJoin(properties, eq(buyerInterest.propertyId, properties.id))
       .where(eq(buyerInterest.buyerUserId, buyerUserId))
-      .orderBy(desc(buyerInterest.createdAt));
+      .orderBy(desc(buyerInterest.lastActivityAt));
     return rows.map(row => ({ ...row.buyer_interest, property: row.properties }));
   }
 
@@ -1361,9 +1368,14 @@ export class DatabaseStorage implements IStorage {
       buyerLastReadAt: new Date(),
       agentLastReadAt: new Date(),
     }).returning();
+    const now = new Date();
     await db.update(buyerInterest)
-      .set({ conversationId: created.id, updatedAt: new Date() })
-      .where(and(eq(buyerInterest.propertyId, propertyId), eq(buyerInterest.buyerUserId, buyerUserId)));
+      .set({ conversationId: created.id, stage: "engaged", lastActivityAt: now, updatedAt: now })
+      .where(and(
+        eq(buyerInterest.propertyId, propertyId),
+        eq(buyerInterest.buyerUserId, buyerUserId),
+        inArray(buyerInterest.stage, ["new"]),
+      ));
     return created;
   }
 

@@ -4,6 +4,4 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
-data/error-archive.jsonattached_assets/Pasted-*5-Core-Loop*
-attached_assets/Pasted-*Now-I-want*
-attached_assets/Pasted-*We-are-proceeding*
+data/error-archive.json

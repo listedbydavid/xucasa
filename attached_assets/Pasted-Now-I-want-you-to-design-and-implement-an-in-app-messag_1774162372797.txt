@@ -1,0 +1,56 @@
+Now I want you to design and implement an in-app messaging system for xucasa.
+
+Goal:
+Keep buyer-agent and agent-seller communication inside the platform, especially after a buyer swipes right on a property or expresses interest.
+
+Requirements:
+1. Conversations must be tied to a property when relevant
+2. Supported conversation types:
+   - buyer ↔ listing agent
+   - buyer ↔ linked agent
+   - homeowner / seller ↔ buyer inquiry pathway
+   - agent ↔ interested buyer
+3. Trigger points for starting a conversation:
+   - buyer swipes right on a property
+   - buyer clicks "Ask a Question"
+   - buyer clicks "Request Tour"
+   - agent clicks into an interested buyer from Buyer Interest
+   - homeowner pitches a property to a buyer
+4. Build a lightweight but scalable conversation model:
+   - conversations
+   - conversation_participants
+   - messages
+   - message_read_status or equivalent
+5. Add notifications for:
+   - new message
+   - unread thread
+   - response received
+6. UX requirements:
+   - property detail page should include message entry points
+   - agent dashboard should show active conversations
+   - buyer dashboard should show messages and property-linked threads
+   - thread UI should clearly display associated property
+7. Security / permissions:
+   - users can only access conversations they belong to
+   - admins can inspect conversations if necessary
+   - verified agents can message regarding their own listings or linked clients
+8. Provide all implementation pieces:
+   - database schema changes
+   - backend routes
+   - frontend components
+   - polling or realtime recommendation
+   - notification integration
+9. Use the current stack and patterns already in the project
+
+Important:
+- Do not build generic chat with no structure
+- This must be tightly integrated with property interest workflows
+- Keep it MVP-simple but production-minded
+
+Deliverables:
+- architecture plan
+- schema additions
+- route list
+- React component list
+- step by step implementation plan
+- then begin implementing it

@@ -1956,16 +1956,19 @@ export async function registerRoutes(
             .where(and(eq(buyerInterest.propertyId, offer.propertyId), eq(buyerInterest.buyerUserId, offer.buyerUserId!)));
 
           const recipientId = userId === offer.buyerUserId ? agentId : offer.buyerUserId!;
+          const offerNotifTitle = `Offer ${statusLabel}`;
+          const offerNotifMsg = `${buyerName} has ${statusLabel} the offer on the property.`;
           await storage.createNotification({
             userId: recipientId,
             type: "offer_response",
-            title: `Offer ${statusLabel}`,
-            message: `${buyerName} has ${statusLabel} the offer on the property.`,
+            title: offerNotifTitle,
+            message: offerNotifMsg,
             propertyId: offer.propertyId,
             linkUrl: `/conversations/${convo.id}`,
             read: false,
             archived: false,
           });
+          trySendNotificationEmail(recipientId, "offer_response", offerNotifTitle, offerNotifMsg, `/conversations/${convo.id}`, offer.propertyId, convo.id);
         }
       }
 
@@ -2611,7 +2614,7 @@ export async function registerRoutes(
     }
   });
 
-  async function trySendNotificationEmail(targetUserId: string, type: string, title: string, message: string, linkUrl?: string | null, propertyId?: number | null) {
+  async function trySendNotificationEmail(targetUserId: string, type: string, title: string, message: string, linkUrl?: string | null, propertyId?: number | null, conversationId?: number | null) {
     try {
       const configured = await isEmailConfigured();
       if (!configured) return;
@@ -2627,6 +2630,12 @@ export async function registerRoutes(
         open_house: "emailOpenHouse",
         agent_match: "emailAgentMatch",
         system: "emailSystem",
+        message_received: "emailSystem",
+        showing_request: "emailSystem",
+        showing_confirmed: "emailSystem",
+        showing_declined: "emailSystem",
+        showing_update: "emailSystem",
+        offer_response: "emailSystem",
       };
       const field = typeToField[type];
       if (!field) return;
@@ -2662,6 +2671,7 @@ export async function registerRoutes(
         recipientName: targetUser.firstName || targetUser.email,
         type, title, message, linkUrl,
         propertyId: propertyId ?? null,
+        conversationId: conversationId ?? null,
         propertyCard,
         userId: targetUserId,
         emailsSentToday: emailsToday,
@@ -3219,6 +3229,7 @@ export async function registerRoutes(
             read: false,
             archived: false,
           });
+          trySendNotificationEmail(resolvedAgentId, "message_received", `New message from ${buyerName}`, initialMessage.substring(0, 200), `/conversations/${convo.id}`, propertyId, convo.id);
         }
       }
 
@@ -3307,6 +3318,7 @@ export async function registerRoutes(
         read: false,
         archived: false,
       });
+      trySendNotificationEmail(recipientId, "message_received", `New message from ${senderName}`, content.substring(0, 200), `/conversations/${conversationId}`, convo.propertyId, conversationId);
 
       const msgWithSender = { ...msg, sender };
       res.status(201).json(msgWithSender);
@@ -3376,6 +3388,7 @@ export async function registerRoutes(
         read: false,
         archived: false,
       });
+      trySendNotificationEmail(agentId, "showing_request", `Showing request from ${buyerName}`, `Requested dates: ${dateStr}`, `/conversations/${convo.id}`, propertyId, convo.id);
 
       res.status(201).json(request);
     } catch (err) {
@@ -3426,16 +3439,19 @@ export async function registerRoutes(
       const senderName = sender?.firstName || "Agent";
       const statusLabel = status === "confirmed" ? "confirmed" : status === "declined" ? "declined" : status === "cancelled" ? "cancelled" : status;
       const notificationType = status === "confirmed" ? "showing_confirmed" : status === "declined" ? "showing_declined" : "showing_update";
+      const showingNotifTitle = `Showing ${statusLabel} by ${senderName}`;
+      const showingNotifMsg = confirmedDate ? `Confirmed for ${new Date(confirmedDate).toLocaleDateString()}` : `Showing has been ${statusLabel}`;
       await storage.createNotification({
         userId: recipientId,
         type: notificationType,
-        title: `Showing ${statusLabel} by ${senderName}`,
-        message: confirmedDate ? `Confirmed for ${new Date(confirmedDate).toLocaleDateString()}` : `Showing has been ${statusLabel}`,
+        title: showingNotifTitle,
+        message: showingNotifMsg,
         propertyId: updated.propertyId,
         linkUrl: `/conversations/${updated.conversationId}`,
         read: false,
         archived: false,
       });
+      trySendNotificationEmail(recipientId, notificationType, showingNotifTitle, showingNotifMsg, `/conversations/${updated.conversationId}`, updated.propertyId, updated.conversationId);
 
       res.json(updated);
     } catch (err) {
