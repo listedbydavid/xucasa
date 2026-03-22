@@ -61,7 +61,7 @@ export default function AuthPage() {
         return;
       }
 
-      window.location.href = "/onboarding";
+      window.location.href = data.user?.onboardingCompleted ? "/dashboard" : "/onboarding";
     } catch {
       setError("Network error. Please try again.");
       setLoading(false);
