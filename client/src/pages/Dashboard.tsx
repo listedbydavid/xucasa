@@ -687,9 +687,9 @@ function AgentForm({
 function ActivateProfileSection({ user }: { user: any }) {
   const [, setLocation] = useLocation();
   const profiles = [
-    { key: "buyer", label: "Buyer Profile", desc: "Set up your home search preferences", icon: Search, completed: user?.buyerProfileCompleted, path: "/onboarding", color: "text-blue-500 bg-blue-500/10" },
-    { key: "homeowner", label: "Homeowner Profile", desc: "Track your home's value", icon: Home, completed: user?.homeownerProfileCompleted, path: "/onboarding", color: "text-green-500 bg-green-500/10" },
-    { key: "agent", label: "Agent Profile", desc: "Get verified as a real estate agent", icon: Briefcase, completed: user?.agentProfileCompleted, path: "/onboarding", color: "text-purple-500 bg-purple-500/10" },
+    { key: "buyer", label: "Buyer Profile", desc: "Set up your home search preferences", icon: Search, completed: user?.buyerProfileCompleted, path: "/onboarding?reentry=1&intent=buyer", color: "text-blue-500 bg-blue-500/10" },
+    { key: "homeowner", label: "Homeowner Profile", desc: "Track your home's value", icon: Home, completed: user?.homeownerProfileCompleted, path: "/onboarding?reentry=1&intent=homeowner", color: "text-green-500 bg-green-500/10" },
+    { key: "agent", label: "Agent Profile", desc: "Get verified as a real estate agent", icon: Briefcase, completed: user?.agentProfileCompleted, path: "/onboarding?reentry=1&intent=agent", color: "text-purple-500 bg-purple-500/10" },
   ];
 
   const incomplete = profiles.filter(p => !p.completed);

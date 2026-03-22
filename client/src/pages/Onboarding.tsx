@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -48,10 +48,20 @@ export default function Onboarding() {
   const [brokerageName, setBrokerageName] = useState("");
   const [mlsId, setMlsId] = useState("");
 
-  if (user?.onboardingCompleted) {
+  const searchParams = new URLSearchParams(window.location.search);
+  const reentry = searchParams.get("reentry") === "1";
+  const presetIntent = searchParams.get("intent") as Intent | null;
+
+  if (user?.onboardingCompleted && !reentry) {
     setLocation("/dashboard");
     return null;
   }
+
+  useEffect(() => {
+    if (reentry && presetIntent && ["buyer", "homeowner", "agent"].includes(presetIntent) && step === "intent") {
+      setStep(presetIntent as Step);
+    }
+  }, [reentry, presetIntent]);
 
   const handleIntentSelect = async (selected: Intent) => {
     setIntent(selected);

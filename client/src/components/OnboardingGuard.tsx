@@ -2,7 +2,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
-const PUBLIC_PATHS = ["/", "/search", "/swipe", "/property", "/auth", "/privacy", "/terms", "/onboarding"];
+const PUBLIC_PATHS = ["/", "/search", "/swipe", "/property", "/auth", "/privacy", "/terms"];
 
 export function useOnboardingGuard() {
   const { user, isAuthenticated, isLoading } = useAuth();
@@ -21,7 +21,8 @@ export function useOnboardingGuard() {
       return;
     }
 
-    if (!user.onboardingCompleted) {
+    const isOnboarding = location.startsWith("/onboarding");
+    if (!user.onboardingCompleted && !isOnboarding) {
       setLocation("/onboarding");
       return;
     }

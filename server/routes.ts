@@ -875,18 +875,18 @@ export async function registerRoutes(
       const parsed = intentSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid intent" });
 
-      const updates: Partial<{
-        primaryIntent: string;
-        currentMode: string | null;
-        onboardingCompleted: boolean;
-      }> = { primaryIntent: parsed.data.intent };
       if (parsed.data.intent === "explorer") {
-        updates.onboardingCompleted = true;
-        updates.currentMode = undefined;
-      } else {
-        updates.currentMode = parsed.data.intent;
+        const updated = await authStorage.updateOnboarding(userId, {
+          primaryIntent: parsed.data.intent,
+          onboardingCompleted: true,
+        });
+        res.json(updated);
+        return;
       }
-      const updated = await authStorage.updateOnboarding(userId, updates as any);
+      const updated = await authStorage.updateOnboarding(userId, {
+        primaryIntent: parsed.data.intent,
+        currentMode: parsed.data.intent,
+      });
       res.json(updated);
     } catch (err) {
       res.status(500).json({ message: "Failed to save intent" });
