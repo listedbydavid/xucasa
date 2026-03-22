@@ -5,7 +5,7 @@ import path from "path";
 import { storage } from "./storage";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { db } from "./db";
-import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews, errorReports, notifications } from "@shared/schema";
+import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews, errorReports, notifications, buyerInterest } from "@shared/schema";
 import { eq, desc, sql, or, and, ilike } from "drizzle-orm";
 import { api } from "@shared/routes";
 import { z } from "zod";
@@ -3046,6 +3046,36 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/buyer-interest/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseInt(req.params.id);
+      const { stage } = req.body;
+
+      const existing = await db.select().from(buyerInterest).where(eq(buyerInterest.id, id)).limit(1);
+      if (!existing.length) return res.status(404).json({ message: "Not found" });
+
+      const prop = await storage.getProperty(existing[0].propertyId);
+      const isAgent = prop?.agentId === userId;
+      if (!isAgent && existing[0].buyerUserId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const validStages = ["new", "engaged", "showing", "offer", "closed", "archived"];
+      if (stage && !validStages.includes(stage)) {
+        return res.status(400).json({ message: `Invalid stage. Must be one of: ${validStages.join(", ")}` });
+      }
+
+      const updates: any = { updatedAt: new Date() };
+      if (stage) updates.stage = stage;
+
+      const [updated] = await db.update(buyerInterest).set(updates).where(eq(buyerInterest.id, id)).returning();
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
   // ── Conversations API ───────────────────────────────────────────────────
 
   app.get("/api/conversations", isAuthenticated, async (req: any, res) => {
@@ -3135,7 +3165,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/conversations/:id/read", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/conversations/:id/read", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const conversationId = parseInt(req.params.id);
@@ -3303,6 +3333,17 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Access denied" });
       }
 
+      const isAgent = existing.agentUserId === userId;
+      const isBuyer = existing.buyerUserId === userId;
+      const agentAllowed = ["confirmed", "declined", "rescheduled"];
+      const buyerAllowed = ["cancelled"];
+      if (isAgent && !agentAllowed.includes(status)) {
+        return res.status(403).json({ message: `Agents can only set status to: ${agentAllowed.join(", ")}` });
+      }
+      if (isBuyer && !buyerAllowed.includes(status)) {
+        return res.status(403).json({ message: `Buyers can only cancel showing requests` });
+      }
+
       const updated = await storage.updateShowingRequestStatus(
         id,
         status,
@@ -3312,10 +3353,11 @@ export async function registerRoutes(
       const recipientId = updated.buyerUserId === userId ? updated.agentUserId : updated.buyerUserId;
       const sender = await storage.getUser(userId);
       const senderName = sender?.firstName || "Agent";
-      const statusLabel = status === "confirmed" ? "confirmed" : status === "declined" ? "declined" : status;
+      const statusLabel = status === "confirmed" ? "confirmed" : status === "declined" ? "declined" : status === "cancelled" ? "cancelled" : status;
+      const notificationType = status === "confirmed" ? "showing_confirmed" : status === "declined" ? "showing_declined" : "showing_update";
       await storage.createNotification({
         userId: recipientId,
-        type: "showing_update",
+        type: notificationType,
         title: `Showing ${statusLabel} by ${senderName}`,
         message: confirmedDate ? `Confirmed for ${new Date(confirmedDate).toLocaleDateString()}` : `Showing has been ${statusLabel}`,
         propertyId: updated.propertyId,
