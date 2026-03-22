@@ -3340,8 +3340,10 @@ export async function registerRoutes(
         return { allowed: false, reason: "Buyer-to-buyer conversations are not allowed" };
       }
       if (callerRole === "user") {
-        const buyerUser = await storage.getUser(userId);
-        if (buyerUser?.assignedAgentUserId && buyerUser.assignedAgentUserId !== otherUserId) {
+        if (!callerUser?.assignedAgentUserId) {
+          return { allowed: false, reason: "No agent assigned. Please contact support before messaging." };
+        }
+        if (callerUser.assignedAgentUserId !== otherUserId) {
           return { allowed: false, reason: "You can only communicate with your assigned agent" };
         }
       }
@@ -3349,14 +3351,28 @@ export async function registerRoutes(
     return { allowed: true };
   }
 
+  function sanitizeConversationForCaller(convo: any, callerUserId: string, callerRole: string): any {
+    const isListingAgent = convo.type === "agent_coordination" && convo.agentUserId === callerUserId && callerRole !== "admin";
+    if (isListingAgent) {
+      const { relatedBuyerUserId, ...sanitized } = convo;
+      return sanitized;
+    }
+    return convo;
+  }
+
   app.get("/api/conversations", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const callerUser = await storage.getUser(userId);
-      const isBuyerRole = callerUser?.role === "user";
+      const callerRole = callerUser?.role || "user";
+      const isBuyerRole = callerRole === "user";
+      if (isBuyerRole && !callerUser?.assignedAgentUserId) {
+        return res.json([]);
+      }
       const type = isBuyerRole ? "buyer" : (req.query.type as string | undefined);
       const convos = await storage.getConversationsForUser(userId, type);
-      res.json(convos);
+      const sanitized = convos.map(c => sanitizeConversationForCaller(c, userId, callerRole));
+      res.json(sanitized);
     } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
     }
@@ -3365,6 +3381,10 @@ export async function registerRoutes(
   app.get("/api/conversations/unread-count", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      const callerUser = await storage.getUser(userId);
+      if (callerUser?.role === "user" && !callerUser?.assignedAgentUserId) {
+        return res.json({ unreadCount: 0 });
+      }
       const convos = await storage.getConversationsForUser(userId);
       const total = convos.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
       res.json({ unreadCount: total });
@@ -3380,7 +3400,8 @@ export async function registerRoutes(
       if (!convo) return res.status(404).json({ message: "Conversation not found" });
       const access = await validateConversationAccess(convo, userId);
       if (!access.allowed) return res.status(403).json({ message: access.reason });
-      res.json(convo);
+      const callerUser = await storage.getUser(userId);
+      res.json(sanitizeConversationForCaller(convo, userId, callerUser?.role || "user"));
     } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
     }
@@ -3480,7 +3501,7 @@ export async function registerRoutes(
         trySendNotificationEmail(recipientId, "message_received", `New message from ${senderName}`, initialMessage.substring(0, 200), `/conversations/${convo.id}`, propertyId, convo.id);
       }
 
-      res.status(201).json(convo);
+      res.status(201).json(sanitizeConversationForCaller(convo, userId, callerRole || "user"));
     } catch (err) {
       console.error("Create conversation error:", err);
       res.status(500).json({ message: "Internal Server Error" });
@@ -3577,8 +3598,17 @@ export async function registerRoutes(
   app.get("/api/showing-requests", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      const callerUser = await storage.getUser(userId);
       const requests = await storage.getShowingRequestsForUser(userId);
-      res.json(requests);
+      const sanitized = requests.map(r => {
+        const isListingAgentOnThis = r.property?.agentId === userId && r.agentUserId !== userId;
+        if (isListingAgentOnThis && callerUser?.role !== "admin") {
+          const { buyer, buyerUserId, ...rest } = r as any;
+          return { ...rest, buyerUserId: "[redacted]", buyer: null };
+        }
+        return r;
+      });
+      res.json(sanitized);
     } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
     }
@@ -3802,7 +3832,12 @@ export async function registerRoutes(
         trySendNotificationEmail(recipientId, notificationType, notifTitle, notifMsg, `/conversations/${updated.conversationId}`, updated.propertyId, updated.conversationId);
       }
 
-      res.json(updated);
+      if (isListingAgent && !isAssignedAgent) {
+        const { buyerUserId: _b, ...sanitizedUpdated } = updated as any;
+        res.json({ ...sanitizedUpdated, buyerUserId: "[redacted]" });
+      } else {
+        res.json(updated);
+      }
     } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
     }
