@@ -510,10 +510,14 @@ export const buyerInterest = pgTable("buyer_interest", {
   id: serial("id").primaryKey(),
   propertyId: integer("property_id").references(() => properties.id).notNull(),
   buyerUserId: varchar("buyer_user_id").references(() => users.id).notNull(),
+  assignedAgentUserId: varchar("assigned_agent_user_id").references(() => users.id),
+  listingAgentUserId: varchar("listing_agent_user_id").references(() => users.id),
   source: text("source").default("swipe").notNull(),
-  stage: text("stage").default("new").notNull(),
+  stage: text("stage").default("interested").notNull(),
   initiatedBy: text("initiated_by").default("buyer").notNull(),
-  conversationId: integer("conversation_id"),
+  conversationId: integer("conversation_id").references(() => conversations.id),
+  buyerConversationId: integer("buyer_conversation_id").references(() => conversations.id),
+  agentCoordinationConversationId: integer("agent_coordination_conversation_id").references(() => conversations.id),
   lastActivityAt: timestamp("last_activity_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -521,17 +525,20 @@ export const buyerInterest = pgTable("buyer_interest", {
   uniqueIndex("buyer_interest_property_buyer_idx").on(table.propertyId, table.buyerUserId),
 ]);
 
-// Conversations between buyer and agent
+// Conversations between buyer and agent, or agent-to-agent coordination
 export const conversations = pgTable("conversations", {
   id: serial("id").primaryKey(),
   propertyId: integer("property_id").references(() => properties.id).notNull(),
   buyerUserId: varchar("buyer_user_id").references(() => users.id).notNull(),
   agentUserId: varchar("agent_user_id").references(() => users.id).notNull(),
+  relatedBuyerUserId: varchar("related_buyer_user_id").references(() => users.id),
+  type: text("type").default("buyer").notNull(),
   status: text("status").default("active").notNull(),
   initiatedBy: text("initiated_by").default("buyer").notNull(),
   lastMessageAt: timestamp("last_message_at"),
   buyerLastReadAt: timestamp("buyer_last_read_at"),
   agentLastReadAt: timestamp("agent_last_read_at"),
+  secondAgentLastReadAt: timestamp("second_agent_last_read_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -556,7 +563,7 @@ export const showingRequests = pgTable("showing_requests", {
   agentUserId: varchar("agent_user_id").references(() => users.id).notNull(),
   requestedDates: jsonb("requested_dates").notNull(),
   confirmedDate: timestamp("confirmed_date"),
-  status: text("status").default("pending").notNull(),
+  status: text("status").default("requested").notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -565,6 +572,8 @@ export const showingRequests = pgTable("showing_requests", {
 export const buyerInterestRelations = relations(buyerInterest, ({ one }) => ({
   property: one(properties, { fields: [buyerInterest.propertyId], references: [properties.id] }),
   buyer: one(users, { fields: [buyerInterest.buyerUserId], references: [users.id] }),
+  assignedAgent: one(users, { fields: [buyerInterest.assignedAgentUserId], references: [users.id] }),
+  listingAgent: one(users, { fields: [buyerInterest.listingAgentUserId], references: [users.id] }),
 }));
 
 export const conversationsRelations = relations(conversations, ({ one, many }) => ({

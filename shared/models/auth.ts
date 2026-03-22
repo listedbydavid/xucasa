@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, jsonb, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { boolean, foreignKey, index, jsonb, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
 export const sessions = pgTable(
   "sessions",
@@ -31,10 +31,13 @@ export const users = pgTable("users", {
   phone: varchar("phone"),
   emailVerified: boolean("email_verified").default(false),
   mailingAddress: text("mailing_address"),
+  assignedAgentUserId: varchar("assigned_agent_user_id"),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  foreignKey({ columns: [table.assignedAgentUserId], foreignColumns: [table.id] }),
+]);
 
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;

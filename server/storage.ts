@@ -240,14 +240,21 @@ export interface IStorage {
   resetDailyEmailCount(userId: string): Promise<void>;
 
   // Buyer Interest
-  upsertBuyerInterest(propertyId: number, buyerUserId: string, source?: string): Promise<BuyerInterest>;
+  upsertBuyerInterest(propertyId: number, buyerUserId: string, source?: string, assignedAgentUserId?: string, listingAgentUserId?: string): Promise<BuyerInterest>;
   getBuyerInterestForAgent(agentUserId: string): Promise<(BuyerInterest & { property: Property; buyer: any })[]>;
   getBuyerInterestForBuyer(buyerUserId: string): Promise<(BuyerInterest & { property: Property })[]>;
+  updateBuyerInterestConversations(id: number, updates: { buyerConversationId?: number; agentCoordinationConversationId?: number }): Promise<void>;
+
+  // Agent Assignment
+  getAssignedAgent(buyerUserId: string): Promise<any | null>;
+  assignAgent(buyerUserId: string, agentUserId: string): Promise<void>;
+  lookupAssignedAgent(buyerUserId: string): Promise<any>;
+  resolveAndAssignAgent(buyerUserId: string): Promise<any>;
 
   // Conversations
-  getOrCreateConversation(propertyId: number, buyerUserId: string, agentUserId: string, initiatedBy?: string): Promise<Conversation>;
+  getOrCreateConversation(propertyId: number, buyerUserId: string, agentUserId: string, initiatedBy?: string, type?: string, relatedBuyerUserId?: string): Promise<Conversation>;
   getConversation(id: number): Promise<(Conversation & { property: Property; buyer: any; agent: any }) | undefined>;
-  getConversationsForUser(userId: string): Promise<(Conversation & { property: Property; buyer: any; agent: any; lastMessage: Message | null; unreadCount: number })[]>;
+  getConversationsForUser(userId: string, type?: string): Promise<(Conversation & { property: Property; buyer: any; agent: any; lastMessage: Message | null; unreadCount: number })[]>;
   updateConversationReadAt(conversationId: number, userId: string, role: 'buyer' | 'agent'): Promise<void>;
   getAllConversations(filters?: { search?: string; status?: string; limit?: number; offset?: number }): Promise<{ conversations: (Conversation & { property: Property; buyer: any; agent: any; lastMessage: Message | null; messageCount: number })[]; total: number }>;
   getConversationWithMessages(id: number): Promise<{ conversation: Conversation & { property: Property; buyer: any; agent: any }; messages: (Message & { sender: any })[] } | undefined>;
@@ -1297,29 +1304,34 @@ export class DatabaseStorage implements IStorage {
 
   // ── Buyer Interest ──────────────────────────────────────────────────────────
 
-  async upsertBuyerInterest(propertyId: number, buyerUserId: string, source: string = "swipe"): Promise<BuyerInterest> {
+  async upsertBuyerInterest(propertyId: number, buyerUserId: string, source: string = "swipe", assignedAgentUserId?: string, listingAgentUserId?: string): Promise<BuyerInterest> {
     const existing = await db.select().from(buyerInterest)
       .where(and(eq(buyerInterest.propertyId, propertyId), eq(buyerInterest.buyerUserId, buyerUserId)))
       .limit(1);
     const stageMap: Record<string, string> = {
-      swipe: "new",
-      inquiry: "engaged",
-      text: "engaged",
-      info_request: "engaged",
-      showing_request: "showing",
-      offer: "offer",
+      swipe: "interested",
+      inquiry: "agent_reviewing",
+      text: "agent_reviewing",
+      info_request: "agent_reviewing",
+      ask_question: "agent_reviewing",
+      showing_request: "coordinating",
+      reverse_offer: "offer_stage",
+      offer: "offer_stage",
     };
-    const stageOrder = ["new", "engaged", "showing", "offer"];
+    const stageOrder = ["interested", "agent_reviewing", "coordinating", "showing_scheduled", "offer_stage", "closed"];
     if (existing.length > 0) {
       const newStage = stageMap[source] || existing[0].stage;
       const shouldUpgrade = stageOrder.indexOf(newStage) > stageOrder.indexOf(existing[0].stage);
+      const updates: any = {
+        source,
+        stage: shouldUpgrade ? newStage : existing[0].stage,
+        lastActivityAt: new Date(),
+        updatedAt: new Date(),
+      };
+      if (assignedAgentUserId && !existing[0].assignedAgentUserId) updates.assignedAgentUserId = assignedAgentUserId;
+      if (listingAgentUserId && !existing[0].listingAgentUserId) updates.listingAgentUserId = listingAgentUserId;
       const [updated] = await db.update(buyerInterest)
-        .set({
-          source,
-          stage: shouldUpgrade ? newStage : existing[0].stage,
-          lastActivityAt: new Date(),
-          updatedAt: new Date(),
-        })
+        .set(updates)
         .where(eq(buyerInterest.id, existing[0].id))
         .returning();
       return updated;
@@ -1328,15 +1340,29 @@ export class DatabaseStorage implements IStorage {
       propertyId,
       buyerUserId,
       source,
-      stage: stageMap[source] || "new",
+      stage: stageMap[source] || "interested",
+      assignedAgentUserId: assignedAgentUserId || null,
+      listingAgentUserId: listingAgentUserId || null,
     }).returning();
     return created;
+  }
+
+  async updateBuyerInterestConversations(id: number, updates: { buyerConversationId?: number; agentCoordinationConversationId?: number }): Promise<void> {
+    const setObj: any = { updatedAt: new Date() };
+    if (updates.buyerConversationId !== undefined) {
+      setObj.buyerConversationId = updates.buyerConversationId;
+      setObj.conversationId = updates.buyerConversationId;
+    }
+    if (updates.agentCoordinationConversationId !== undefined) {
+      setObj.agentCoordinationConversationId = updates.agentCoordinationConversationId;
+    }
+    await db.update(buyerInterest).set(setObj).where(eq(buyerInterest.id, id));
   }
 
   async getBuyerInterestForAgent(agentUserId: string): Promise<(BuyerInterest & { property: Property; buyer: any })[]> {
     const rows = await db.select().from(buyerInterest)
       .innerJoin(properties, eq(buyerInterest.propertyId, properties.id))
-      .where(eq(properties.agentId, agentUserId))
+      .where(eq(buyerInterest.assignedAgentUserId, agentUserId))
       .orderBy(desc(buyerInterest.lastActivityAt));
     const results: (BuyerInterest & { property: Property; buyer: any })[] = [];
     for (const row of rows) {
@@ -1354,34 +1380,120 @@ export class DatabaseStorage implements IStorage {
     return rows.map(row => ({ ...row.buyer_interest, property: row.properties }));
   }
 
+  // ── Agent Assignment ───────────────────────────────────────────────────────
+
+  async getAssignedAgent(buyerUserId: string): Promise<any | null> {
+    const user = await this.getUser(buyerUserId);
+    if (user?.assignedAgentUserId) {
+      return this.getUser(user.assignedAgentUserId);
+    }
+    return null;
+  }
+
+  async assignAgent(buyerUserId: string, agentUserId: string): Promise<void> {
+    await db.update(users).set({ assignedAgentUserId: agentUserId, updatedAt: new Date() }).where(eq(users.id, buyerUserId));
+  }
+
+  async lookupAssignedAgent(buyerUserId: string): Promise<any> {
+    const user = await this.getUser(buyerUserId);
+    if (user?.assignedAgentUserId) {
+      const agent = await this.getUser(user.assignedAgentUserId);
+      if (agent) return agent;
+    }
+    const link = await this.getClientAgentLink(buyerUserId);
+    if (link?.agentId) {
+      const agent = await this.getUser(link.agentId);
+      if (agent) return agent;
+    }
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (adminEmail) {
+      const admins = await db.select().from(users).where(eq(users.email, adminEmail)).limit(1);
+      if (admins.length > 0) return admins[0];
+    }
+    const fallbackAdmins = await db.select().from(users)
+      .where(sql`${users.role} = 'admin' OR (${users.role} = 'agent' AND ${users.agentVerified} = true)`)
+      .limit(1);
+    if (fallbackAdmins.length > 0) return fallbackAdmins[0];
+    return null;
+  }
+
+  async resolveAndAssignAgent(buyerUserId: string): Promise<any> {
+    const user = await this.getUser(buyerUserId);
+    if (user?.assignedAgentUserId) {
+      const agent = await this.getUser(user.assignedAgentUserId);
+      if (agent) return agent;
+    }
+    const link = await this.getClientAgentLink(buyerUserId);
+    if (link?.agentId) {
+      const agent = await this.getUser(link.agentId);
+      if (agent) {
+        await this.assignAgent(buyerUserId, link.agentId);
+        return agent;
+      }
+    }
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (adminEmail) {
+      const admins = await db.select().from(users).where(eq(users.email, adminEmail)).limit(1);
+      if (admins.length > 0) {
+        await this.assignAgent(buyerUserId, admins[0].id);
+        return admins[0];
+      }
+    }
+    const fallbackAdmins = await db.select().from(users)
+      .where(sql`${users.role} = 'admin' OR (${users.role} = 'agent' AND ${users.agentVerified} = true)`)
+      .limit(1);
+    if (fallbackAdmins.length > 0) {
+      await this.assignAgent(buyerUserId, fallbackAdmins[0].id);
+      return fallbackAdmins[0];
+    }
+    return null;
+  }
+
   // ── Conversations ───────────────────────────────────────────────────────────
 
-  async getOrCreateConversation(propertyId: number, buyerUserId: string, agentUserId: string, initiatedBy: string = "buyer"): Promise<Conversation> {
+  async getOrCreateConversation(propertyId: number, buyerUserId: string, agentUserId: string, initiatedBy: string = "buyer", type: string = "buyer", relatedBuyerUserId?: string): Promise<Conversation> {
+    const whereClause = and(
+      eq(conversations.propertyId, propertyId),
+      eq(conversations.buyerUserId, buyerUserId),
+      eq(conversations.agentUserId, agentUserId),
+      eq(conversations.type, type),
+      relatedBuyerUserId ? eq(conversations.relatedBuyerUserId, relatedBuyerUserId) : isNull(conversations.relatedBuyerUserId),
+    );
+
     const existing = await db.select().from(conversations)
-      .where(and(
-        eq(conversations.propertyId, propertyId),
-        eq(conversations.buyerUserId, buyerUserId),
-        eq(conversations.agentUserId, agentUserId),
-      ))
+      .where(whereClause)
       .limit(1);
+
     if (existing.length > 0) return existing[0];
     const [created] = await db.insert(conversations).values({
-      propertyId, buyerUserId, agentUserId,
+      propertyId,
+      buyerUserId,
+      agentUserId,
+      type,
       initiatedBy,
+      relatedBuyerUserId: relatedBuyerUserId || null,
       buyerLastReadAt: new Date(),
       agentLastReadAt: new Date(),
     }).returning();
     const now = new Date();
+    const interestBuyerId = relatedBuyerUserId || buyerUserId;
     const existingInterest = await db.select().from(buyerInterest)
-      .where(and(eq(buyerInterest.propertyId, propertyId), eq(buyerInterest.buyerUserId, buyerUserId)))
+      .where(and(eq(buyerInterest.propertyId, propertyId), eq(buyerInterest.buyerUserId, interestBuyerId)))
       .limit(1);
     if (existingInterest.length > 0) {
-      const stageOrder = ["new", "engaged", "showing", "offer"];
+      const stageOrder = ["interested", "agent_reviewing", "coordinating", "showing_scheduled", "offer_stage", "closed"];
       const currentIdx = stageOrder.indexOf(existingInterest[0].stage);
-      const engagedIdx = stageOrder.indexOf("engaged");
-      const newStage = engagedIdx > currentIdx ? "engaged" : existingInterest[0].stage;
+      const reviewingIdx = stageOrder.indexOf("agent_reviewing");
+      const newStage = reviewingIdx > currentIdx ? "agent_reviewing" : existingInterest[0].stage;
+      const updateObj: any = { stage: newStage, lastActivityAt: now, updatedAt: now };
+      if (type === "buyer") {
+        updateObj.buyerConversationId = created.id;
+        updateObj.conversationId = created.id;
+      } else if (type === "agent_coordination") {
+        updateObj.agentCoordinationConversationId = created.id;
+      }
       await db.update(buyerInterest)
-        .set({ conversationId: created.id, stage: newStage, lastActivityAt: now, updatedAt: now })
+        .set(updateObj)
         .where(eq(buyerInterest.id, existingInterest[0].id));
     }
     return created;
@@ -1399,10 +1511,22 @@ export class DatabaseStorage implements IStorage {
     return { ...row.conversations, property: row.properties, buyer, agent };
   }
 
-  async getConversationsForUser(userId: string): Promise<(Conversation & { property: Property; buyer: any; agent: any; lastMessage: Message | null; unreadCount: number })[]> {
+  async getConversationsForUser(userId: string, type?: string): Promise<(Conversation & { property: Property; buyer: any; agent: any; lastMessage: Message | null; unreadCount: number })[]> {
+    const userRole = await this.getUser(userId);
+    const isBuyerRole = userRole?.role === 'user';
+
+    let whereClause;
+    if (type) {
+      whereClause = sql`(${conversations.buyerUserId} = ${userId} OR ${conversations.agentUserId} = ${userId}) AND ${conversations.type} = ${type}`;
+    } else if (isBuyerRole) {
+      whereClause = sql`${conversations.buyerUserId} = ${userId} AND ${conversations.type} = 'buyer'`;
+    } else {
+      whereClause = sql`${conversations.buyerUserId} = ${userId} OR ${conversations.agentUserId} = ${userId}`;
+    }
+
     const rows = await db.select().from(conversations)
       .innerJoin(properties, eq(conversations.propertyId, properties.id))
-      .where(sql`${conversations.buyerUserId} = ${userId} OR ${conversations.agentUserId} = ${userId}`)
+      .where(whereClause)
       .orderBy(desc(sql`COALESCE(${conversations.lastMessageAt}, ${conversations.updatedAt})`));
     const results: (Conversation & { property: Property; buyer: any; agent: any; lastMessage: Message | null; unreadCount: number })[] = [];
     for (const row of rows) {
@@ -1544,9 +1668,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getShowingRequestsForUser(userId: string): Promise<(ShowingRequest & { property: Property; buyer: any; agent: any })[]> {
+    const listingAgentVisibleStatuses = ['sent_to_listing_agent', 'confirmed', 'alternate_proposed', 'declined', 'completed'];
     const rows = await db.select().from(showingRequests)
       .innerJoin(properties, eq(showingRequests.propertyId, properties.id))
-      .where(sql`${showingRequests.buyerUserId} = ${userId} OR ${showingRequests.agentUserId} = ${userId}`)
+      .where(sql`${showingRequests.buyerUserId} = ${userId} OR ${showingRequests.agentUserId} = ${userId} OR (${properties.agentId} = ${userId} AND ${showingRequests.status} IN (${sql.join(listingAgentVisibleStatuses.map(s => sql`${s}`), sql`, `)}))`)
       .orderBy(desc(showingRequests.createdAt));
     const results: (ShowingRequest & { property: Property; buyer: any; agent: any })[] = [];
     for (const row of rows) {

@@ -85,7 +85,7 @@ function ContactCard({
 
   return (
     <div className="hidden md:block bg-muted p-6 rounded-3xl border border-border sticky top-24" data-testid="contact-card">
-      <h3 className="font-display font-bold text-lg mb-4">Contact for this listing</h3>
+      <h3 className="font-display font-bold text-lg mb-4">Your Agent</h3>
       <div className="flex items-center gap-3 mb-5">
         <div className="w-12 h-12 bg-background rounded-full flex items-center justify-center border-2 border-primary overflow-hidden shadow-sm flex-shrink-0">
           {contactImage ? (
@@ -143,7 +143,7 @@ function ContactCard({
               data-testid="button-ask-question"
             >
               <MessageSquare className="w-4 h-4" />
-              Ask a Question
+              Message Your Agent
             </button>
           )}
           {onRequestShowing && (
@@ -153,7 +153,7 @@ function ContactCard({
               data-testid="button-request-showing"
             >
               <CalendarDays className="w-4 h-4" />
-              Request a Showing
+              Request Showing Through Agent
             </button>
           )}
           {onRequestInfo && (
@@ -163,7 +163,7 @@ function ContactCard({
               data-testid="button-request-info"
             >
               <Mail className="w-4 h-4" />
-              Request More Info
+              Request Info Through Agent
             </button>
           )}
         </div>
@@ -1345,7 +1345,7 @@ export default function PropertyDetail() {
       const res = await apiRequest("POST", "/api/conversations", {
         propertyId: data.propertyId,
         initialMessage: data.message,
-        type: "text",
+        type: "ask_question",
       });
       return res.json();
     },
@@ -1383,8 +1383,50 @@ export default function PropertyDetail() {
     },
   });
 
+  const requestInfoMutation = useMutation({
+    mutationFn: async (propertyId: number) => {
+      const items = Object.entries(requestInfoChecks)
+        .filter(([, v]) => v)
+        .map(([k]) => {
+          const labels: Record<string, string> = {
+            disclosures: "Property disclosures",
+            hoaDetails: "HOA details & fees",
+            additionalPhotos: "Additional photos",
+            floorPlan: "Floor plan",
+            priceHistory: "Price history",
+            neighborhoodInfo: "Neighborhood info",
+            inspectionReports: "Inspection reports",
+          };
+          return labels[k] || k;
+        });
+      const message = `I'd like to request more information about this property:\n\n${items.map(i => `• ${i}`).join("\n")}${requestInfoNote ? `\n\nAdditional notes: ${requestInfoNote}` : ""}`;
+      const res = await apiRequest("POST", "/api/conversations", {
+        propertyId,
+        initialMessage: message,
+        type: "info_request",
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setShowRequestInfoModal(false);
+      setRequestInfoChecks({ disclosures: false, hoaDetails: false, additionalPhotos: false, floorPlan: false, priceHistory: false, neighborhoodInfo: false, inspectionReports: false });
+      setRequestInfoNote("");
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      toast({ title: "Info request sent!", description: "The agent will respond in your Messages." });
+      navigate(`/conversations/${data.id}`);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to send request.", variant: "destructive" });
+    },
+  });
+
   const { data: agentLink } = useQuery<{ agentId: string; agentEmail: string; status: string } | null>({
     queryKey: ["/api/agent-invite"],
+    enabled: isAuthenticated,
+  });
+
+  const { data: assignedAgent } = useQuery<{ id: string; firstName: string; lastName: string; email: string; phone: string; profileImageUrl: string | null; brokerageName: string } | null>({
+    queryKey: ["/api/assigned-agent"],
     enabled: isAuthenticated,
   });
 
@@ -1528,16 +1570,15 @@ export default function PropertyDetail() {
   const listingAgentPhone = property.listingAgentPhone || "";
   const listingAgentImage = property.agent?.profileImageUrl || null;
 
-  const userHasAgent = !!agentLink && agentLink.status === "active";
-  const listingAgentHasContact = !!(listingAgentPhone || listingAgentEmail);
-  const showListingAgent = userHasAgent && listingAgentHasContact;
-
-  const contactName = showListingAgent ? listingAgentName || "Listing Agent" : ADMIN_CONTACT.name;
-  const contactPhone = showListingAgent ? (listingAgentPhone || null) : ADMIN_CONTACT.phone;
-  const contactEmail = showListingAgent ? (listingAgentEmail || null) : ADMIN_CONTACT.email;
-  const contactTitle = showListingAgent ? "Listing Agent" : ADMIN_CONTACT.title;
-  const contactBrokerage = showListingAgent ? listingBrokerage : ADMIN_CONTACT.brokerage;
-  const contactImage = showListingAgent ? listingAgentImage : null;
+  const hasAssignedAgent = !!assignedAgent;
+  const contactName = hasAssignedAgent
+    ? `${assignedAgent.firstName || ""} ${assignedAgent.lastName || ""}`.trim() || "Your Agent"
+    : ADMIN_CONTACT.name;
+  const contactPhone = hasAssignedAgent ? (assignedAgent.phone || null) : ADMIN_CONTACT.phone;
+  const contactEmail = hasAssignedAgent ? (assignedAgent.email || null) : ADMIN_CONTACT.email;
+  const contactTitle = hasAssignedAgent ? "Your Agent" : ADMIN_CONTACT.title;
+  const contactBrokerage = hasAssignedAgent ? (assignedAgent.brokerageName || "") : ADMIN_CONTACT.brokerage;
+  const contactImage = hasAssignedAgent ? assignedAgent.profileImageUrl : null;
 
   const propertyAddress = `${property.title}, ${property.location}`;
 
@@ -1555,43 +1596,6 @@ export default function PropertyDetail() {
     if (!isAuthenticated) { setShowAuthPrompt(true); return; }
     setShowRequestInfoModal(true);
   };
-
-  const requestInfoMutation = useMutation({
-    mutationFn: async () => {
-      const items = Object.entries(requestInfoChecks)
-        .filter(([, v]) => v)
-        .map(([k]) => {
-          const labels: Record<string, string> = {
-            disclosures: "Property disclosures",
-            hoaDetails: "HOA details & fees",
-            additionalPhotos: "Additional photos",
-            floorPlan: "Floor plan",
-            priceHistory: "Price history",
-            neighborhoodInfo: "Neighborhood info",
-            inspectionReports: "Inspection reports",
-          };
-          return labels[k] || k;
-        });
-      const message = `I'd like to request more information about this property:\n\n${items.map(i => `• ${i}`).join("\n")}${requestInfoNote ? `\n\nAdditional notes: ${requestInfoNote}` : ""}`;
-      const res = await apiRequest("POST", "/api/conversations", {
-        propertyId: property.id,
-        initialMessage: message,
-        type: "info_request",
-      });
-      return res.json();
-    },
-    onSuccess: (data: any) => {
-      setShowRequestInfoModal(false);
-      setRequestInfoChecks({ disclosures: false, hoaDetails: false, additionalPhotos: false, floorPlan: false, priceHistory: false, neighborhoodInfo: false, inspectionReports: false });
-      setRequestInfoNote("");
-      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
-      toast({ title: "Info request sent!", description: "The agent will respond in your Messages." });
-      navigate(`/conversations/${data.id}`);
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to send request.", variant: "destructive" });
-    },
-  });
 
   return (
     <>
@@ -1756,7 +1760,7 @@ export default function PropertyDetail() {
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
               <button onClick={() => setShowRequestInfoModal(false)} className="px-4 py-2 text-sm font-medium text-muted-foreground">Cancel</button>
               <button
-                onClick={() => requestInfoMutation.mutate()}
+                onClick={() => requestInfoMutation.mutate(property.id)}
                 disabled={!Object.values(requestInfoChecks).some(v => v) || requestInfoMutation.isPending}
                 className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2 rounded-lg text-sm font-bold disabled:opacity-50"
                 data-testid="button-submit-request-info"

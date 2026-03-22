@@ -1697,107 +1697,39 @@ export async function registerRoutes(
       const { propertyId } = req.body;
       if (!propertyId) return res.status(400).json({ message: "propertyId required" });
 
-      await storage.upsertBuyerInterest(propertyId, buyerUserId, "swipe");
+      const prop = await storage.getProperty(propertyId);
+      if (!prop) return res.status(404).json({ message: "Property not found" });
+
+      const assignedAgent = await storage.resolveAndAssignAgent(buyerUserId);
+      await storage.upsertBuyerInterest(propertyId, buyerUserId, "swipe", assignedAgent?.id || null, prop?.agentId || null);
 
       const existing = await storage.getExistingSwipeNotification(buyerUserId, propertyId);
       if (existing) return res.status(200).json({ message: "Already notified", notification: existing });
 
-      const prop = await storage.getProperty(propertyId);
-      if (!prop) return res.status(404).json({ message: "Property not found" });
-
-      const buyerProfile = await storage.getUserBuyerProfile(buyerUserId);
-      const buyerLink = await storage.getClientAgentLink(buyerUserId);
-
-      const buyerRepresented = !!(
-        (buyerProfile && (buyerProfile.agentId || buyerProfile.buyerAgentEmail)) ||
-        (buyerLink && buyerLink.agentId)
-      );
-      const buyerAgentEmail = buyerProfile?.buyerAgentEmail || buyerLink?.agentEmail || null;
+      if (!assignedAgent) {
+        return res.status(400).json({ message: "No agent assigned. Please contact support." });
+      }
 
       const sellerRepresented = !!(prop.agentId || prop.listingAgentEmail);
       const listingAgentEmail = prop.listingAgentEmail || null;
 
-      const adminEmail = process.env.ADMIN_EMAIL || "";
-      const adminUser = adminEmail
-        ? await db.select().from(users).where(eq(users.email, adminEmail)).limit(1).then(r => r[0])
-        : null;
-
-      const notifications: any[] = [];
-
-      if (sellerRepresented) {
-        if (prop.agentId) {
-          notifications.push({
-            buyerUserId,
-            propertyId,
-            notifiedParty: "listing_agent",
-            notifiedUserId: prop.agentId,
-            notifiedEmail: prop.listingAgentEmail || "",
-            buyerRepresented,
-            sellerRepresented: true,
-            buyerAgentEmail,
-            listingAgentEmail,
-            status: "notified",
-          });
-        } else if (prop.listingAgentEmail) {
-          notifications.push({
-            buyerUserId,
-            propertyId,
-            notifiedParty: "listing_agent",
-            notifiedUserId: null,
-            notifiedEmail: prop.listingAgentEmail,
-            buyerRepresented,
-            sellerRepresented: true,
-            buyerAgentEmail,
-            listingAgentEmail,
-            status: "notified",
-          });
-        }
-      } else {
-        notifications.push({
-          buyerUserId,
-          propertyId,
-          notifiedParty: "admin",
-          notifiedUserId: adminUser?.id || null,
-          notifiedEmail: adminEmail,
-          buyerRepresented,
-          sellerRepresented: false,
-          buyerAgentEmail,
-          listingAgentEmail: null,
-          status: "notified",
-        });
-      }
-
-      if (!buyerRepresented) {
-        const alreadyHasAdminNotif = notifications.some(n => n.notifiedParty === "admin");
-        if (!alreadyHasAdminNotif) {
-          notifications.push({
-            buyerUserId,
-            propertyId,
-            notifiedParty: "admin",
-            notifiedUserId: adminUser?.id || null,
-            notifiedEmail: adminEmail,
-            buyerRepresented: false,
-            sellerRepresented,
-            buyerAgentEmail: null,
-            listingAgentEmail,
-            status: "notified",
-          });
-        } else {
-          const adminNotif = notifications.find(n => n.notifiedParty === "admin");
-          if (adminNotif) adminNotif.buyerRepresented = false;
-        }
-      }
-
-      const created = [];
-      for (const notif of notifications) {
-        const n = await storage.createSwipeNotification(notif);
-        created.push(n);
-      }
+      const n = await storage.createSwipeNotification({
+        buyerUserId,
+        propertyId,
+        notifiedParty: "assigned_agent",
+        notifiedUserId: assignedAgent.id,
+        notifiedEmail: assignedAgent.email || "",
+        buyerRepresented: true,
+        sellerRepresented,
+        buyerAgentEmail: assignedAgent.email || null,
+        listingAgentEmail,
+        status: "notified",
+      });
 
       res.status(201).json({
         message: "Interest registered",
-        notifications: created,
-        buyerRepresented,
+        notifications: [n],
+        buyerRepresented: true,
         sellerRepresented,
       });
     } catch (err) {
@@ -1875,8 +1807,13 @@ export async function registerRoutes(
   app.get("/api/property-offers/incoming", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const offers = await storage.getPropertyOffersForBuyer(userId);
-      res.json(offers);
+      const user = await storage.getUser(userId);
+      if (user?.role === "agent" || user?.role === "admin") {
+        const offers = await storage.getPropertyOffersForAgent(userId);
+        res.json(offers);
+      } else {
+        res.status(403).json({ message: "Offer details are communicated through your assigned agent" });
+      }
     } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
     }
@@ -1922,53 +1859,99 @@ export async function registerRoutes(
       const offer = offers[0];
       if (!offer) return res.status(404).json({ message: "Offer not found" });
 
-      const buyerStatuses = ["accepted", "rejected", "declined", "countered", "viewed"];
-      const agentStatuses = ["sent_to_buyer", "pending_agent_review", "expired"];
+      const assignedAgent = offer.buyerUserId ? await storage.lookupAssignedAgent(offer.buyerUserId) : null;
+      const isAssignedAgent = assignedAgent?.id === userId;
 
-      if (buyerStatuses.includes(status) && offer.buyerUserId !== userId && !isAdminUser) {
-        return res.status(403).json({ message: "Only the buyer can respond to this offer" });
+      const assignedAgentStatuses = ["accepted", "rejected", "declined", "countered", "viewed", "pending_agent_review"];
+      const listingAgentStatuses = ["sent_to_buyer", "expired"];
+
+      if (assignedAgentStatuses.includes(status) && !isAssignedAgent && !isAdminUser) {
+        return res.status(403).json({ message: "Only the assigned agent can respond to this offer on behalf of the buyer" });
       }
-      if (agentStatuses.includes(status) && offer.listingAgentId !== userId && !isAdminUser) {
+      if (listingAgentStatuses.includes(status) && offer.listingAgentId !== userId && !isAdminUser) {
         return res.status(403).json({ message: "Only the listing agent or admin can update this status" });
       }
 
       const updated = await storage.updatePropertyOfferStatus(id, status, adminNotes);
 
       const offerResponseStatuses = ["accepted", "rejected", "declined", "countered"];
-      if (offerResponseStatuses.includes(status) && offer.propertyId) {
-        const statusLabel = status === "countered" ? "counter-offered" : status;
+      if ((offerResponseStatuses.includes(status) || listingAgentStatuses.includes(status)) && offer.propertyId) {
+        const statusLabel = status === "countered" ? "counter-offered" : status === "sent_to_buyer" ? "sent to buyer's agent" : status;
         const buyerUser = await storage.getUser(offer.buyerUserId!);
         const buyerName = buyerUser?.firstName ? `${buyerUser.firstName} ${buyerUser.lastName || ""}`.trim() : "Buyer";
-        const agentId = offer.listingAgentId;
 
-        if (agentId) {
-          const convo = await storage.getOrCreateConversation(offer.propertyId, offer.buyerUserId!, agentId);
+        const resolvedAssignedAgent = offer.buyerUserId ? await storage.lookupAssignedAgent(offer.buyerUserId) : null;
+        const agentId = resolvedAssignedAgent?.id;
+        const listingAgentId = offer.listingAgentId;
+
+        const now = new Date();
+        await db.update(buyerInterest)
+          .set({ stage: "offer_stage", lastActivityAt: now, updatedAt: now })
+          .where(and(eq(buyerInterest.propertyId, offer.propertyId), eq(buyerInterest.buyerUserId, offer.buyerUserId!)));
+
+        if (offerResponseStatuses.includes(status) && agentId) {
+          const buyerConvo = await storage.getOrCreateConversation(offer.propertyId, offer.buyerUserId!, agentId, "agent", "buyer");
           await storage.createMessage({
-            conversationId: convo.id,
-            senderUserId: userId,
+            conversationId: buyerConvo.id,
+            senderUserId: agentId,
             type: "system",
-            content: `${buyerName} has ${statusLabel} the offer.`,
+            content: `Offer has been ${statusLabel}.`,
           });
-
-          const now = new Date();
-          await db.update(buyerInterest)
-            .set({ stage: "offer", lastActivityAt: now, updatedAt: now })
-            .where(and(eq(buyerInterest.propertyId, offer.propertyId), eq(buyerInterest.buyerUserId, offer.buyerUserId!)));
-
-          const recipientId = userId === offer.buyerUserId ? agentId : offer.buyerUserId!;
-          const offerNotifTitle = `Offer ${statusLabel}`;
-          const offerNotifMsg = `${buyerName} has ${statusLabel} the offer on the property.`;
           await storage.createNotification({
-            userId: recipientId,
+            userId: offer.buyerUserId!,
             type: "offer_response",
-            title: offerNotifTitle,
-            message: offerNotifMsg,
+            title: `Offer ${statusLabel}`,
+            message: `Your offer has been ${statusLabel}.`,
             propertyId: offer.propertyId,
-            linkUrl: `/conversations/${convo.id}`,
+            linkUrl: `/conversations/${buyerConvo.id}`,
             read: false,
             archived: false,
           });
-          trySendNotificationEmail(recipientId, "offer_response", offerNotifTitle, offerNotifMsg, `/conversations/${convo.id}`, offer.propertyId, convo.id);
+          trySendNotificationEmail(offer.buyerUserId!, "offer_response", `Offer ${statusLabel}`, `Your offer has been ${statusLabel}.`, `/conversations/${buyerConvo.id}`, offer.propertyId, buyerConvo.id);
+
+          if (listingAgentId && agentId !== listingAgentId) {
+            const coordConvo = await storage.getOrCreateConversation(offer.propertyId, agentId, listingAgentId, "agent", "agent_coordination", offer.buyerUserId!);
+            await storage.createMessage({
+              conversationId: coordConvo.id,
+              senderUserId: agentId,
+              type: "system",
+              content: `${buyerName}'s agent has ${statusLabel} the offer.`,
+            });
+            await storage.createNotification({
+              userId: listingAgentId,
+              type: "offer_response",
+              title: `Offer ${statusLabel}`,
+              message: `${buyerName}'s agent has ${statusLabel} the offer.`,
+              propertyId: offer.propertyId,
+              linkUrl: `/conversations/${coordConvo.id}`,
+              read: false,
+              archived: false,
+            });
+            trySendNotificationEmail(listingAgentId, "offer_response", `Offer ${statusLabel}`, `${buyerName}'s agent has ${statusLabel} the offer.`, `/conversations/${coordConvo.id}`, offer.propertyId, coordConvo.id);
+          }
+        }
+
+        if (listingAgentStatuses.includes(status) && listingAgentId && agentId) {
+          if (agentId !== listingAgentId) {
+            const coordConvo = await storage.getOrCreateConversation(offer.propertyId, agentId, listingAgentId, "agent", "agent_coordination", offer.buyerUserId!);
+            await storage.createMessage({
+              conversationId: coordConvo.id,
+              senderUserId: listingAgentId,
+              type: "system",
+              content: `Listing agent has ${statusLabel} the offer.`,
+            });
+            await storage.createNotification({
+              userId: agentId,
+              type: "offer_response",
+              title: `Offer ${statusLabel}`,
+              message: `Listing agent has ${statusLabel} the offer.`,
+              propertyId: offer.propertyId,
+              linkUrl: `/conversations/${coordConvo.id}`,
+              read: false,
+              archived: false,
+            });
+            trySendNotificationEmail(agentId, "offer_response", `Offer ${statusLabel}`, `Listing agent has ${statusLabel} the offer.`, `/conversations/${coordConvo.id}`, offer.propertyId, coordConvo.id);
+          }
         }
       }
 
@@ -3161,8 +3144,51 @@ export async function registerRoutes(
       const userId = req.user.claims.sub;
       const { propertyId, source } = req.body;
       if (!propertyId) return res.status(400).json({ message: "propertyId required" });
-      const result = await storage.upsertBuyerInterest(propertyId, userId, source || "swipe");
+
+      const prop = await storage.getProperty(propertyId);
+      const assignedAgent = await storage.resolveAndAssignAgent(userId);
+      const result = await storage.upsertBuyerInterest(
+        propertyId, userId, source || "swipe",
+        assignedAgent?.id || null,
+        prop?.agentId || null
+      );
+
+      if (assignedAgent && (source === "swipe" || !source)) {
+        const buyer = await storage.getUser(userId);
+        const buyerName = buyer?.firstName ? `${buyer.firstName} ${buyer.lastName || ""}`.trim() : "A buyer";
+        const propTitle = prop?.title || `Property #${propertyId}`;
+        await storage.createNotification({
+          userId: assignedAgent.id,
+          type: "buyer_interest",
+          title: `${buyerName} is interested in a property`,
+          message: `${buyerName} expressed interest in ${propTitle}`,
+          propertyId,
+          linkUrl: `/agent/dashboard`,
+          read: false,
+          archived: false,
+        });
+      }
+
       res.status(201).json(result);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  app.get("/api/assigned-agent", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const agent = await storage.lookupAssignedAgent(userId);
+      if (!agent) return res.status(404).json({ message: "No assigned agent found" });
+      res.json({
+        id: agent.id,
+        firstName: agent.firstName,
+        lastName: agent.lastName,
+        email: agent.email,
+        phone: agent.phone,
+        profileImageUrl: agent.profileImageUrl,
+        brokerageName: agent.brokerageName,
+      });
     } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
     }
@@ -3213,13 +3239,12 @@ export async function registerRoutes(
       const existing = await db.select().from(buyerInterest).where(eq(buyerInterest.id, id)).limit(1);
       if (!existing.length) return res.status(404).json({ message: "Not found" });
 
-      const prop = await storage.getProperty(existing[0].propertyId);
-      const isAgent = prop?.agentId === userId;
-      if (!isAgent && existing[0].buyerUserId !== userId) {
+      const isAssignedAgent = existing[0].assignedAgentUserId === userId;
+      if (!isAssignedAgent && existing[0].buyerUserId !== userId) {
         return res.status(403).json({ message: "Access denied" });
       }
 
-      const validStages = ["new", "engaged", "showing", "offer", "closed", "archived"];
+      const validStages = ["interested", "agent_reviewing", "coordinating", "showing_scheduled", "offer_stage", "closed", "archived"];
       if (stage && !validStages.includes(stage)) {
         return res.status(400).json({ message: `Invalid stage. Must be one of: ${validStages.join(", ")}` });
       }
@@ -3236,10 +3261,38 @@ export async function registerRoutes(
 
   // ── Conversations API ───────────────────────────────────────────────────
 
+  async function validateConversationAccess(convo: any, userId: string): Promise<{ allowed: boolean; reason?: string }> {
+    if (convo.buyerUserId !== userId && convo.agentUserId !== userId) {
+      return { allowed: false, reason: "You are not a participant in this conversation" };
+    }
+    const callerUser = await storage.getUser(userId);
+    const callerRole = callerUser?.role || "user";
+    if (convo.type === "agent_coordination" && callerRole === "user") {
+      return { allowed: false, reason: "Buyers cannot access agent coordination threads" };
+    }
+    if (convo.type === "buyer") {
+      const otherUserId = convo.buyerUserId === userId ? convo.agentUserId : convo.buyerUserId;
+      const otherUser = await storage.getUser(otherUserId);
+      if (callerRole === "user" && otherUser?.role === "user") {
+        return { allowed: false, reason: "Buyer-to-buyer conversations are not allowed" };
+      }
+      if (callerRole === "user") {
+        const buyerUser = await storage.getUser(userId);
+        if (buyerUser?.assignedAgentUserId && buyerUser.assignedAgentUserId !== otherUserId) {
+          return { allowed: false, reason: "You can only communicate with your assigned agent" };
+        }
+      }
+    }
+    return { allowed: true };
+  }
+
   app.get("/api/conversations", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const convos = await storage.getConversationsForUser(userId);
+      const callerUser = await storage.getUser(userId);
+      const isBuyerRole = callerUser?.role === "user";
+      const type = isBuyerRole ? "buyer" : (req.query.type as string | undefined);
+      const convos = await storage.getConversationsForUser(userId, type);
       res.json(convos);
     } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
@@ -3262,9 +3315,8 @@ export async function registerRoutes(
       const userId = req.user.claims.sub;
       const convo = await storage.getConversation(parseInt(req.params.id));
       if (!convo) return res.status(404).json({ message: "Conversation not found" });
-      if (convo.buyerUserId !== userId && convo.agentUserId !== userId) {
-        return res.status(403).json({ message: "Access denied" });
-      }
+      const access = await validateConversationAccess(convo, userId);
+      if (!access.allowed) return res.status(403).json({ message: access.reason });
       res.json(convo);
     } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
@@ -3274,64 +3326,95 @@ export async function registerRoutes(
   app.post("/api/conversations", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { propertyId, agentUserId, buyerUserId, initialMessage, type } = req.body;
+      const { propertyId, buyerUserId, initialMessage, type: msgType, conversationType } = req.body;
       if (!propertyId) return res.status(400).json({ message: "propertyId required" });
 
       const prop = await storage.getProperty(propertyId);
       if (!prop) return res.status(404).json({ message: "Property not found" });
 
       const callerUser = await storage.getUser(userId);
-      const isAgent = callerUser?.role === "agent";
+      const callerRole = callerUser?.role;
+      const isAgent = callerRole === "agent" || callerRole === "admin";
+      const isBuyer = callerRole === "user";
 
       let resolvedBuyerId: string;
       let resolvedAgentId: string;
+      let convType: string = "buyer";
 
-      if (isAgent) {
-        if (prop.agentId !== userId) {
-          return res.status(403).json({ message: "You are not the listing agent for this property" });
-        }
-        if (!buyerUserId) {
-          return res.status(400).json({ message: "buyerUserId required when agent creates conversation" });
-        }
-        resolvedAgentId = userId;
-        resolvedBuyerId = buyerUserId;
-      } else {
+      if (isBuyer) {
         resolvedBuyerId = userId;
-        resolvedAgentId = prop.agentId || agentUserId;
-        if (!resolvedAgentId) return res.status(400).json({ message: "No agent associated with this property" });
-        if (agentUserId && agentUserId !== prop.agentId) {
-          return res.status(403).json({ message: "Invalid agent for this property" });
+        const assignedAgent = await storage.resolveAndAssignAgent(userId);
+        if (!assignedAgent) return res.status(400).json({ message: "No agent assigned. Please contact support." });
+        resolvedAgentId = assignedAgent.id;
+        convType = "buyer";
+      } else if (isAgent) {
+        if (conversationType === "agent_coordination") {
+          if (!buyerUserId) return res.status(400).json({ message: "buyerUserId required for agent coordination" });
+
+          const buyerUser = await storage.getUser(buyerUserId);
+          if (!buyerUser) return res.status(404).json({ message: "Buyer not found" });
+          if (buyerUser.assignedAgentUserId !== userId) {
+            return res.status(403).json({ message: "You are not the assigned agent for this buyer" });
+          }
+
+          const listingAgentId = prop.agentId;
+          if (!listingAgentId) {
+            return res.status(400).json({ message: "No listing agent for this property" });
+          }
+          if (listingAgentId === userId) {
+            return res.status(400).json({ message: "You are already the listing agent for this property. Use a buyer conversation instead." });
+          }
+          resolvedBuyerId = userId;
+          resolvedAgentId = listingAgentId;
+          convType = "agent_coordination";
+        } else {
+          if (!buyerUserId) return res.status(400).json({ message: "buyerUserId required when agent creates conversation" });
+
+          const buyerUser = await storage.getUser(buyerUserId);
+          if (!buyerUser) return res.status(404).json({ message: "Buyer not found" });
+
+          if (!buyerUser.assignedAgentUserId) {
+            return res.status(403).json({ message: "This buyer has no assigned agent. Assignment happens through buyer-initiated flows." });
+          }
+          if (buyerUser.assignedAgentUserId !== userId) {
+            return res.status(403).json({ message: "You are not the assigned agent for this buyer" });
+          }
+
+          resolvedBuyerId = buyerUserId;
+          resolvedAgentId = userId;
+          convType = "buyer";
         }
+      } else {
+        return res.status(403).json({ message: "Invalid role for conversation creation" });
       }
 
-      await storage.upsertBuyerInterest(propertyId, resolvedBuyerId, type || "inquiry");
+      const actualBuyerIdForInterest = (convType === "agent_coordination" && buyerUserId) ? buyerUserId : resolvedBuyerId;
+      await storage.upsertBuyerInterest(propertyId, actualBuyerIdForInterest, msgType || "inquiry", isAgent ? userId : resolvedAgentId, prop.agentId || null);
 
-      const convo = await storage.getOrCreateConversation(propertyId, resolvedBuyerId, resolvedAgentId, isAgent ? "agent" : "buyer");
+      const relatedBuyer = (convType === "agent_coordination" && buyerUserId) ? buyerUserId : undefined;
+      const convo = await storage.getOrCreateConversation(propertyId, resolvedBuyerId, resolvedAgentId, isAgent ? "agent" : "buyer", convType, relatedBuyer);
 
       if (initialMessage) {
         await storage.createMessage({
           conversationId: convo.id,
           senderUserId: userId,
-          type: type || "text",
+          type: msgType || "text",
           content: initialMessage,
         });
 
-        const recipientId = isAgent ? resolvedBuyerId : resolvedAgentId;
-        const recipient = await storage.getUser(recipientId);
-        if (recipient?.email) {
-          const senderName = callerUser?.firstName ? `${callerUser.firstName} ${callerUser.lastName || ""}`.trim() : (isAgent ? "Your agent" : "A buyer");
-          await storage.createNotification({
-            userId: recipientId,
-            type: "message_received",
-            title: `New message from ${senderName}`,
-            message: initialMessage.substring(0, 200),
-            propertyId,
-            linkUrl: `/conversations/${convo.id}`,
-            read: false,
-            archived: false,
-          });
-          trySendNotificationEmail(recipientId, "message_received", `New message from ${senderName}`, initialMessage.substring(0, 200), `/conversations/${convo.id}`, propertyId, convo.id);
-        }
+        const recipientId = isAgent && convType !== "agent_coordination" ? resolvedBuyerId : resolvedAgentId;
+        const senderName = callerUser?.firstName ? `${callerUser.firstName} ${callerUser.lastName || ""}`.trim() : (isAgent ? "Your agent" : "A buyer");
+        await storage.createNotification({
+          userId: recipientId,
+          type: "message_received",
+          title: `New message from ${senderName}`,
+          message: initialMessage.substring(0, 200),
+          propertyId,
+          linkUrl: `/conversations/${convo.id}`,
+          read: false,
+          archived: false,
+        });
+        trySendNotificationEmail(recipientId, "message_received", `New message from ${senderName}`, initialMessage.substring(0, 200), `/conversations/${convo.id}`, propertyId, convo.id);
       }
 
       res.status(201).json(convo);
@@ -3347,9 +3430,8 @@ export async function registerRoutes(
       const conversationId = parseInt(req.params.id);
       const convo = await storage.getConversation(conversationId);
       if (!convo) return res.status(404).json({ message: "Conversation not found" });
-      if (convo.buyerUserId !== userId && convo.agentUserId !== userId) {
-        return res.status(403).json({ message: "Access denied" });
-      }
+      const access = await validateConversationAccess(convo, userId);
+      if (!access.allowed) return res.status(403).json({ message: access.reason });
       const role = convo.buyerUserId === userId ? 'buyer' : 'agent';
       await storage.updateConversationReadAt(conversationId, userId, role);
       res.json({ success: true });
@@ -3366,9 +3448,8 @@ export async function registerRoutes(
       const conversationId = parseInt(req.params.id);
       const convo = await storage.getConversation(conversationId);
       if (!convo) return res.status(404).json({ message: "Conversation not found" });
-      if (convo.buyerUserId !== userId && convo.agentUserId !== userId) {
-        return res.status(403).json({ message: "Access denied" });
-      }
+      const access = await validateConversationAccess(convo, userId);
+      if (!access.allowed) return res.status(403).json({ message: access.reason });
 
       const limit = parseInt(req.query.limit as string) || 50;
       const before = req.query.before ? parseInt(req.query.before as string) : undefined;
@@ -3389,9 +3470,8 @@ export async function registerRoutes(
       const conversationId = parseInt(req.params.id);
       const convo = await storage.getConversation(conversationId);
       if (!convo) return res.status(404).json({ message: "Conversation not found" });
-      if (convo.buyerUserId !== userId && convo.agentUserId !== userId) {
-        return res.status(403).json({ message: "Access denied" });
-      }
+      const access = await validateConversationAccess(convo, userId);
+      if (!access.allowed) return res.status(403).json({ message: access.reason });
 
       const { content, type } = req.body;
       if (!content) return res.status(400).json({ message: "content required" });
@@ -3452,12 +3532,13 @@ export async function registerRoutes(
       const prop = await storage.getProperty(propertyId);
       if (!prop) return res.status(404).json({ message: "Property not found" });
 
-      const agentId = prop.agentId;
-      if (!agentId) return res.status(400).json({ message: "No agent for this property" });
+      const assignedAgent = await storage.resolveAndAssignAgent(userId);
+      if (!assignedAgent) return res.status(400).json({ message: "No agent assigned" });
+      const agentId = assignedAgent.id;
 
-      await storage.upsertBuyerInterest(propertyId, userId, "showing_request");
+      await storage.upsertBuyerInterest(propertyId, userId, "showing_request", agentId, prop.agentId || null);
 
-      const convo = await storage.getOrCreateConversation(propertyId, userId, agentId);
+      const convo = await storage.getOrCreateConversation(propertyId, userId, agentId, "buyer", "buyer");
 
       const request = await storage.createShowingRequest({
         conversationId: convo.id,
@@ -3507,19 +3588,57 @@ export async function registerRoutes(
 
       const existing = await storage.getShowingRequest(id);
       if (!existing) return res.status(404).json({ message: "Showing request not found" });
-      if (existing.buyerUserId !== userId && existing.agentUserId !== userId) {
+
+      const prop = await storage.getProperty(existing.propertyId);
+      const isAssignedAgent = existing.agentUserId === userId;
+      const isBuyerUser = existing.buyerUserId === userId;
+      const isListingAgent = prop?.agentId === userId;
+
+      if (!isAssignedAgent && !isBuyerUser && !isListingAgent) {
         return res.status(403).json({ message: "Access denied" });
       }
 
-      const isAgent = existing.agentUserId === userId;
-      const isBuyer = existing.buyerUserId === userId;
-      const agentAllowed = ["confirmed", "declined", "rescheduled"];
-      const buyerAllowed = ["cancelled"];
-      if (isAgent && !agentAllowed.includes(status)) {
-        return res.status(403).json({ message: `Agents can only set status to: ${agentAllowed.join(", ")}` });
+      const currentStatus = existing.status;
+
+      const validTransitions: Record<string, Record<string, string[]>> = {
+        assignedAgent: {
+          requested: ["under_review"],
+          under_review: ["sent_to_listing_agent"],
+          sent_to_listing_agent: [],
+          confirmed: ["completed"],
+          alternate_proposed: ["under_review", "sent_to_listing_agent"],
+          declined: [],
+          completed: [],
+          cancelled: [],
+        },
+        listingAgent: {
+          sent_to_listing_agent: ["confirmed", "alternate_proposed", "declined"],
+          confirmed: ["completed"],
+          alternate_proposed: [],
+          declined: [],
+          completed: [],
+        },
+        buyer: {
+          requested: ["cancelled"],
+          under_review: ["cancelled"],
+          sent_to_listing_agent: ["cancelled"],
+        },
+      };
+
+      let allowedNext: string[] = [];
+      if (isAssignedAgent) {
+        allowedNext = [...allowedNext, ...(validTransitions.assignedAgent[currentStatus] || [])];
       }
-      if (isBuyer && !buyerAllowed.includes(status)) {
-        return res.status(403).json({ message: `Buyers can only cancel showing requests` });
+      if (isListingAgent) {
+        allowedNext = [...allowedNext, ...(validTransitions.listingAgent[currentStatus] || [])];
+      }
+      if (isBuyerUser) {
+        allowedNext = [...allowedNext, ...(validTransitions.buyer[currentStatus] || [])];
+      }
+      allowedNext = [...new Set(allowedNext)];
+
+      if (!allowedNext.includes(status)) {
+        return res.status(403).json({ message: `Cannot transition from '${currentStatus}' to '${status}' with your role. Allowed: ${allowedNext.join(", ") || "none"}` });
       }
 
       const updated = await storage.updateShowingRequestStatus(
@@ -3531,40 +3650,94 @@ export async function registerRoutes(
       if (status === "confirmed") {
         const now = new Date();
         await db.update(buyerInterest)
-          .set({ stage: "showing", lastActivityAt: now, updatedAt: now })
+          .set({ stage: "showing_scheduled", lastActivityAt: now, updatedAt: now })
           .where(and(eq(buyerInterest.propertyId, updated.propertyId), eq(buyerInterest.buyerUserId, updated.buyerUserId)));
       }
 
-      if (updated.conversationId) {
-        const statusMsg = status === "confirmed"
-          ? `Showing confirmed${confirmedDate ? ` for ${new Date(confirmedDate).toLocaleDateString()}` : ""}`
-          : `Showing ${status}`;
-        await storage.createMessage({
-          conversationId: updated.conversationId,
-          senderUserId: userId,
-          type: "system",
-          content: statusMsg,
-        });
-      }
+      const statusMsg = status === "confirmed"
+        ? `Showing confirmed${confirmedDate ? ` for ${new Date(confirmedDate).toLocaleDateString()}` : ""}`
+        : `Showing ${(status || "").replace(/_/g, " ")}`;
 
-      const recipientId = updated.buyerUserId === userId ? updated.agentUserId : updated.buyerUserId;
-      const sender = await storage.getUser(userId);
-      const senderName = sender?.firstName || "Agent";
-      const statusLabel = status === "confirmed" ? "confirmed" : status === "declined" ? "declined" : status === "cancelled" ? "cancelled" : status;
-      const notificationType = status === "confirmed" ? "showing_confirmed" : status === "declined" ? "showing_declined" : "showing_update";
-      const showingNotifTitle = `Showing ${statusLabel} by ${senderName}`;
-      const showingNotifMsg = confirmedDate ? `Confirmed for ${new Date(confirmedDate).toLocaleDateString()}` : `Showing has been ${statusLabel}`;
-      await storage.createNotification({
-        userId: recipientId,
-        type: notificationType,
-        title: showingNotifTitle,
-        message: showingNotifMsg,
-        propertyId: updated.propertyId,
-        linkUrl: `/conversations/${updated.conversationId}`,
-        read: false,
-        archived: false,
-      });
-      trySendNotificationEmail(recipientId, notificationType, showingNotifTitle, showingNotifMsg, `/conversations/${updated.conversationId}`, updated.propertyId, updated.conversationId);
+      if (isListingAgent && !isAssignedAgent) {
+        const biRecord = await db.select().from(buyerInterest)
+          .where(and(eq(buyerInterest.propertyId, updated.propertyId), eq(buyerInterest.buyerUserId, updated.buyerUserId)))
+          .limit(1);
+        const coordConvoId = biRecord[0]?.agentCoordinationConversationId;
+        const buyerConvoId = biRecord[0]?.buyerConversationId || updated.conversationId;
+        if (coordConvoId) {
+          await storage.createMessage({
+            conversationId: coordConvoId,
+            senderUserId: userId,
+            type: "system",
+            content: statusMsg,
+          });
+        }
+        const sender = await storage.getUser(userId);
+        const senderName = sender?.firstName || "Listing Agent";
+        const notificationType = status === "confirmed" ? "showing_confirmed" : status === "declined" ? "showing_declined" : "showing_update";
+        const notifTitle = `Showing ${(status || "").replace(/_/g, " ")}`;
+        const notifMsg = confirmedDate ? `Confirmed for ${new Date(confirmedDate).toLocaleDateString()}` : `Showing has been ${(status || "").replace(/_/g, " ")}`;
+
+        await storage.createNotification({
+          userId: updated.agentUserId,
+          type: notificationType,
+          title: `${notifTitle} by ${senderName}`,
+          message: notifMsg,
+          propertyId: updated.propertyId,
+          linkUrl: coordConvoId ? `/conversations/${coordConvoId}` : undefined,
+          read: false,
+          archived: false,
+        });
+        if (coordConvoId) {
+          trySendNotificationEmail(updated.agentUserId, notificationType, `${notifTitle} by ${senderName}`, notifMsg, `/conversations/${coordConvoId}`, updated.propertyId, coordConvoId);
+        }
+
+        if (buyerConvoId && ["confirmed", "declined", "completed"].includes(status)) {
+          await storage.createMessage({
+            conversationId: buyerConvoId,
+            senderUserId: updated.agentUserId,
+            type: "system",
+            content: statusMsg,
+          });
+          await storage.createNotification({
+            userId: updated.buyerUserId,
+            type: notificationType,
+            title: notifTitle,
+            message: notifMsg,
+            propertyId: updated.propertyId,
+            linkUrl: `/conversations/${buyerConvoId}`,
+            read: false,
+            archived: false,
+          });
+          trySendNotificationEmail(updated.buyerUserId, notificationType, notifTitle, notifMsg, `/conversations/${buyerConvoId}`, updated.propertyId, buyerConvoId);
+        }
+      } else {
+        if (updated.conversationId) {
+          await storage.createMessage({
+            conversationId: updated.conversationId,
+            senderUserId: userId,
+            type: "system",
+            content: statusMsg,
+          });
+        }
+        const recipientId = updated.buyerUserId === userId ? updated.agentUserId : updated.buyerUserId;
+        const sender = await storage.getUser(userId);
+        const senderName = sender?.firstName || "Agent";
+        const notificationType = status === "confirmed" ? "showing_confirmed" : status === "declined" ? "showing_declined" : "showing_update";
+        const notifTitle = `Showing ${(status || "").replace(/_/g, " ")} by ${senderName}`;
+        const notifMsg = confirmedDate ? `Confirmed for ${new Date(confirmedDate).toLocaleDateString()}` : `Showing has been ${(status || "").replace(/_/g, " ")}`;
+        await storage.createNotification({
+          userId: recipientId,
+          type: notificationType,
+          title: notifTitle,
+          message: notifMsg,
+          propertyId: updated.propertyId,
+          linkUrl: `/conversations/${updated.conversationId}`,
+          read: false,
+          archived: false,
+        });
+        trySendNotificationEmail(recipientId, notificationType, notifTitle, notifMsg, `/conversations/${updated.conversationId}`, updated.propertyId, updated.conversationId);
+      }
 
       res.json(updated);
     } catch (err) {

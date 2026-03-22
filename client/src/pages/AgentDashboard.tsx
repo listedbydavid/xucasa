@@ -222,6 +222,7 @@ export default function AgentDashboard() {
 // ── Buyer Interest Section ────────────────────────────────────────────────────
 
 function BuyerInterestSection() {
+  const { user } = useAuth();
   const [, navigate] = useLocation();
   const { data: interests = [], isLoading: interestLoading } = useQuery<any[]>({
     queryKey: ["/api/buyer-interest/agent"],
@@ -389,6 +390,29 @@ function BuyerInterestSection() {
                                 Message
                               </button>
                             )}
+                            {property?.agentId && property.agentId !== user?.id && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const res = await apiRequest("POST", "/api/conversations", {
+                                    propertyId: interest.propertyId,
+                                    buyerUserId: interest.buyerUserId,
+                                    conversationType: "agent_coordination",
+                                  });
+                                  const data = await res.json();
+                                  queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+                                  navigate(`/conversations/${data.id}`);
+                                } catch (err) {
+                                  console.error("Failed to create coordination thread:", err);
+                                }
+                              }}
+                              className="flex items-center gap-1.5 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 px-3 py-1.5 rounded-lg text-xs font-semibold border border-amber-200 dark:border-amber-800"
+                              data-testid={`button-contact-listing-agent-${interest.id}`}
+                            >
+                              <Users className="w-3.5 h-3.5" />
+                              Contact Listing Agent
+                            </button>
+                            )}
                             {status !== "offer_created" && (
                               <button
                                 onClick={() => setSelectedNotification(interest)}
@@ -469,13 +493,18 @@ function ConversationsList({ conversations, navigate }: { conversations: any[]; 
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">
-                <h4 className="font-bold text-sm truncate">{convo.property?.title || "Property"}</h4>
+                <div className="flex items-center gap-2 min-w-0">
+                  <h4 className="font-bold text-sm truncate">{convo.property?.title || "Property"}</h4>
+                  {convo.type === "agent_coordination" && (
+                    <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-[10px] px-1.5 py-0.5 rounded-full font-bold flex-shrink-0">Agent</span>
+                  )}
+                </div>
                 {convo.unreadCount > 0 && (
                   <span className="bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full font-bold ml-2">{convo.unreadCount}</span>
                 )}
               </div>
               <p className="text-xs text-muted-foreground truncate">
-                {convo.buyer?.firstName || "Buyer"} · {convo.lastMessage?.content?.substring(0, 60) || "No messages"}
+                {convo.type === "agent_coordination" ? "Listing Agent" : (convo.buyer?.firstName || "Buyer")} · {convo.lastMessage?.content?.substring(0, 60) || "No messages"}
               </p>
             </div>
           </div>
@@ -501,10 +530,14 @@ function ShowingsList({ showings, navigate }: { showings: any[]; navigate: (to: 
   }
 
   const statusColors: Record<string, string> = {
-    pending: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300",
+    requested: "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300",
+    under_review: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300",
+    sent_to_listing_agent: "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300",
     confirmed: "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300",
-    cancelled: "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300",
+    alternate_proposed: "bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300",
+    declined: "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300",
     completed: "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300",
+    cancelled: "bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300",
   };
 
   return (
@@ -526,8 +559,8 @@ function ShowingsList({ showings, navigate }: { showings: any[]; navigate: (to: 
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2">
                 <h4 className="font-bold text-sm truncate">{showing.property?.title || "Property"}</h4>
-                <span className={`${statusColors[showing.status] || statusColors.pending} px-2.5 py-0.5 rounded-full text-xs font-bold`}>
-                  {showing.status}
+                <span className={`${statusColors[showing.status] || statusColors.requested} px-2.5 py-0.5 rounded-full text-xs font-bold`}>
+                  {(showing.status || "requested").replace(/_/g, " ")}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">

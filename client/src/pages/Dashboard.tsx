@@ -1656,10 +1656,14 @@ function ShowingsSection() {
   });
 
   const statusColors: Record<string, string> = {
-    pending: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300",
+    requested: "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300",
+    under_review: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300",
+    sent_to_listing_agent: "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300",
     confirmed: "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300",
-    cancelled: "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300",
+    alternate_proposed: "bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300",
+    declined: "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300",
     completed: "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300",
+    cancelled: "bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300",
   };
 
   return (
@@ -1702,8 +1706,8 @@ function ShowingsSection() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <h4 className="font-bold text-sm truncate">{showing.property?.title || "Property"}</h4>
-                    <span className={`${statusColors[showing.status] || statusColors.pending} px-2.5 py-0.5 rounded-full text-xs font-bold capitalize`}>
-                      {showing.status}
+                    <span className={`${statusColors[showing.status] || statusColors.requested} px-2.5 py-0.5 rounded-full text-xs font-bold capitalize`}>
+                      {(showing.status || "requested").replace(/_/g, " ")}
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">

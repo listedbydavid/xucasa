@@ -26,7 +26,7 @@ export default function ConversationThread({ adminMode = false, adminConversatio
     enabled: adminMode && !!conversationId,
   });
 
-  const { data: conversation, isLoading: convoLoading } = useQuery<any>({
+  const { data: conversationData, isLoading: convoLoading } = useQuery<any>({
     queryKey: ["/api/conversations", conversationId],
     enabled: !adminMode && !!conversationId,
   });
@@ -42,7 +42,7 @@ export default function ConversationThread({ adminMode = false, adminConversatio
     refetchInterval: 10000,
   });
 
-  const activeConversation = adminMode ? adminData?.conversation : conversation;
+  const conversation = adminMode ? adminData?.conversation : conversationData;
   const messages = adminMode ? (adminData?.messages || []) : regularMessages;
   const isLoadingConvo = adminMode ? adminLoading : convoLoading;
   const isLoadingMsgs = adminMode ? adminLoading : msgsLoading;
@@ -102,7 +102,7 @@ export default function ConversationThread({ adminMode = false, adminConversatio
     );
   }
 
-  if (!activeConversation) {
+  if (!conversation) {
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center gap-4">
         <p className="text-muted-foreground">Conversation not found.</p>
@@ -115,14 +115,34 @@ export default function ConversationThread({ adminMode = false, adminConversatio
     );
   }
 
-  const isBuyer = !adminMode && activeConversation.buyerUserId === user?.id;
-  const otherParty = adminMode ? null : (isBuyer ? activeConversation.agent : activeConversation.buyer);
-  const otherName = adminMode
-    ? "Admin View"
+  const isAdminMode = adminMode || (user?.role === "admin" && conversation.buyerUserId !== user?.id && conversation.agentUserId !== user?.id);
+  const isAgentCoordination = conversation.type === "agent_coordination";
+  const isBuyerSlot = conversation.buyerUserId === user?.id;
+  const isBuyer = isBuyerSlot && !isAgentCoordination && !isAdminMode;
+
+  const otherParty = isAgentCoordination 
+    ? (isBuyerSlot ? conversation.agent : conversation.buyer)
+    : (isBuyer ? conversation.agent : conversation.buyer);
+
+  const otherName = isAdminMode
+    ? `${conversation.buyer?.firstName || "Buyer"} & ${conversation.agent?.firstName || "Agent"}`
     : otherParty?.firstName
       ? `${otherParty.firstName} ${otherParty.lastName || ""}`.trim()
       : otherParty?.email || "Unknown";
-  const property = activeConversation.property;
+
+  const property = conversation.property;
+
+  const threadLabel = isAdminMode
+    ? `Admin View · ${otherName}`
+    : isAgentCoordination
+      ? `Agent Coordination · ${otherName}`
+      : isBuyer ? `Your Agent · ${otherName}` : `Buyer · ${otherName}`;
+
+  const backHref = isAdminMode
+    ? "/admin"
+    : isBuyer
+      ? "/dashboard?section=messages"
+      : "/agent?tab=messages";
 
   const handleSend = () => {
     const trimmed = newMessage.trim();
@@ -137,12 +157,12 @@ export default function ConversationThread({ adminMode = false, adminConversatio
     }
   };
 
-  const lastReadAt = isBuyer ? activeConversation.buyerLastReadAt : activeConversation.agentLastReadAt;
+  const lastReadAt = isBuyerSlot ? conversation.buyerLastReadAt : conversation.agentLastReadAt;
   const lastReadTime = lastReadAt ? new Date(lastReadAt).getTime() : null;
   let unreadSeparatorShown = false;
 
   function renderMessage(msg: any) {
-    const isMe = !adminMode && msg.senderUserId === user?.id;
+    const isMe = !isAdminMode && msg.senderUserId === user?.id;
     const senderName = msg.sender?.firstName || msg.sender?.email?.split("@")[0] || "User";
     const isSystem = msg.type === "system";
     const isShowingRequest = msg.type === "showing_request";
@@ -182,9 +202,24 @@ export default function ConversationThread({ adminMode = false, adminConversatio
     if (isShowingRequest) {
       const showingReqId = msg.metadata?.showingRequestId;
       const matchedShowing = showingReqId ? showingRequests.find((s: any) => s.id === showingReqId) : null;
-      const showingStatus = matchedShowing?.status || "pending";
-      const isAgentViewer = !isBuyer && !adminMode;
-      const canAct = isAgentViewer && showingStatus === "pending";
+      const showingStatus = matchedShowing?.status || "requested";
+      const isAgentViewer = !isBuyer && !isAdminMode;
+      const isCoordinationThread = conversation?.type === "agent_coordination";
+
+      const assignedAgentCanAct = isAgentViewer && !isCoordinationThread && ["requested"].includes(showingStatus);
+      const listingAgentCanAct = isAgentViewer && isCoordinationThread && ["sent_to_listing_agent"].includes(showingStatus);
+      const assignedAgentCanForward = isAgentViewer && !isCoordinationThread && showingStatus === "under_review";
+
+      const statusColors: Record<string, string> = {
+        requested: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+        under_review: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+        sent_to_listing_agent: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+        confirmed: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+        alternate_proposed: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+        declined: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+        completed: "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400",
+        cancelled: "bg-gray-100 text-gray-500 dark:bg-gray-900/30 dark:text-gray-400",
+      };
 
       return (
         <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
@@ -192,18 +227,38 @@ export default function ConversationThread({ adminMode = false, adminConversatio
             <div className="flex items-center gap-1.5 mb-1">
               <Calendar className="w-3.5 h-3.5" />
               <span className="text-xs font-bold">Showing Request</span>
-              {showingStatus !== "pending" && (
-                <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ml-1 ${
-                  showingStatus === "confirmed" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
-                  showingStatus === "declined" ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
-                  "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-                }`}>
-                  {showingStatus}
-                </span>
-              )}
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ml-1 ${statusColors[showingStatus] || "bg-gray-100 text-gray-700"}`}>
+                {showingStatus.replace(/_/g, " ")}
+              </span>
             </div>
             <p className="text-sm">{msg.content}</p>
-            {canAct && (
+            {assignedAgentCanAct && (
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={() => showingMutation.mutate({ id: showingReqId, status: "under_review" })}
+                  disabled={showingMutation.isPending}
+                  className="flex items-center gap-1 bg-blue-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  data-testid={`button-review-showing-${showingReqId}`}
+                >
+                  <Check className="w-3 h-3" />
+                  Review
+                </button>
+              </div>
+            )}
+            {assignedAgentCanForward && (
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={() => showingMutation.mutate({ id: showingReqId, status: "sent_to_listing_agent" })}
+                  disabled={showingMutation.isPending}
+                  className="flex items-center gap-1 bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  data-testid={`button-forward-showing-${showingReqId}`}
+                >
+                  <Send className="w-3 h-3" />
+                  Send to Listing Agent
+                </button>
+              </div>
+            )}
+            {listingAgentCanAct && (
               <div className="flex items-center gap-2 mt-2">
                 <button
                   onClick={() => showingMutation.mutate({ id: showingReqId, status: "confirmed", confirmedDate: msg.metadata?.requestedDates?.[0] })}
@@ -264,15 +319,9 @@ export default function ConversationThread({ adminMode = false, adminConversatio
     );
   }
 
-  const backHref = adminMode
-    ? "/admin"
-    : isBuyer
-      ? "/dashboard?section=messages"
-      : "/agent?tab=messages";
-
   return (
-    <div className={`flex flex-col ${adminMode ? "h-[70vh]" : "h-[calc(100vh-64px)]"} max-w-4xl mx-auto`} data-testid="conversation-thread">
-      {adminMode && (
+    <div className={`flex flex-col ${isAdminMode ? "h-[70vh]" : "h-[calc(100vh-64px)]"} max-w-4xl mx-auto`} data-testid="conversation-thread">
+      {isAdminMode && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center gap-2" data-testid="admin-view-banner">
           <Shield className="w-4 h-4 text-amber-700" />
           <span className="text-sm font-bold text-amber-800">Admin View — Read Only</span>
@@ -280,31 +329,18 @@ export default function ConversationThread({ adminMode = false, adminConversatio
       )}
 
       <div className="bg-card border-b border-border px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
-        {!adminMode && (
-          <Link href={backHref} className="p-2 hover:bg-muted rounded-lg transition-colors" data-testid="button-back">
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-        )}
+        <Link href={backHref} className="p-2 hover:bg-muted rounded-lg transition-colors" data-testid="button-back">
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
         <div className="flex-1 min-w-0">
-          {adminMode ? (
-            <div>
-              <p className="font-bold text-foreground text-sm" data-testid="text-admin-participants">
-                {activeConversation.buyer?.firstName || activeConversation.buyer?.email || "Buyer"} ↔ {activeConversation.agent?.firstName || activeConversation.agent?.email || "Seller/Agent"}
-              </p>
-              <div className="flex items-center gap-1 text-xs text-muted-foreground truncate">
-                <Home className="w-3 h-3 flex-shrink-0" />
-                <span className="truncate">{property?.title || "Property"}</span>
-              </div>
-            </div>
-          ) : (
-            <>
-              <p className="font-bold text-foreground truncate" data-testid="text-other-party">{otherName}</p>
-              <div className="flex items-center gap-1 text-xs text-muted-foreground truncate">
-                <Home className="w-3 h-3 flex-shrink-0" />
-                <span className="truncate">{property?.title || "Property"}</span>
-              </div>
-            </>
-          )}
+          <p className="font-bold text-foreground truncate" data-testid="text-other-party">{threadLabel}</p>
+          <div className="flex items-center gap-1 text-xs text-muted-foreground truncate">
+            <Home className="w-3 h-3 flex-shrink-0" />
+            <span className="truncate">{property?.title || "Property"}</span>
+            {isAgentCoordination && (
+              <span className="ml-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-[10px] px-1.5 py-0.5 rounded-full font-bold">Agent-to-Agent</span>
+            )}
+          </div>
         </div>
         {property?.id && (
           <Link
@@ -337,12 +373,12 @@ export default function ConversationThread({ adminMode = false, adminConversatio
         {messages.length === 0 && (
           <div className="text-center py-12 text-muted-foreground">
             <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p className="text-sm">No messages yet. {!adminMode && "Start the conversation!"}</p>
+            <p className="text-sm">No messages yet. {!isAdminMode && "Start the conversation!"}</p>
           </div>
         )}
         {messages.map((msg: any) => {
           const msgTime = new Date(msg.createdAt).getTime();
-          const showUnreadSep = !adminMode && !unreadSeparatorShown && lastReadTime && msgTime > lastReadTime && msg.senderUserId !== user?.id;
+          const showUnreadSep = !isAdminMode && !unreadSeparatorShown && lastReadTime && msgTime > lastReadTime && msg.senderUserId !== user?.id;
           if (showUnreadSep) unreadSeparatorShown = true;
           return (
             <Fragment key={msg.id}>
@@ -360,7 +396,7 @@ export default function ConversationThread({ adminMode = false, adminConversatio
         <div ref={messagesEndRef} />
       </div>
 
-      {!adminMode && (
+      {!isAdminMode && (
         <div className="bg-card border-t border-border px-4 py-3 safe-bottom" data-testid="message-input-area">
           <div className="flex items-end gap-2 max-w-3xl mx-auto">
             <textarea
