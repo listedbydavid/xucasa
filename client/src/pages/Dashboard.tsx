@@ -15,7 +15,7 @@ import {
   useOpenHouses,
   useVerifyAgent,
 } from "@/hooks/use-client-dashboard";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   Heart, Search, User, Home, Clock, BookmarkCheck,
   Trash2, ChevronRight, X, Plus, Edit2, Check, MapPin,
@@ -243,6 +243,8 @@ function ProfileSection({ user }: { user: any }) {
       <BuyerCriteriaSection />
 
       <AgentVerificationSection user={user} />
+
+      <ActivateProfileSection user={user} />
 
       <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
         <h3 className="font-bold text-foreground mb-4">Account Actions</h3>
@@ -677,6 +679,44 @@ function AgentForm({
         >
           Cancel
         </button>
+      </div>
+    </div>
+  );
+}
+
+function ActivateProfileSection({ user }: { user: any }) {
+  const [, setLocation] = useLocation();
+  const profiles = [
+    { key: "buyer", label: "Buyer Profile", desc: "Set up your home search preferences", icon: Search, completed: user?.buyerProfileCompleted, path: "/onboarding", color: "text-blue-500 bg-blue-500/10" },
+    { key: "homeowner", label: "Homeowner Profile", desc: "Track your home's value", icon: Home, completed: user?.homeownerProfileCompleted, path: "/onboarding", color: "text-green-500 bg-green-500/10" },
+    { key: "agent", label: "Agent Profile", desc: "Get verified as a real estate agent", icon: Briefcase, completed: user?.agentProfileCompleted, path: "/onboarding", color: "text-purple-500 bg-purple-500/10" },
+  ];
+
+  const incomplete = profiles.filter(p => !p.completed);
+  if (incomplete.length === 0) return null;
+
+  return (
+    <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+      <h3 className="font-bold text-foreground mb-1">Activate Additional Profiles</h3>
+      <p className="text-sm text-muted-foreground mb-4">Unlock more features by setting up additional profiles.</p>
+      <div className="space-y-3">
+        {incomplete.map(p => (
+          <button
+            key={p.key}
+            onClick={() => setLocation(p.path)}
+            data-testid={`activate-${p.key}-profile`}
+            className="w-full flex items-center gap-4 px-4 py-3 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-all text-left"
+          >
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${p.color}`}>
+              <p.icon className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="font-bold text-foreground text-sm">{p.label}</span>
+              <span className="block text-xs text-muted-foreground">{p.desc}</span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </button>
+        ))}
       </div>
     </div>
   );

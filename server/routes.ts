@@ -875,11 +875,18 @@ export async function registerRoutes(
       const parsed = intentSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid intent" });
 
-      const updates: any = { primaryIntent: parsed.data.intent, currentMode: parsed.data.intent };
+      const updates: Partial<{
+        primaryIntent: string;
+        currentMode: string | null;
+        onboardingCompleted: boolean;
+      }> = { primaryIntent: parsed.data.intent };
       if (parsed.data.intent === "explorer") {
         updates.onboardingCompleted = true;
+        updates.currentMode = undefined;
+      } else {
+        updates.currentMode = parsed.data.intent;
       }
-      const updated = await authStorage.updateOnboarding(userId, updates);
+      const updated = await authStorage.updateOnboarding(userId, updates as any);
       res.json(updated);
     } catch (err) {
       res.status(500).json({ message: "Failed to save intent" });
@@ -901,17 +908,23 @@ export async function registerRoutes(
       const parsed = buyerSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid buyer data" });
 
+      const profileData = {
+        preApprovalAmount: parsed.data.budget ? parseInt(parsed.data.budget.replace(/\D/g, '')) || null : null,
+        preferredCities: parsed.data.areas || [],
+        minBeds: parsed.data.beds || null,
+        minBaths: parsed.data.baths || null,
+        moveInTimeline: parsed.data.timeline || null,
+        hasAgent: parsed.data.hasAgent ?? false,
+      };
+
       const existing = await storage.getUserBuyerProfile(userId);
-      if (!existing) {
+      if (existing) {
+        await storage.updateBuyerProfile(existing.id, userId, profileData);
+      } else {
         await storage.createBuyerProfile({
           userId,
           displayName: "My Search",
-          preApprovalAmount: parsed.data.budget ? parseInt(parsed.data.budget.replace(/\D/g, '')) || null : null,
-          preferredCities: parsed.data.areas || [],
-          minBeds: parsed.data.beds || null,
-          minBaths: parsed.data.baths || null,
-          moveInTimeline: parsed.data.timeline || null,
-          hasAgent: parsed.data.hasAgent ?? false,
+          ...profileData,
           isPreApproved: false,
           homeTypes: [],
           mustHaves: [],
@@ -922,6 +935,7 @@ export async function registerRoutes(
       const updated = await authStorage.updateOnboarding(userId, {
         buyerProfileCompleted: true,
         onboardingCompleted: true,
+        currentMode: "buyer",
       });
       res.json(updated);
     } catch (err) {
@@ -944,7 +958,7 @@ export async function registerRoutes(
       const parsed = homeSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid homeowner data" });
 
-      await storage.createUserHome(userId, {
+      const homeData = {
         address: parsed.data.address,
         beds: parsed.data.beds || null,
         baths: parsed.data.baths || null,
@@ -955,11 +969,19 @@ export async function registerRoutes(
         renovations: null,
         condition: null,
         notes: parsed.data.sellingIntent || null,
-      });
+      };
+
+      const existingHomes = await storage.getUserHomes(userId);
+      if (existingHomes.length > 0) {
+        await storage.updateUserHome(existingHomes[0].id, userId, homeData);
+      } else {
+        await storage.createUserHome(userId, homeData);
+      }
 
       const updated = await authStorage.updateOnboarding(userId, {
         homeownerProfileCompleted: true,
         onboardingCompleted: true,
+        currentMode: "homeowner",
       });
       res.json(updated);
     } catch (err) {
@@ -991,6 +1013,7 @@ export async function registerRoutes(
         agentProfileCompleted: true,
         agentVerificationStatus: "pending",
         onboardingCompleted: true,
+        currentMode: "agent",
       });
       res.json(updated);
     } catch (err) {
