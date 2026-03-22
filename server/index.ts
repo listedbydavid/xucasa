@@ -67,10 +67,10 @@ app.use((req, res, next) => {
   try {
     const { db } = await import("./db");
     const { users } = await import("@shared/schema");
-    const { eq, and, isNull } = await import("drizzle-orm");
+    const { eq, and, ne, or, isNull } = await import("drizzle-orm");
     await db.update(users)
       .set({ onboardingCompleted: true })
-      .where(and(eq(users.role, "admin"), isNull(users.onboardingCompleted)));
+      .where(and(eq(users.role, "admin"), or(isNull(users.onboardingCompleted), ne(users.onboardingCompleted, true))));
     log("Admin onboarding backfill complete");
   } catch (e) {
     log("Admin onboarding backfill skipped: " + (e as Error).message);

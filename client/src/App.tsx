@@ -65,8 +65,8 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/search" component={Search} />
-      <Route path="/sell" component={Sell} />
-      <Route path="/home-report" component={HomeReport} />
+      <Route path="/sell">{() => <ProtectedRoute component={Sell} />}</Route>
+      <Route path="/home-report">{() => <ProtectedRoute component={HomeReport} />}</Route>
       <Route path="/swipe" component={Swipe} />
       <Route path="/property/:id" component={PropertyDetail} />
       <Route path="/auth" component={AuthPage} />
