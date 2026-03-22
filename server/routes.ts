@@ -2087,14 +2087,20 @@ export async function registerRoutes(
 
       const respondableStatuses = ["sent_to_buyer", "viewed"];
       if (!respondableStatuses.includes(offer.status)) {
-        return res.status(400).json({ message: `Cannot respond to offer with status '${offer.status}'` });
+        return res.status(409).json({ message: `This offer has already been ${offer.status}. No further action is needed.` });
       }
 
       const statusMap: Record<string, string> = { accept: "accepted", decline: "declined", counter: "countered" };
       const newStatus = statusMap[action];
       const statusLabel = action === "counter" ? "counter-offered" : newStatus;
 
-      const updated = await storage.updatePropertyOfferStatus(id, newStatus);
+      const [updated] = await db.update(propertyOffers)
+        .set({ status: newStatus, updatedAt: new Date() })
+        .where(and(eq(propertyOffers.id, id), or(eq(propertyOffers.status, "sent_to_buyer"), eq(propertyOffers.status, "viewed"))))
+        .returning();
+      if (!updated) {
+        return res.status(409).json({ message: `This offer has already been responded to.` });
+      }
 
       const assignedAgent = await storage.lookupAssignedAgent(userId);
       if (!assignedAgent) return res.status(400).json({ message: "No agent assigned" });

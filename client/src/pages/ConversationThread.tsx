@@ -5,16 +5,19 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   ArrowLeft, Send, Loader2, MapPin, Calendar, Home,
-  MessageSquare, Eye, Clock, Check, X, Shield, DollarSign,
+  MessageSquare, Eye, Clock, Check, X, Shield, DollarSign, AlertCircle,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function ConversationThread({ adminMode = false, adminConversationId }: { adminMode?: boolean; adminConversationId?: number } = {}) {
   const [, params] = useRoute("/conversations/:id");
   const conversationId = adminConversationId || (params?.id ? parseInt(params.id) : null);
   const { user, isAuthenticated } = useAuth();
+  const { toast } = useToast();
   const [newMessage, setNewMessage] = useState("");
   const [counterOfferId, setCounterOfferId] = useState<number | null>(null);
   const [counterText, setCounterText] = useState("");
+  const [respondingOfferId, setRespondingOfferId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -83,13 +86,23 @@ export default function ConversationThread({ adminMode = false, adminConversatio
 
   const offerResponseMutation = useMutation({
     mutationFn: async ({ offerId, action, counterMessage }: { offerId: number; action: string; counterMessage?: string }) => {
+      setRespondingOfferId(offerId);
       return apiRequest("POST", `/api/property-offers/${offerId}/buyer-response`, { action, counterMessage });
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       setCounterOfferId(null);
       setCounterText("");
+      setRespondingOfferId(null);
+      const actionLabel = variables.action === "counter" ? "counter-offer sent" : variables.action === "accept" ? "offer accepted" : "offer declined";
+      toast({ title: "Response submitted", description: `Your ${actionLabel} successfully.` });
       queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversationId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/property-offers/statuses", offerIdsKey] });
+    },
+    onError: (error: any) => {
+      setRespondingOfferId(null);
+      const msg = error?.message || "Failed to submit response. Please try again.";
+      toast({ title: "Action failed", description: msg, variant: "destructive" });
       queryClient.invalidateQueries({ queryKey: ["/api/property-offers/statuses", offerIdsKey] });
     },
   });
@@ -325,7 +338,8 @@ export default function ConversationThread({ adminMode = false, adminConversatio
       const offerId = msg.metadata?.offerId;
       const offerStatus = offerId ? (offerStatuses as Record<number, string>)[offerId] : null;
       const isActionable = offerStatus === "sent_to_buyer" || offerStatus === "viewed";
-      const canBuyerRespond = isBuyer && !isMe && offerId && isActionable;
+      const isRespondingToThis = respondingOfferId === offerId && offerResponseMutation.isPending;
+      const canBuyerRespond = isBuyer && !isMe && offerId && isActionable && !isRespondingToThis;
       const isCounteringThis = counterOfferId === offerId;
 
       const offerStatusColors: Record<string, string> = {
@@ -368,12 +382,18 @@ export default function ConversationThread({ adminMode = false, adminConversatio
               )}
             </div>
             <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+            {isRespondingToThis && (
+              <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground" data-testid={`offer-responding-${offerId}`}>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Submitting your response...</span>
+              </div>
+            )}
             {canBuyerRespond && !isCounteringThis && (
               <div className="flex items-center gap-2 mt-2">
                 <button
                   onClick={() => offerResponseMutation.mutate({ offerId, action: "accept" })}
                   disabled={offerResponseMutation.isPending}
-                  className="flex items-center gap-1 bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  className="flex items-center gap-1 bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
                   data-testid={`button-accept-offer-${offerId}`}
                 >
                   <Check className="w-3 h-3" />
@@ -382,7 +402,7 @@ export default function ConversationThread({ adminMode = false, adminConversatio
                 <button
                   onClick={() => offerResponseMutation.mutate({ offerId, action: "decline" })}
                   disabled={offerResponseMutation.isPending}
-                  className="flex items-center gap-1 bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  className="flex items-center gap-1 bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
                   data-testid={`button-decline-offer-${offerId}`}
                 >
                   <X className="w-3 h-3" />
@@ -391,7 +411,7 @@ export default function ConversationThread({ adminMode = false, adminConversatio
                 <button
                   onClick={() => setCounterOfferId(offerId)}
                   disabled={offerResponseMutation.isPending}
-                  className="flex items-center gap-1 bg-amber-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  className="flex items-center gap-1 bg-amber-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
                   data-testid={`button-counter-offer-${offerId}`}
                 >
                   <MessageSquare className="w-3 h-3" />
