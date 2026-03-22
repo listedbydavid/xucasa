@@ -908,11 +908,12 @@ export async function registerRoutes(
       const parsed = buyerSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid buyer data" });
 
+      const budgetAmount = parsed.data.budget ? parseInt(parsed.data.budget.replace(/\D/g, '')) || 0 : 0;
       const profileData = {
-        preApprovalAmount: parsed.data.budget ? parseInt(parsed.data.budget.replace(/\D/g, '')) || null : null,
+        preApprovalAmount: budgetAmount,
         preferredCities: parsed.data.areas || [],
         minBeds: parsed.data.beds || null,
-        minBaths: parsed.data.baths || null,
+        minBaths: parsed.data.baths ? String(parsed.data.baths) : null,
         moveInTimeline: parsed.data.timeline || null,
         hasAgent: parsed.data.hasAgent ?? false,
       };
@@ -958,16 +959,21 @@ export async function registerRoutes(
       const parsed = homeSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid homeowner data" });
 
+      const addressParts = parsed.data.address.split(",").map(s => s.trim());
+      const streetPart = addressParts[0] || "";
+      const streetMatch = streetPart.match(/^(\d+)\s+(.+)$/);
+
       const homeData = {
-        address: parsed.data.address,
+        nickname: "My Home",
+        addressStreetNumber: streetMatch ? streetMatch[1] : null,
+        addressStreetName: streetMatch ? streetMatch[2] : streetPart,
+        addressCity: addressParts[1] || null,
+        addressState: addressParts[2]?.replace(/\s*\d{5}.*/, '').trim() || "CA",
+        addressZip: addressParts[2]?.match(/\d{5}/)?.[0] || null,
         beds: parsed.data.beds || null,
-        baths: parsed.data.baths || null,
+        baths: parsed.data.baths ? String(parsed.data.baths) : null,
         sqft: parsed.data.sqft || null,
         yearBuilt: parsed.data.yearBuilt || null,
-        propertyType: null,
-        lotSqft: null,
-        renovations: null,
-        condition: null,
         notes: parsed.data.sellingIntent || null,
       };
 
@@ -998,6 +1004,7 @@ export async function registerRoutes(
         licenseState: z.string().default("CA"),
         brokerageName: z.string().optional(),
         mlsId: z.string().optional(),
+        association: z.string().optional(),
       });
       const parsed = agentSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Invalid agent data" });
@@ -1007,6 +1014,7 @@ export async function registerRoutes(
         licenseState: parsed.data.licenseState,
         brokerageName: parsed.data.brokerageName || null,
         agentMlsId: parsed.data.mlsId || null,
+        association: parsed.data.association || null,
       });
 
       const updated = await authStorage.updateOnboarding(userId, {

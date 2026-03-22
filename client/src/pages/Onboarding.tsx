@@ -47,6 +47,7 @@ export default function Onboarding() {
   const [licenseState, setLicenseState] = useState("CA");
   const [brokerageName, setBrokerageName] = useState("");
   const [mlsId, setMlsId] = useState("");
+  const [association, setAssociation] = useState("");
 
   const searchParams = new URLSearchParams(window.location.search);
   const reentry = searchParams.get("reentry") === "1";
@@ -112,7 +113,7 @@ export default function Onboarding() {
     setLoading(true);
     try {
       await apiRequest("POST", "/api/onboarding/agent", {
-        licenseNumber: licenseNumber.trim(), licenseState, brokerageName, mlsId,
+        licenseNumber: licenseNumber.trim(), licenseState, brokerageName, mlsId, association,
       });
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       window.location.href = "/dashboard";
@@ -465,6 +466,17 @@ export default function Onboarding() {
                 placeholder="Your brokerage name"
                 className={inputClass}
                 data-testid="input-brokerage"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-bold text-foreground mb-1 block">Association</label>
+              <input
+                value={association}
+                onChange={e => setAssociation(e.target.value)}
+                placeholder="e.g. SDAR, CAR"
+                className={inputClass}
+                data-testid="input-association"
               />
             </div>
 
