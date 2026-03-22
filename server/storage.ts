@@ -1369,13 +1369,18 @@ export class DatabaseStorage implements IStorage {
       agentLastReadAt: new Date(),
     }).returning();
     const now = new Date();
-    await db.update(buyerInterest)
-      .set({ conversationId: created.id, stage: "engaged", lastActivityAt: now, updatedAt: now })
-      .where(and(
-        eq(buyerInterest.propertyId, propertyId),
-        eq(buyerInterest.buyerUserId, buyerUserId),
-        inArray(buyerInterest.stage, ["new"]),
-      ));
+    const existingInterest = await db.select().from(buyerInterest)
+      .where(and(eq(buyerInterest.propertyId, propertyId), eq(buyerInterest.buyerUserId, buyerUserId)))
+      .limit(1);
+    if (existingInterest.length > 0) {
+      const stageOrder = ["new", "engaged", "showing", "offer"];
+      const currentIdx = stageOrder.indexOf(existingInterest[0].stage);
+      const engagedIdx = stageOrder.indexOf("engaged");
+      const newStage = engagedIdx > currentIdx ? "engaged" : existingInterest[0].stage;
+      await db.update(buyerInterest)
+        .set({ conversationId: created.id, stage: newStage, lastActivityAt: now, updatedAt: now })
+        .where(eq(buyerInterest.id, existingInterest[0].id));
+    }
     return created;
   }
 

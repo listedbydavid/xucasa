@@ -3190,22 +3190,39 @@ export async function registerRoutes(
   app.post("/api/conversations", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { propertyId, agentUserId, initialMessage, type } = req.body;
+      const { propertyId, agentUserId, buyerUserId, initialMessage, type } = req.body;
       if (!propertyId) return res.status(400).json({ message: "propertyId required" });
 
       const prop = await storage.getProperty(propertyId);
       if (!prop) return res.status(404).json({ message: "Property not found" });
 
-      const resolvedAgentId = prop.agentId || agentUserId;
-      if (!resolvedAgentId) return res.status(400).json({ message: "No agent associated with this property" });
+      const callerUser = await storage.getUser(userId);
+      const isAgent = callerUser?.role === "agent";
 
-      if (agentUserId && agentUserId !== prop.agentId) {
-        return res.status(403).json({ message: "Invalid agent for this property" });
+      let resolvedBuyerId: string;
+      let resolvedAgentId: string;
+
+      if (isAgent) {
+        if (prop.agentId !== userId) {
+          return res.status(403).json({ message: "You are not the listing agent for this property" });
+        }
+        if (!buyerUserId) {
+          return res.status(400).json({ message: "buyerUserId required when agent creates conversation" });
+        }
+        resolvedAgentId = userId;
+        resolvedBuyerId = buyerUserId;
+      } else {
+        resolvedBuyerId = userId;
+        resolvedAgentId = prop.agentId || agentUserId;
+        if (!resolvedAgentId) return res.status(400).json({ message: "No agent associated with this property" });
+        if (agentUserId && agentUserId !== prop.agentId) {
+          return res.status(403).json({ message: "Invalid agent for this property" });
+        }
       }
 
-      await storage.upsertBuyerInterest(propertyId, userId, type || "inquiry");
+      await storage.upsertBuyerInterest(propertyId, resolvedBuyerId, type || "inquiry");
 
-      const convo = await storage.getOrCreateConversation(propertyId, userId, resolvedAgentId);
+      const convo = await storage.getOrCreateConversation(propertyId, resolvedBuyerId, resolvedAgentId, isAgent ? "agent" : "buyer");
 
       if (initialMessage) {
         await storage.createMessage({
@@ -3215,21 +3232,21 @@ export async function registerRoutes(
           content: initialMessage,
         });
 
-        const agent = await storage.getUser(resolvedAgentId);
-        if (agent?.email) {
-          const buyer = await storage.getUser(userId);
-          const buyerName = buyer?.firstName ? `${buyer.firstName} ${buyer.lastName || ""}`.trim() : "A buyer";
+        const recipientId = isAgent ? resolvedBuyerId : resolvedAgentId;
+        const recipient = await storage.getUser(recipientId);
+        if (recipient?.email) {
+          const senderName = callerUser?.firstName ? `${callerUser.firstName} ${callerUser.lastName || ""}`.trim() : (isAgent ? "Your agent" : "A buyer");
           await storage.createNotification({
-            userId: resolvedAgentId,
+            userId: recipientId,
             type: "message_received",
-            title: `New message from ${buyerName}`,
+            title: `New message from ${senderName}`,
             message: initialMessage.substring(0, 200),
             propertyId,
             linkUrl: `/conversations/${convo.id}`,
             read: false,
             archived: false,
           });
-          trySendNotificationEmail(resolvedAgentId, "message_received", `New message from ${buyerName}`, initialMessage.substring(0, 200), `/conversations/${convo.id}`, propertyId, convo.id);
+          trySendNotificationEmail(recipientId, "message_received", `New message from ${senderName}`, initialMessage.substring(0, 200), `/conversations/${convo.id}`, propertyId, convo.id);
         }
       }
 

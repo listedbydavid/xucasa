@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
-import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar, Send, Eye, ContactRound } from "lucide-react";
+import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar, Send, Eye, ContactRound, MessageSquare } from "lucide-react";
 import { ReverseOfferForm } from "@/components/ReverseOfferForm";
 import { IdxSyncPanel } from "@/components/IdxSyncPanel";
 import type { PropertyResponse, CreatePropertyRequest } from "@shared/schema";
@@ -355,7 +355,7 @@ function BuyerInterestSection() {
                           </div>
 
                           <div className="flex items-center gap-2 flex-wrap">
-                            {convo && (
+                            {convo ? (
                               <button
                                 onClick={() => navigate(`/conversations/${convo.id}`)}
                                 className="flex items-center gap-1.5 bg-muted text-foreground px-3 py-1.5 rounded-lg text-xs font-semibold border border-border"
@@ -363,6 +363,28 @@ function BuyerInterestSection() {
                               >
                                 <Users className="w-3.5 h-3.5" />
                                 Open Chat
+                              </button>
+                            ) : (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const res = await apiRequest("POST", "/api/conversations", {
+                                      propertyId: interest.propertyId,
+                                      buyerUserId: interest.buyerUserId,
+                                    });
+                                    const data = await res.json();
+                                    queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+                                    queryClient.invalidateQueries({ queryKey: ["/api/buyer-interest/agent"] });
+                                    navigate(`/conversations/${data.id}`);
+                                  } catch (err) {
+                                    console.error("Failed to create conversation:", err);
+                                  }
+                                }}
+                                className="flex items-center gap-1.5 bg-muted text-foreground px-3 py-1.5 rounded-lg text-xs font-semibold border border-border"
+                                data-testid={`button-message-lead-${interest.id}`}
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                                Message
                               </button>
                             )}
                             {status !== "offer_created" && (
