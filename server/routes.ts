@@ -1842,6 +1842,34 @@ export async function registerRoutes(
             archived: false,
           });
           trySendNotificationEmail(assignedAgent.id, "message_received", `Reverse offer from ${creatorName}`, `Reverse offer for your client`, `/conversations/${coordConvo.id}`, propertyId, coordConvo.id);
+
+          const agentName = assignedAgent.firstName ? `${assignedAgent.firstName} ${assignedAgent.lastName || ""}`.trim() : "Your agent";
+          const priceStr = `$${(offerPrice || prop.price).toLocaleString()}`;
+          const terms: string[] = [];
+          if (escrowLengthDays) terms.push(`${escrowLengthDays}-day escrow`);
+          if (sellerConcessions) terms.push(`$${sellerConcessions.toLocaleString()} seller concessions`);
+          if (buydownOffered) terms.push(`buydown: ${buydownType || "offered"}`);
+          const termsStr = terms.length > 0 ? `\nKey terms: ${terms.join(", ")}` : "";
+
+          const buyerConvo = await storage.getOrCreateConversation(propertyId, buyerUserId, assignedAgent.id, "agent", "buyer");
+          await storage.createMessage({
+            conversationId: buyerConvo.id,
+            senderUserId: assignedAgent.id,
+            type: "reverse_offer",
+            content: `${agentName} has presented you with an offer: ${priceStr}${termsStr}`,
+            metadata: { offerId: offer.id },
+          });
+          await storage.createNotification({
+            userId: buyerUserId,
+            type: "message_received",
+            title: `${agentName} presented an offer`,
+            message: `You received an offer for ${priceStr}`,
+            propertyId,
+            linkUrl: `/conversations/${buyerConvo.id}`,
+            read: false,
+            archived: false,
+          });
+          trySendNotificationEmail(buyerUserId, "message_received", `${agentName} presented an offer`, `You received an offer for ${priceStr}`, `/conversations/${buyerConvo.id}`, propertyId, buyerConvo.id);
         }
       }
 
