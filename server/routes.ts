@@ -3421,7 +3421,7 @@ export async function registerRoutes(
       const { status, confirmedDate } = req.body;
       if (!status) return res.status(400).json({ message: "status required" });
 
-      const existing = await storage.getShowingRequest?.(id);
+      const existing = await storage.getShowingRequest(id);
       if (!existing) return res.status(404).json({ message: "Showing request not found" });
       if (existing.buyerUserId !== userId && existing.agentUserId !== userId) {
         return res.status(403).json({ message: "Access denied" });
@@ -3449,6 +3449,18 @@ export async function registerRoutes(
         await db.update(buyerInterest)
           .set({ stage: "showing", lastActivityAt: now, updatedAt: now })
           .where(and(eq(buyerInterest.propertyId, updated.propertyId), eq(buyerInterest.buyerUserId, updated.buyerUserId)));
+      }
+
+      if (updated.conversationId) {
+        const statusMsg = status === "confirmed"
+          ? `Showing confirmed${confirmedDate ? ` for ${new Date(confirmedDate).toLocaleDateString()}` : ""}`
+          : `Showing ${status}`;
+        await storage.createMessage({
+          conversationId: updated.conversationId,
+          senderUserId: userId,
+          type: "system",
+          content: statusMsg,
+        });
       }
 
       const recipientId = updated.buyerUserId === userId ? updated.agentUserId : updated.buyerUserId;

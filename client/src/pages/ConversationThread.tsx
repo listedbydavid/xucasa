@@ -5,7 +5,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   ArrowLeft, Send, Loader2, MapPin, Calendar, Home,
-  MessageSquare, Eye, Clock,
+  MessageSquare, Eye, Clock, Check, X,
 } from "lucide-react";
 
 export default function ConversationThread() {
@@ -30,6 +30,21 @@ export default function ConversationThread() {
     },
     enabled: !!conversationId,
     refetchInterval: 10000,
+  });
+
+  const { data: showingRequests = [] } = useQuery<any[]>({
+    queryKey: ["/api/showing-requests"],
+    enabled: !!conversationId && isAuthenticated,
+  });
+
+  const showingMutation = useMutation({
+    mutationFn: async ({ id, status, confirmedDate }: { id: number; status: string; confirmedDate?: string }) => {
+      return apiRequest("PATCH", `/api/showing-requests/${id}`, { status, confirmedDate });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/showing-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversationId, "messages"] });
+    },
   });
 
   const sendMutation = useMutation({
@@ -125,14 +140,51 @@ export default function ConversationThread() {
     }
 
     if (isShowingRequest) {
+      const showingReqId = msg.metadata?.showingRequestId;
+      const matchedShowing = showingReqId ? showingRequests.find((s: any) => s.id === showingReqId) : null;
+      const showingStatus = matchedShowing?.status || "pending";
+      const isAgentViewer = !isBuyer;
+      const canAct = isAgentViewer && showingStatus === "pending";
+
       return (
         <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-          <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${isMe ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`} data-testid={`message-${msg.id}`}>
+          <div className={`max-w-[80%] rounded-2xl px-4 py-3 border-2 border-blue-400/30 ${isMe ? "bg-primary text-primary-foreground" : "bg-blue-50 dark:bg-blue-900/20 text-foreground"}`} data-testid={`message-${msg.id}`}>
             <div className="flex items-center gap-1.5 mb-1">
               <Calendar className="w-3.5 h-3.5" />
               <span className="text-xs font-bold">Showing Request</span>
+              {showingStatus !== "pending" && (
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ml-1 ${
+                  showingStatus === "confirmed" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
+                  showingStatus === "declined" ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
+                  "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                }`}>
+                  {showingStatus}
+                </span>
+              )}
             </div>
             <p className="text-sm">{msg.content}</p>
+            {canAct && (
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={() => showingMutation.mutate({ id: showingReqId, status: "confirmed", confirmedDate: msg.metadata?.requestedDates?.[0] })}
+                  disabled={showingMutation.isPending}
+                  className="flex items-center gap-1 bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  data-testid={`button-confirm-showing-${showingReqId}`}
+                >
+                  <Check className="w-3 h-3" />
+                  Confirm
+                </button>
+                <button
+                  onClick={() => showingMutation.mutate({ id: showingReqId, status: "declined" })}
+                  disabled={showingMutation.isPending}
+                  className="flex items-center gap-1 bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  data-testid={`button-decline-showing-${showingReqId}`}
+                >
+                  <X className="w-3 h-3" />
+                  Decline
+                </button>
+              </div>
+            )}
             <p className={`text-xs mt-1 ${isMe ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
               {new Date(msg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
             </p>
