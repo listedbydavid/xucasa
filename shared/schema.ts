@@ -62,6 +62,7 @@ export const properties = pgTable("properties", {
   buyerAgentCommission: text("buyer_agent_commission"),
   specialConditions: text("special_conditions"),
   mlsDocuments: jsonb("mls_documents"),
+  virtualTourUrl: text("virtual_tour_url"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

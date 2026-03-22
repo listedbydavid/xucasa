@@ -366,6 +366,7 @@ const RESO_SELECT_FIELDS = [
   "ShowingContactName", "ShowingContactPhone",
   "LockBoxType", "AccessCode",
   "BuyerAgencyCompensation", "SpecialListingConditions",
+  "VirtualTourURLUnbranded", "VirtualTourURLBranded",
 ].join(",");
 
 export async function realtyFeedODataFetch(url: string, token: string): Promise<Response> {
@@ -469,6 +470,19 @@ function normaliseIdxBroker(raw: any) {
   };
 }
 
+function sanitizeTourUrl(url: string | null | undefined): string | null {
+  if (!url || typeof url !== "string") return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed.startsWith("http") ? trimmed : `https://${trimmed}`);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 function normaliseReso(raw: any) {
   let imageUrl: string | null = null;
   let photos: string[] | null = null;
@@ -490,8 +504,18 @@ function normaliseReso(raw: any) {
   const agentName = raw.ListAgentFullName ||
     (raw.ListAgentFirstName ? `${raw.ListAgentFirstName || ""} ${raw.ListAgentLastName || ""}`.trim() : null);
 
+  let virtualTourUrl: string | null = sanitizeTourUrl(raw.VirtualTourURLUnbranded) || sanitizeTourUrl(raw.VirtualTourURLBranded) || null;
   let mlsDocuments: any[] | null = null;
   if (raw.Media && Array.isArray(raw.Media)) {
+    if (!virtualTourUrl) {
+      const tourMedia = raw.Media.find((m: any) => {
+        const cat = (m.MediaCategory || "").toLowerCase();
+        return cat === "virtual tour" || cat === "virtualtour" || cat === "3d tour" || cat === "video tour";
+      });
+      if (tourMedia && tourMedia.MediaURL) {
+        virtualTourUrl = sanitizeTourUrl(tourMedia.MediaURL);
+      }
+    }
     const docMedia = raw.Media
       .filter((m: any) => {
         const cat = (m.MediaCategory || "").toLowerCase();
@@ -556,6 +580,7 @@ function normaliseReso(raw: any) {
     buyerAgentCommission: raw.BuyerAgencyCompensation || null,
     specialConditions: raw.SpecialListingConditions || null,
     mlsDocuments,
+    virtualTourUrl,
   };
 }
 

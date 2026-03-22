@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
-import { BedDouble, Bath, Maximize, Heart, Sparkles, ChevronLeft, ChevronRight, Clock, Shield } from "lucide-react";
+import { BedDouble, Bath, Maximize, Heart, Sparkles, ChevronLeft, ChevronRight, Clock, Shield, View } from "lucide-react";
 import type { PropertyResponse } from "@shared/schema";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
 import { useAuth } from "@/hooks/use-auth";
@@ -272,6 +272,17 @@ export function PropertyCard({ property }: PropertyCardProps) {
                 className="h-full bg-white/80 transition-all duration-300"
                 style={{ width: `${((photoIndex + 1) / maxPhotos) * 100}%` }}
               />
+            </div>
+          )}
+
+          {property.virtualTourUrl && (
+            <div
+              data-testid={`badge-3d-tour-${property.id}`}
+              className="absolute bottom-4 left-4 flex items-center gap-1 bg-black/70 text-white px-2.5 py-1.5 rounded-full text-xs font-semibold backdrop-blur-sm pointer-events-none"
+              title="3D Virtual Tour available"
+            >
+              <View className="w-3.5 h-3.5" />
+              3D Tour
             </div>
           )}
 

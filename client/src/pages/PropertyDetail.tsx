@@ -3,7 +3,7 @@ import { useParams, useLocation, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useProperty, useProperties } from "@/hooks/use-properties";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
-import { BedDouble, Bath, Maximize, MapPin, Heart, Sparkles, Building, Briefcase, ChevronLeft, ChevronRight, Phone, Mail, MessageSquare, Camera, Home, LandPlot, Clock, TrendingUp, CalendarDays, Activity, Calculator, ChevronDown, DollarSign, Percent, Share2, Printer, Check, Link2, School, Trees, Hospital, Bus, ShoppingCart, Navigation } from "lucide-react";
+import { BedDouble, Bath, Maximize, MapPin, Heart, Sparkles, Building, Briefcase, ChevronLeft, ChevronRight, Phone, Mail, MessageSquare, Camera, Home, LandPlot, Clock, TrendingUp, CalendarDays, Activity, Calculator, ChevronDown, DollarSign, Percent, Share2, Printer, Check, Link2, School, Trees, Hospital, Bus, ShoppingCart, Navigation, View, ExternalLink } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { MapView } from "@/components/MapView";
 import { PublicRecordsPanel } from "@/components/PublicRecordsPanel";
@@ -624,6 +624,83 @@ function NeighborhoodSection({ propertyId }: { propertyId: number }) {
         })}
       </div>
       <p className="text-xs text-muted-foreground mt-3">Source: OpenStreetMap</p>
+    </div>
+  );
+}
+
+function isValidTourUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function VirtualTourSection({ url }: { url: string }) {
+  const [isOpen, setIsOpen] = useState(true);
+
+  if (!isValidTourUrl(url)) return null;
+
+  const getEmbedUrl = (tourUrl: string): string => {
+    try {
+      const u = new URL(tourUrl);
+      if (u.hostname.includes("matterport.com") && !u.searchParams.has("play")) {
+        u.searchParams.set("play", "1");
+      }
+      if (u.hostname.includes("my.matterport.com") && u.pathname.startsWith("/show")) {
+        u.searchParams.set("qs", "1");
+        u.searchParams.set("brand", "0");
+      }
+      return u.toString();
+    } catch {
+      return tourUrl;
+    }
+  };
+
+  const embedUrl = getEmbedUrl(url);
+
+  return (
+    <div className="mt-8" data-testid="virtual-tour-section">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center justify-between w-full mb-4"
+        data-testid="toggle-virtual-tour"
+      >
+        <div className="flex items-center gap-2">
+          <View className="w-5 h-5 text-primary" />
+          <h2 className="text-xl sm:text-2xl font-display font-bold">3D Virtual Tour</h2>
+        </div>
+        <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      {isOpen && (
+        <div className="space-y-3">
+          <div className="relative w-full rounded-2xl overflow-hidden border border-border bg-muted" style={{ paddingBottom: '56.25%' }}>
+            <iframe
+              src={embedUrl}
+              className="absolute inset-0 w-full h-full"
+              allowFullScreen
+              allow="xr-spatial-tracking; fullscreen"
+              sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+              referrerPolicy="no-referrer-when-downgrade"
+              title="3D Virtual Tour"
+              data-testid="virtual-tour-iframe"
+            />
+          </div>
+          <div className="flex justify-end">
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 font-medium transition-colors"
+              data-testid="virtual-tour-external-link"
+            >
+              Open full tour
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1391,6 +1468,12 @@ export default function PropertyDetail() {
               </SectionErrorBoundary>
             </div>
           </div>
+
+          {property.virtualTourUrl && (
+            <SectionErrorBoundary name="VirtualTourSection">
+              <VirtualTourSection url={property.virtualTourUrl} />
+            </SectionErrorBoundary>
+          )}
 
           <SectionErrorBoundary name="AgentMLSPanel">
             <AgentMLSPanel propertyId={property.id} isAgent={!!(user?.role === 'agent' && user?.agentVerified)} />
