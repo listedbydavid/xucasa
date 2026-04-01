@@ -3,6 +3,7 @@ import { useProperties } from "@/hooks/use-properties";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import {
   Heart, X, RotateCcw, MapPin, BedDouble, Bath,
@@ -21,6 +22,7 @@ export default function Swipe() {
   const { data: savedProps = [] } = useSavedProperties();
   const { mutate: toggleSave } = useToggleSavedProperty();
   const { isAuthenticated } = useAuth();
+  const { toast } = useToast();
 
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -65,7 +67,13 @@ export default function Swipe() {
         return;
       }
       if (!isSaved) toggleSave({ propertyId: current.id, isSaved: false });
-      apiRequest("POST", "/api/swipe-interest", { propertyId: current.id }).catch(() => {});
+      apiRequest("POST", "/api/swipe-interest", { propertyId: current.id })
+        .then(() => {
+          toast({ title: "Saved!", description: "Your agent has been notified of your interest." });
+        })
+        .catch(() => {
+          toast({ title: "Couldn't register interest", description: "Please try again.", variant: "destructive" });
+        });
       flashAction("liked");
     } else {
       flashAction("passed");
@@ -78,7 +86,7 @@ export default function Swipe() {
       setDragX(0);
       setDragY(0);
     }, 320);
-  }, [current, isAuthenticated, isSaved, toggleSave]);
+  }, [current, isAuthenticated, isSaved, toggleSave, toast]);
 
   const swipeLeft  = useCallback(() => commitSwipe("left"),  [commitSwipe]);
   const swipeRight = useCallback(() => commitSwipe("right"), [commitSwipe]);

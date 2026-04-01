@@ -18,6 +18,8 @@ export default function ConversationThread({ adminMode = false, adminConversatio
   const [counterOfferId, setCounterOfferId] = useState<number | null>(null);
   const [counterText, setCounterText] = useState("");
   const [respondingOfferId, setRespondingOfferId] = useState<number | null>(null);
+  const [alternateShowingId, setAlternateShowingId] = useState<number | null>(null);
+  const [alternateDate, setAlternateDate] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -78,9 +80,24 @@ export default function ConversationThread({ adminMode = false, adminConversatio
     mutationFn: async ({ id, status, confirmedDate }: { id: number; status: string; confirmedDate?: string }) => {
       return apiRequest("PATCH", `/api/showing-requests/${id}`, { status, confirmedDate });
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      const labels: Record<string, string> = {
+        under_review: "Marked as under review",
+        sent_to_listing_agent: "Forwarded to listing agent",
+        confirmed: "Showing confirmed",
+        declined: "Showing declined",
+        alternate_proposed: "Alternate time proposed",
+        cancelled: "Showing cancelled",
+        completed: "Showing marked complete",
+      };
+      toast({ title: labels[variables.status] || "Status updated", description: "All parties have been notified." });
+      setAlternateShowingId(null);
+      setAlternateDate("");
       queryClient.invalidateQueries({ queryKey: ["/api/showing-requests"] });
       queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversationId, "messages"] });
+    },
+    onError: () => {
+      toast({ title: "Action failed", description: "Could not update showing status. Please try again.", variant: "destructive" });
     },
   });
 
@@ -93,8 +110,8 @@ export default function ConversationThread({ adminMode = false, adminConversatio
       setCounterOfferId(null);
       setCounterText("");
       setRespondingOfferId(null);
-      const actionLabel = variables.action === "counter" ? "counter-offer sent" : variables.action === "accept" ? "offer accepted" : "offer declined";
-      toast({ title: "Response submitted", description: `Your ${actionLabel} successfully.` });
+      const actionLabels: Record<string, string> = { counter: "Counter-offer sent", accept: "Offer accepted", decline: "Offer declined" };
+      toast({ title: actionLabels[variables.action] || "Response submitted", description: "All parties have been notified." });
       queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversationId, "messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/property-offers/statuses", offerIdsKey] });
@@ -245,6 +262,20 @@ export default function ConversationThread({ adminMode = false, adminConversatio
         cancelled: "bg-gray-100 text-gray-500 dark:bg-gray-900/30 dark:text-gray-400",
       };
 
+      const statusLabels: Record<string, string> = {
+        requested: "Requested",
+        under_review: "Under Review",
+        sent_to_listing_agent: "Sent to Listing Agent",
+        confirmed: "Confirmed",
+        alternate_proposed: "Alternate Proposed",
+        declined: "Declined",
+        completed: "Completed",
+        cancelled: "Cancelled",
+      };
+
+      const buyerCanCancel = isBuyer && !isAdminMode && ["requested", "under_review", "sent_to_listing_agent"].includes(showingStatus);
+      const isAlternating = alternateShowingId === showingReqId;
+
       return (
         <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
           <div className={`max-w-[80%] rounded-2xl px-4 py-3 border-2 border-blue-400/30 ${isMe ? "bg-primary text-primary-foreground" : "bg-blue-50 dark:bg-blue-900/20 text-foreground"}`} data-testid={`message-${msg.id}`}>
@@ -252,7 +283,7 @@ export default function ConversationThread({ adminMode = false, adminConversatio
               <Calendar className="w-3.5 h-3.5" />
               <span className="text-xs font-bold">Showing Request</span>
               <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ml-1 ${statusColors[showingStatus] || "bg-gray-100 text-gray-700"}`}>
-                {showingStatus.replace(/_/g, " ")}
+                {statusLabels[showingStatus] || showingStatus.replace(/_/g, " ")}
               </span>
             </div>
             <p className="text-sm">{msg.content}</p>
@@ -261,10 +292,10 @@ export default function ConversationThread({ adminMode = false, adminConversatio
                 <button
                   onClick={() => showingMutation.mutate({ id: showingReqId, status: "under_review" })}
                   disabled={showingMutation.isPending}
-                  className="flex items-center gap-1 bg-blue-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  className="flex items-center gap-1 bg-blue-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
                   data-testid={`button-review-showing-${showingReqId}`}
                 >
-                  <Check className="w-3 h-3" />
+                  {showingMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
                   Review
                 </button>
               </div>
@@ -274,11 +305,11 @@ export default function ConversationThread({ adminMode = false, adminConversatio
                 <button
                   onClick={() => showingMutation.mutate({ id: showingReqId, status: "sent_to_listing_agent" })}
                   disabled={showingMutation.isPending}
-                  className="flex items-center gap-1 bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  className="flex items-center gap-1 bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
                   data-testid={`button-forward-showing-${showingReqId}`}
                 >
-                  <Send className="w-3 h-3" />
-                  Send to Listing Agent
+                  {showingMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                  Forward to Listing Agent
                 </button>
               </div>
             )}
@@ -287,16 +318,16 @@ export default function ConversationThread({ adminMode = false, adminConversatio
                 <button
                   onClick={() => showingMutation.mutate({ id: showingReqId, status: "confirmed", confirmedDate: msg.metadata?.requestedDates?.[0] })}
                   disabled={showingMutation.isPending}
-                  className="flex items-center gap-1 bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  className="flex items-center gap-1 bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
                   data-testid={`button-confirm-showing-dual-${showingReqId}`}
                 >
-                  <Check className="w-3 h-3" />
+                  {showingMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
                   Confirm Showing
                 </button>
                 <button
                   onClick={() => showingMutation.mutate({ id: showingReqId, status: "declined" })}
                   disabled={showingMutation.isPending}
-                  className="flex items-center gap-1 bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  className="flex items-center gap-1 bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
                   data-testid={`button-decline-showing-dual-${showingReqId}`}
                 >
                   <X className="w-3 h-3" />
@@ -304,25 +335,81 @@ export default function ConversationThread({ adminMode = false, adminConversatio
                 </button>
               </div>
             )}
-            {listingAgentCanAct && (
+            {listingAgentCanAct && !isAlternating && (
               <div className="flex items-center gap-2 mt-2">
                 <button
                   onClick={() => showingMutation.mutate({ id: showingReqId, status: "confirmed", confirmedDate: msg.metadata?.requestedDates?.[0] })}
                   disabled={showingMutation.isPending}
-                  className="flex items-center gap-1 bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  className="flex items-center gap-1 bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
                   data-testid={`button-confirm-showing-${showingReqId}`}
                 >
-                  <Check className="w-3 h-3" />
+                  {showingMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
                   Confirm
+                </button>
+                <button
+                  onClick={() => setAlternateShowingId(showingReqId)}
+                  disabled={showingMutation.isPending}
+                  className="flex items-center gap-1 bg-orange-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                  data-testid={`button-alternate-showing-${showingReqId}`}
+                >
+                  <Clock className="w-3 h-3" />
+                  Propose Alternate
                 </button>
                 <button
                   onClick={() => showingMutation.mutate({ id: showingReqId, status: "declined" })}
                   disabled={showingMutation.isPending}
-                  className="flex items-center gap-1 bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95"
+                  className="flex items-center gap-1 bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
                   data-testid={`button-decline-showing-${showingReqId}`}
                 >
                   <X className="w-3 h-3" />
                   Decline
+                </button>
+              </div>
+            )}
+            {isAlternating && (
+              <div className="mt-2 space-y-2">
+                <label className="text-xs font-bold">Propose a different date:</label>
+                <input
+                  type="date"
+                  value={alternateDate}
+                  onChange={e => setAlternateDate(e.target.value)}
+                  className="w-full bg-white dark:bg-gray-800 border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/50 text-foreground"
+                  data-testid={`input-alternate-date-${showingReqId}`}
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (alternateDate) {
+                        showingMutation.mutate({ id: showingReqId, status: "alternate_proposed", confirmedDate: alternateDate });
+                      }
+                    }}
+                    disabled={!alternateDate || showingMutation.isPending}
+                    className="flex items-center gap-1 bg-orange-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-40"
+                    data-testid={`button-submit-alternate-${showingReqId}`}
+                  >
+                    {showingMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                    Send Alternate
+                  </button>
+                  <button
+                    onClick={() => { setAlternateShowingId(null); setAlternateDate(""); }}
+                    className="text-xs text-muted-foreground hover:text-foreground px-2 py-1.5"
+                    data-testid={`button-cancel-alternate-${showingReqId}`}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {buyerCanCancel && (
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={() => showingMutation.mutate({ id: showingReqId, status: "cancelled" })}
+                  disabled={showingMutation.isPending}
+                  className="flex items-center gap-1 text-muted-foreground hover:text-destructive text-xs font-semibold px-3 py-1.5 rounded-lg border border-border hover:border-destructive/30 transition-all active:scale-95 disabled:opacity-50"
+                  data-testid={`button-cancel-showing-${showingReqId}`}
+                >
+                  <X className="w-3 h-3" />
+                  Cancel Request
                 </button>
               </div>
             )}

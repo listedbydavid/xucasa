@@ -1370,13 +1370,16 @@ export default function PropertyDetail() {
       });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       setShowShowingModal(false);
       setShowingDates([""]);
       setShowingNotes("");
       queryClient.invalidateQueries({ queryKey: ["/api/showing-requests"] });
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
-      toast({ title: "Showing requested!", description: "The agent will confirm a date in your Messages." });
+      toast({ title: "Showing requested!", description: "Your agent will confirm a date in your messages." });
+      if (data?.conversationId) {
+        navigate(`/conversations/${data.conversationId}`);
+      }
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to request showing.", variant: "destructive" });

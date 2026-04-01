@@ -4143,6 +4143,8 @@ export async function registerRoutes(
 
       const statusMsg = status === "confirmed"
         ? `Showing confirmed${confirmedDate ? ` for ${new Date(confirmedDate).toLocaleDateString()}` : ""}`
+        : status === "alternate_proposed"
+        ? `Alternate date proposed${confirmedDate ? `: ${new Date(confirmedDate).toLocaleDateString()}` : ""}`
         : `Showing ${(status || "").replace(/_/g, " ")}`;
 
       if (isAssignedAgent && status === "sent_to_listing_agent" && prop?.agentId && prop.agentId !== userId) {
