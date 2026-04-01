@@ -280,10 +280,22 @@ function buildRawMessage(to: string, subject: string, htmlBody: string, fromEmai
 }
 
 // --- Send email via Gmail API ---
+async function getSenderEmail(): Promise<string> {
+  if (connectionSettings?.settings?.oauth?.credentials?.email) {
+    return connectionSettings.settings.oauth.credentials.email;
+  }
+  try {
+    const gmail = await getGmailClient();
+    const profile = await gmail.users.getProfile({ userId: "me" });
+    return profile.data.emailAddress || "noreply@xucasa.com";
+  } catch {
+    return "noreply@xucasa.com";
+  }
+}
+
 async function sendViaGmail(to: string, subject: string, htmlBody: string): Promise<void> {
   const gmail = await getGmailClient();
-  const profile = await gmail.users.getProfile({ userId: "me" });
-  const fromEmail = profile.data.emailAddress || "noreply@xucasa.com";
+  const fromEmail = await getSenderEmail();
   const raw = buildRawMessage(to, subject, htmlBody, fromEmail);
   await gmail.users.messages.send({
     userId: "me",
