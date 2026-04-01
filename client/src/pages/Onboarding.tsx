@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { resolveUserDestination } from "@shared/routing";
 import { useToast } from "@/hooks/use-toast";
 import {
   Search, Home, Briefcase, Compass, ArrowRight, ArrowLeft,
@@ -56,11 +57,7 @@ export default function Onboarding() {
   const presetIntent = searchParams.get("intent") as Intent | null;
 
   if (user?.onboardingCompleted && !reentry) {
-    const mode = (user as any).currentMode || (user as any).primaryIntent;
-    if (mode === "buyer" || mode === "explorer") setLocation("/swipe");
-    else if (mode === "homeowner") setLocation("/home-report");
-    else if (mode === "agent") setLocation("/agent");
-    else setLocation("/dashboard");
+    setLocation(resolveUserDestination(user));
     return null;
   }
 

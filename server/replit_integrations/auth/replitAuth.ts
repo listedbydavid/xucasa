@@ -5,6 +5,7 @@ import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import { authStorage } from "./storage";
+import { resolveUserDestination } from "@shared/routing";
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
@@ -145,14 +146,7 @@ export async function setupAuth(app: Express) {
           console.log("[Auth] Google OAuth success for:", (user as any)?.claims?.email);
           try {
             const dbUser = await authStorage.getUser((user as any)?.claims?.sub);
-            if (!dbUser?.onboardingCompleted) {
-              return res.redirect("/onboarding");
-            }
-            const mode = dbUser.currentMode || dbUser.primaryIntent;
-            if (mode === "buyer" || mode === "explorer") return res.redirect("/swipe");
-            if (mode === "homeowner") return res.redirect("/home-report");
-            if (mode === "agent") return res.redirect("/agent");
-            return res.redirect("/dashboard");
+            return res.redirect(resolveUserDestination(dbUser));
           } catch {
             return res.redirect("/dashboard");
           }
