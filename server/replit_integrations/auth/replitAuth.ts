@@ -17,6 +17,7 @@ import {
   recordFailedAttempt,
   clearFailedAttempts,
 } from "../../authMiddleware";
+import { audit } from "../../auditLog";
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
@@ -120,8 +121,10 @@ export async function setupAuth(app: Express) {
               },
             };
 
+            audit({ event: "auth_login_success", outcome: "success", userId: user.id, metadata: { provider: "google", email } });
             done(null, sessionUser);
           } catch (err) {
+            audit({ event: "auth_login_failure", outcome: "failure", error: (err as Error).message, metadata: { provider: "google" } });
             done(err as Error);
           }
         }
@@ -219,15 +222,18 @@ export async function setupAuth(app: Express) {
         if (err) {
           console.error("[Auth] Session login error after register:", err);
           logAuthAttempt("register", "session_error", req, email);
-          return res.status(500).json({ message: "Registration succeeded but login failed" });
+          audit({ req, event: "auth_register_success", outcome: "failure", error: "session_error", metadata: { email } });
+          return res.status(500).json({ message: "Registration succeeded but login failed", requestId: (req as any).requestId });
         }
         logAuthAttempt("register", "success", req, email);
+        audit({ req, event: "auth_register_success", outcome: "success", userId: user.id, metadata: { email } });
         return res.json({ ok: true, user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, onboardingCompleted: user.onboardingCompleted, currentMode: user.currentMode, primaryIntent: user.primaryIntent } });
       });
     } catch (err: any) {
       console.error("[Auth] Registration error:", err);
       logAuthAttempt("register", "error", req, req.body?.email);
-      return res.status(500).json({ message: "Registration failed" });
+      audit({ req, event: "auth_register_success", outcome: "failure", error: (err as Error).message, metadata: { email: req.body?.email } });
+      return res.status(500).json({ message: "Registration failed", requestId: (req as any).requestId });
     }
   });
 
@@ -247,17 +253,20 @@ export async function setupAuth(app: Express) {
       if (!user || !user.passwordHash) {
         logAuthAttempt("login", "invalid_credentials", req, email);
         recordFailedAttempt(req);
+        audit({ req, event: "auth_login_failure", outcome: "failure", error: "invalid_credentials", metadata: { email } });
         return res.status(401).json({ message: "Invalid email or password" });
       }
       if (user.status === "disabled" || user.status === "suspended" || user.status === "banned") {
         logAuthAttempt("login", "account_disabled", req, email);
         recordFailedAttempt(req);
+        audit({ req, event: "auth_login_failure", outcome: "failure", userId: user.id, error: "account_disabled", metadata: { email } });
         return res.status(403).json({ message: "This account has been disabled. Please contact support." });
       }
       const valid = await bcrypt.compare(password, user.passwordHash);
       if (!valid) {
         logAuthAttempt("login", "invalid_password", req, email);
         recordFailedAttempt(req);
+        audit({ req, event: "auth_login_failure", outcome: "failure", userId: user.id, error: "invalid_password", metadata: { email } });
         return res.status(401).json({ message: "Invalid email or password" });
       }
       if (rememberMe) {
@@ -276,16 +285,19 @@ export async function setupAuth(app: Express) {
         if (err) {
           console.error("[Auth] Session login error:", err);
           logAuthAttempt("login", "session_error", req, email);
-          return res.status(500).json({ message: "Login failed" });
+          audit({ req, event: "auth_login_failure", outcome: "failure", error: "session_error", metadata: { email } });
+          return res.status(500).json({ message: "Login failed", requestId: (req as any).requestId });
         }
         logAuthAttempt("login", "success", req, email);
         clearFailedAttempts(req);
+        audit({ req, event: "auth_login_success", outcome: "success", userId: user.id, metadata: { email } });
         return res.json({ ok: true, user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, onboardingCompleted: user.onboardingCompleted, currentMode: user.currentMode, primaryIntent: user.primaryIntent } });
       });
     } catch (err: any) {
       console.error("[Auth] Login error:", err);
       logAuthAttempt("login", "error", req, req.body?.email);
-      return res.status(500).json({ message: "Login failed" });
+      audit({ req, event: "auth_login_failure", outcome: "failure", error: (err as Error).message, metadata: { email: req.body?.email } });
+      return res.status(500).json({ message: "Login failed", requestId: (req as any).requestId });
     }
   });
 
@@ -301,6 +313,7 @@ export async function setupAuth(app: Express) {
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
   if (!req.isAuthenticated() || !(req.user as any)?.claims?.sub) {
+    audit({ req, event: "authorization_denied", outcome: "failure", metadata: { reason: "unauthenticated", route: req.originalUrl } });
     return res.status(401).json({ message: "Unauthorized" });
   }
   return next();

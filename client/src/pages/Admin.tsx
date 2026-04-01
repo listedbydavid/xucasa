@@ -825,7 +825,7 @@ function ErrorReportCard({ report, onUpdateStatus, onResolve, onDelete, onAddNot
 export default function Admin() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals" | "buyers" | "users" | "representation" | "errors" | "conversations">("overview");
+  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals" | "buyers" | "users" | "representation" | "errors" | "conversations" | "audit">("overview");
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
   const [convoSearch, setConvoSearch] = useState("");
   const [convoStatusFilter, setConvoStatusFilter] = useState("all");
@@ -974,6 +974,23 @@ export default function Admin() {
 
   const [showArchive, setShowArchive] = useState(false);
 
+  const [auditEventType, setAuditEventType] = useState("all");
+  const { data: auditStats } = useQuery<any>({
+    queryKey: ["/api/admin/audit-events/stats"],
+    enabled: isAdminUser && activeTab === "audit",
+  });
+  const { data: auditEvents } = useQuery<any[]>({
+    queryKey: ["/api/admin/audit-events", auditEventType],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: "100" });
+      if (auditEventType !== "all") params.set("eventType", auditEventType);
+      const res = await fetch(`/api/admin/audit-events?${params.toString()}`);
+      if (!res.ok) throw new Error("Failed to fetch audit events");
+      return res.json();
+    },
+    enabled: isAdminUser && activeTab === "audit",
+  });
+
   const { data: adminConversations, isLoading: convoListLoading } = useQuery<any>({
     queryKey: ["/api/admin/conversations", convoSearch, convoStatusFilter, convoPage],
     queryFn: async () => {
@@ -1096,7 +1113,7 @@ export default function Admin() {
         </div>
 
         <div className="flex gap-1 mb-6 bg-muted/30 rounded-xl p-1 overflow-x-auto" data-testid="section-admin-tabs">
-          {(["overview", "users", "pitches", "leads", "buyers", "conversations", "referrals", "representation", "errors"] as const).map(tab => (
+          {(["overview", "users", "pitches", "leads", "buyers", "conversations", "referrals", "representation", "errors", "audit"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => { setActiveTab(tab); if (tab === "conversations") setSelectedConversationId(null); }}
@@ -1113,6 +1130,7 @@ export default function Admin() {
                 : tab === "conversations" ? "Conversations"
                 : tab === "referrals" ? `Referrals (${(referrals?.length || 0) + (sellerReferrals?.length || 0)})`
                 : tab === "errors" ? `Errors (${errorReports?.filter((e: any) => !e.resolved).length || 0})`
+                : tab === "audit" ? "Audit Log"
                 : `Representation (${swipeNotifications?.length || 0})`}
             </button>
           ))}
@@ -2026,6 +2044,87 @@ export default function Admin() {
                 <CheckCircle2 className="w-10 h-10 text-green-500 mx-auto mb-3" />
                 <h3 className="font-semibold mb-1">No errors reported</h3>
                 <p className="text-sm text-muted-foreground">The application is running smoothly.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "audit" && (
+          <div className="space-y-4" data-testid="section-audit">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+              <div className="bg-card rounded-xl border p-4 text-center">
+                <div className="text-2xl font-bold" data-testid="text-total-events">{auditStats?.totalEvents || 0}</div>
+                <div className="text-xs text-muted-foreground">Total Events</div>
+              </div>
+              <div className="bg-card rounded-xl border p-4 text-center">
+                <div className="text-2xl font-bold text-red-600" data-testid="text-total-failures">{auditStats?.totalFailures || 0}</div>
+                <div className="text-xs text-muted-foreground">Failures</div>
+              </div>
+              <div className="bg-card rounded-xl border p-4 text-center">
+                <div className="text-2xl font-bold text-green-600" data-testid="text-success-rate">
+                  {auditStats?.totalEvents ? Math.round(((auditStats.totalEvents - auditStats.totalFailures) / auditStats.totalEvents) * 100) : 100}%
+                </div>
+                <div className="text-xs text-muted-foreground">Success Rate</div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 mb-3">
+              <label className="text-sm font-medium">Filter:</label>
+              <select
+                value={auditEventType}
+                onChange={e => setAuditEventType(e.target.value)}
+                className="border rounded-lg px-3 py-1.5 text-sm"
+                data-testid="select-audit-filter"
+              >
+                <option value="all">All Events</option>
+                <option value="auth_login_success">Login Success</option>
+                <option value="auth_login_failure">Login Failure</option>
+                <option value="auth_register_success">Register</option>
+                <option value="onboarding_completed">Onboarding</option>
+                <option value="mode_switched">Mode Switch</option>
+                <option value="swipe_interest_created">Swipe Interest</option>
+                <option value="buyer_interest_upserted">Buyer Interest</option>
+                <option value="conversation_created">Conversation Created</option>
+                <option value="message_sent">Message Sent</option>
+                <option value="showing_request_created">Showing Created</option>
+                <option value="showing_status_changed">Showing Status</option>
+                <option value="coordination_thread_created">Coordination Thread</option>
+                <option value="reverse_offer_created">Reverse Offer</option>
+                <option value="buyer_offer_response">Offer Response</option>
+                <option value="authorization_denied">Auth Denied</option>
+              </select>
+            </div>
+
+            {auditEvents && auditEvents.length > 0 ? (
+              <div className="space-y-2">
+                {auditEvents.map((evt: any) => (
+                  <div key={evt.id} className={`bg-card rounded-xl border p-3 text-sm ${evt.outcome === "failure" ? "border-red-200 bg-red-50/50" : ""}`} data-testid={`audit-event-${evt.id}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-mono font-medium text-xs">{evt.eventType}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${evt.outcome === "success" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                        {evt.outcome}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <span>{new Date(evt.createdAt).toLocaleString()}</span>
+                      {evt.actorUserId && <span>User: {evt.actorUserId.substring(0, 8)}...</span>}
+                      {evt.requestId && <span>Req: {evt.requestId.substring(0, 8)}...</span>}
+                      {evt.propertyId && <span>Property: #{evt.propertyId}</span>}
+                      {evt.conversationId && <span>Convo: #{evt.conversationId}</span>}
+                    </div>
+                    {evt.metadata && (
+                      <div className="mt-1 text-xs font-mono text-muted-foreground bg-muted/30 rounded p-1 overflow-x-auto">
+                        {JSON.stringify(evt.metadata)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border p-12 text-center">
+                <Activity className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                <h3 className="font-semibold mb-1">No audit events yet</h3>
+                <p className="text-sm text-muted-foreground">Events will appear here as users interact with the platform.</p>
               </div>
             )}
           </div>

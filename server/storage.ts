@@ -66,6 +66,9 @@ import {
   type InsertMessage,
   type ShowingRequest,
   type InsertShowingRequest,
+  auditEvents,
+  type AuditEvent,
+  type InsertAuditEvent,
   users,
 } from "@shared/schema";
 import { eq, and, desc, asc, sql, gte, count, inArray, isNull } from "drizzle-orm";
@@ -269,6 +272,9 @@ export interface IStorage {
   getShowingRequest?(id: number): Promise<ShowingRequest | undefined>;
   getShowingRequestsForUser(userId: string): Promise<(ShowingRequest & { property: Property; buyer: any; agent: any })[]>;
   updateShowingRequestStatus(id: number, status: string, confirmedDate?: Date): Promise<ShowingRequest>;
+
+  createAuditEvent(event: InsertAuditEvent): Promise<AuditEvent>;
+  getRecentAuditEvents(limit?: number, filters?: { eventType?: string; outcome?: string }): Promise<AuditEvent[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1687,6 +1693,24 @@ export class DatabaseStorage implements IStorage {
     if (confirmedDate) updates.confirmedDate = confirmedDate;
     const [updated] = await db.update(showingRequests).set(updates).where(eq(showingRequests.id, id)).returning();
     return updated;
+  }
+
+  async createAuditEvent(event: InsertAuditEvent): Promise<AuditEvent> {
+    const [created] = await db.insert(auditEvents).values(event).returning();
+    return created;
+  }
+
+  async getRecentAuditEvents(limit = 100, filters?: { eventType?: string; outcome?: string }): Promise<AuditEvent[]> {
+    const conditions = [];
+    if (filters?.eventType) conditions.push(eq(auditEvents.eventType, filters.eventType));
+    if (filters?.outcome) conditions.push(eq(auditEvents.outcome, filters.outcome));
+    const query = db.select().from(auditEvents)
+      .orderBy(desc(auditEvents.createdAt))
+      .limit(limit);
+    if (conditions.length > 0) {
+      return query.where(and(...conditions));
+    }
+    return query;
   }
 }
 

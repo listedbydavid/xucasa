@@ -6,7 +6,7 @@ import { storage } from "./storage";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { db } from "./db";
 import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews, errorReports, notifications, buyerInterest } from "@shared/schema";
-import { eq, desc, sql, or, and, ilike, inArray } from "drizzle-orm";
+import { eq, desc, sql, or, and, ilike, inArray, count } from "drizzle-orm";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { registerAuthRoutes } from "./replit_integrations/auth";
@@ -18,6 +18,8 @@ import { runIdxSync, isSyncInProgress, idxConfigured, getLastSyncLog, getSyncLog
 import { sendNotificationEmail, sendTestEmail, isEmailConfigured } from "./emailService";
 import { onboardingRateLimit } from "./authMiddleware";
 import { listSuspiciousAccounts, disableAccount, deleteAccountSafely, bulkDisable, bulkDelete } from "./cleanupService";
+import { audit } from "./auditLog";
+import { logger } from "./logger";
 
 const ERROR_ARCHIVE_PATH = path.join(process.cwd(), "data", "error-archive.json");
 
@@ -883,6 +885,7 @@ export async function registerRoutes(
           onboardingCompleted: true,
           currentMode: "explorer",
         });
+        audit({ req, event: "onboarding_completed", outcome: "success", userId, metadata: { intent: "explorer" } });
         res.json(updated);
         return;
       }
@@ -892,7 +895,8 @@ export async function registerRoutes(
       });
       res.json(updated);
     } catch (err) {
-      res.status(500).json({ message: "Failed to save intent" });
+      audit({ req, event: "onboarding_completed", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
+      res.status(500).json({ message: "Failed to save intent", requestId: (req as any).requestId });
     }
   });
 
@@ -953,9 +957,11 @@ export async function registerRoutes(
         onboardingCompleted: true,
         currentMode: "buyer",
       });
+      audit({ req, event: "onboarding_completed", outcome: "success", userId, metadata: { intent: "buyer" } });
       res.json(updated);
     } catch (err) {
-      res.status(500).json({ message: "Failed to save buyer profile" });
+      audit({ req, event: "onboarding_completed", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message, metadata: { intent: "buyer" } });
+      res.status(500).json({ message: "Failed to save buyer profile", requestId: (req as any).requestId });
     }
   });
 
@@ -1004,9 +1010,11 @@ export async function registerRoutes(
         onboardingCompleted: true,
         currentMode: "homeowner",
       });
+      audit({ req, event: "onboarding_completed", outcome: "success", userId, metadata: { intent: "homeowner" } });
       res.json(updated);
     } catch (err) {
-      res.status(500).json({ message: "Failed to save homeowner data" });
+      audit({ req, event: "onboarding_completed", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message, metadata: { intent: "homeowner" } });
+      res.status(500).json({ message: "Failed to save homeowner data", requestId: (req as any).requestId });
     }
   });
 
@@ -1038,9 +1046,11 @@ export async function registerRoutes(
         onboardingCompleted: true,
         currentMode: "agent",
       });
+      audit({ req, event: "onboarding_completed", outcome: "success", userId, metadata: { intent: "agent" } });
       res.json(updated);
     } catch (err) {
-      res.status(500).json({ message: "Failed to save agent data" });
+      audit({ req, event: "onboarding_completed", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message, metadata: { intent: "agent" } });
+      res.status(500).json({ message: "Failed to save agent data", requestId: (req as any).requestId });
     }
   });
 
@@ -1071,9 +1081,11 @@ export async function registerRoutes(
       const updated = await authStorage.updateOnboarding(userId, {
         currentMode: parsed.data.mode,
       });
+      audit({ req, event: "mode_switched", outcome: "success", userId, metadata: { newMode: parsed.data.mode } });
       res.json(updated);
     } catch (err) {
-      res.status(500).json({ message: "Failed to switch mode" });
+      audit({ req, event: "mode_switched", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
+      res.status(500).json({ message: "Failed to switch mode", requestId: (req as any).requestId });
     }
   });
 
@@ -1940,6 +1952,7 @@ export async function registerRoutes(
         status: "notified",
       });
 
+      audit({ req, event: "swipe_interest_created", outcome: "success", userId: buyerUserId, propertyId, metadata: { notificationId: n.id } });
       res.status(201).json({
         message: "Interest registered",
         notifications: [n],
@@ -1947,8 +1960,8 @@ export async function registerRoutes(
         sellerRepresented,
       });
     } catch (err) {
-      console.error("Swipe interest error:", err);
-      res.status(500).json({ message: "Internal Server Error" });
+      audit({ req, event: "swipe_interest_created", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
+      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
     }
   });
 
@@ -2087,10 +2100,11 @@ export async function registerRoutes(
         }
       }
 
+      audit({ req, event: "reverse_offer_created", outcome: "success", userId: creatorId, propertyId, resourceType: "property_offer", resourceId: String(offer.id), metadata: { buyerUserId, offerPrice: offerPrice || prop.price } });
       res.status(201).json(offer);
     } catch (err) {
-      console.error("Create property offer error:", err);
-      res.status(500).json({ message: "Internal Server Error" });
+      audit({ req, event: "reverse_offer_created", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
+      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
     }
   });
 
@@ -2398,10 +2412,11 @@ export async function registerRoutes(
         trySendNotificationEmail(listingAgentId, "offer_response", `Buyer has ${statusLabel} the offer`, action === "counter" ? `Counter: ${counterMessage.substring(0, 200)}` : `The offer has been ${statusLabel}.`, `/conversations/${coordConvo.id}`, offer.propertyId, coordConvo.id);
       }
 
+      audit({ req, event: "buyer_offer_response", outcome: "success", userId, propertyId: offer.propertyId, resourceType: "property_offer", resourceId: String(id), metadata: { action, newStatus } });
       res.json({ success: true, status: newStatus });
     } catch (err) {
-      console.error("Buyer offer response error:", err);
-      res.status(500).json({ message: "Internal Server Error" });
+      audit({ req, event: "buyer_offer_response", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
+      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
     }
   });
 
@@ -2410,10 +2425,12 @@ export async function registerRoutes(
   const isAdmin = async (req: any, res: any, next: any) => {
     const adminEmail = process.env.ADMIN_EMAIL;
     if (!adminEmail || !req.user?.claims?.sub) {
+      audit({ req, event: "authorization_denied", outcome: "failure", metadata: { reason: "admin_required", route: req.originalUrl } });
       return res.status(403).json({ message: "Admin access required" });
     }
     const user = await authStorage.getUser(req.user.claims.sub);
     if (!user?.email || user.email.toLowerCase() !== adminEmail.toLowerCase()) {
+      audit({ req, event: "authorization_denied", outcome: "failure", userId: req.user.claims.sub, metadata: { reason: "not_admin", route: req.originalUrl } });
       return res.status(403).json({ message: "Admin access required" });
     }
     next();
@@ -3680,9 +3697,11 @@ export async function registerRoutes(
         });
       }
 
+      audit({ req, event: "buyer_interest_upserted", outcome: "success", userId, propertyId, buyerInterestId: result.id, metadata: { source: source || "swipe" } });
       res.status(201).json(result);
     } catch (err) {
-      res.status(500).json({ message: "Internal Server Error" });
+      audit({ req, event: "buyer_interest_upserted", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
+      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
     }
   });
 
@@ -3764,9 +3783,11 @@ export async function registerRoutes(
       if (stage) updates.stage = stage;
 
       const [updated] = await db.update(buyerInterest).set(updates).where(eq(buyerInterest.id, id)).returning();
+      audit({ req, event: "buyer_interest_upserted", outcome: "success", userId, buyerInterestId: id, metadata: { stage } });
       res.json(updated);
     } catch (err) {
-      res.status(500).json({ message: "Internal Server Error" });
+      audit({ req, event: "buyer_interest_upserted", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
+      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
     }
   });
 
@@ -3949,10 +3970,14 @@ export async function registerRoutes(
         trySendNotificationEmail(recipientId, "message_received", `New message from ${senderName}`, initialMessage.substring(0, 200), `/conversations/${convo.id}`, propertyId, convo.id);
       }
 
+      audit({ req, event: "conversation_created", outcome: "success", userId, propertyId, conversationId: convo.id, metadata: { type: convType } });
+      if (convType === "agent_coordination") {
+        audit({ req, event: "coordination_thread_created", outcome: "success", userId, propertyId, conversationId: convo.id });
+      }
       res.status(201).json(sanitizeConversationForCaller(convo, userId, callerRole || "user"));
     } catch (err) {
-      console.error("Create conversation error:", err);
-      res.status(500).json({ message: "Internal Server Error" });
+      audit({ req, event: "conversation_created", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
+      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
     }
   });
 
@@ -4003,7 +4028,10 @@ export async function registerRoutes(
       const convo = await storage.getConversation(conversationId);
       if (!convo) return res.status(404).json({ message: "Conversation not found" });
       const access = await validateConversationAccess(convo, userId);
-      if (!access.allowed) return res.status(403).json({ message: access.reason });
+      if (!access.allowed) {
+        audit({ req, event: "authorization_denied", outcome: "failure", userId, conversationId, metadata: { reason: access.reason, action: "send_message" } });
+        return res.status(403).json({ message: access.reason });
+      }
 
       const { content, type } = req.body;
       if (!content) return res.status(400).json({ message: "content required" });
@@ -4034,10 +4062,11 @@ export async function registerRoutes(
       trySendNotificationEmail(recipientId, "message_received", `New message from ${senderName}`, content.substring(0, 200), `/conversations/${conversationId}`, convo.propertyId, conversationId);
 
       const msgWithSender = { ...msg, sender };
+      audit({ req, event: "message_sent", outcome: "success", userId, conversationId, propertyId: convo.propertyId, metadata: { type: type || "text" } });
       res.status(201).json(msgWithSender);
     } catch (err) {
-      console.error("Send message error:", err);
-      res.status(500).json({ message: "Internal Server Error" });
+      audit({ req, event: "message_sent", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
+      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
     }
   });
 
@@ -4113,10 +4142,11 @@ export async function registerRoutes(
       });
       trySendNotificationEmail(agentId, "showing_request", `Showing request from ${buyerName}`, `Requested dates: ${dateStr}`, `/conversations/${convo.id}`, propertyId, convo.id);
 
+      audit({ req, event: "showing_request_created", outcome: "success", userId, propertyId, conversationId: convo.id, resourceType: "showing_request", resourceId: String(request.id) });
       res.status(201).json(request);
     } catch (err) {
-      console.error("Create showing request error:", err);
-      res.status(500).json({ message: "Internal Server Error" });
+      audit({ req, event: "showing_request_created", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
+      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
     }
   });
 
@@ -4136,6 +4166,7 @@ export async function registerRoutes(
       const isListingAgent = prop?.agentId === userId;
 
       if (!isAssignedAgent && !isBuyerUser && !isListingAgent) {
+        audit({ req, event: "authorization_denied", outcome: "failure", userId, resourceType: "showing_request", resourceId: String(id), metadata: { reason: "not_participant" } });
         return res.status(403).json({ message: "Access denied" });
       }
 
@@ -4206,6 +4237,7 @@ export async function registerRoutes(
         const coordConvo = await storage.getOrCreateConversation(
           updated.propertyId, userId, listingAgentId, "agent", "agent_coordination", updated.buyerUserId
         );
+        audit({ req, event: "coordination_thread_created", outcome: "success", userId, propertyId: updated.propertyId, conversationId: coordConvo.id, metadata: { trigger: "showing_forwarded" } });
 
         const agentUser = await storage.getUser(userId);
         const agentName = agentUser?.firstName ? `${agentUser.firstName} ${agentUser.lastName || ""}`.trim() : "Buyer's agent";
@@ -4324,12 +4356,58 @@ export async function registerRoutes(
         trySendNotificationEmail(recipientId, notificationType, notifTitle, notifMsg, `/conversations/${updated.conversationId}`, updated.propertyId, updated.conversationId);
       }
 
+      audit({ req, event: "showing_status_changed", outcome: "success", userId, propertyId: updated.propertyId, resourceType: "showing_request", resourceId: String(id), metadata: { from: currentStatus, to: status, role: isListingAgent ? "listing_agent" : isAssignedAgent ? "assigned_agent" : "buyer" } });
+
       if (isListingAgent && !isAssignedAgent) {
         const { buyerUserId: _b, ...sanitizedUpdated } = updated as any;
         res.json({ ...sanitizedUpdated, buyerUserId: "[redacted]" });
       } else {
         res.json(updated);
       }
+    } catch (err) {
+      audit({ req, event: "showing_status_changed", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
+      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
+    }
+  });
+
+  app.get("/api/admin/audit-events", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const eventType = req.query.eventType as string | undefined;
+      const outcome = req.query.outcome as string | undefined;
+      const events = await storage.getRecentAuditEvents(limit, {
+        eventType: eventType || undefined,
+        outcome: outcome || undefined,
+      });
+      res.json(events);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
+    }
+  });
+
+  app.get("/api/admin/audit-events/failures", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const events = await storage.getRecentAuditEvents(limit, { outcome: "failure" });
+      res.json(events);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
+    }
+  });
+
+  app.get("/api/admin/audit-events/stats", isAuthenticated, isAdmin, async (_req: any, res) => {
+    try {
+      const { auditEvents } = await import("@shared/schema");
+      const totalCount = await db.select({ count: count() }).from(auditEvents);
+      const failureCount = await db.select({ count: count() }).from(auditEvents).where(eq(auditEvents.outcome, "failure"));
+      const recentEvents = await storage.getRecentAuditEvents(10);
+      const recentFailures = await storage.getRecentAuditEvents(10, { outcome: "failure" });
+      res.json({
+        totalEvents: totalCount[0]?.count || 0,
+        totalFailures: failureCount[0]?.count || 0,
+        recentEvents,
+        recentFailures,
+      });
     } catch (err) {
       res.status(500).json({ message: "Internal Server Error" });
     }

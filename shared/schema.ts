@@ -654,6 +654,26 @@ export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type NotificationPreference = typeof notificationPreferences.$inferSelect;
 export type InsertNotificationPreference = z.infer<typeof insertNotificationPreferencesSchema>;
 
+export const auditEvents = pgTable("audit_events", {
+  id: serial("id").primaryKey(),
+  eventType: text("event_type").notNull(),
+  actorUserId: varchar("actor_user_id"),
+  actorRole: text("actor_role"),
+  propertyId: integer("property_id"),
+  conversationId: integer("conversation_id"),
+  buyerInterestId: integer("buyer_interest_id"),
+  resourceType: text("resource_type"),
+  resourceId: text("resource_id"),
+  requestId: text("request_id"),
+  outcome: text("outcome"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertAuditEventSchema = createInsertSchema(auditEvents).omit({ id: true, createdAt: true });
+export type AuditEvent = typeof auditEvents.$inferSelect;
+export type InsertAuditEvent = z.infer<typeof insertAuditEventSchema>;
+
 // Request Types
 export type CreatePropertyRequest = InsertProperty;
 export type UpdatePropertyRequest = Partial<InsertProperty>;

@@ -2,6 +2,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { requestIdMiddleware } from "./requestId";
+import { logger } from "./logger";
 
 const app = express();
 const httpServer = createServer(app);
@@ -11,6 +13,8 @@ declare module "http" {
     rawBody: unknown;
   }
 }
+
+app.use(requestIdMiddleware);
 
 app.use(
   express.json({
@@ -76,17 +80,26 @@ app.use((req, res, next) => {
     log("Admin onboarding backfill skipped: " + (e as Error).message);
   }
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
+    const reqId = (req as any).requestId || null;
 
-    console.error("Internal Server Error:", err);
+    logger.error({
+      event: "unexpected_server_error",
+      requestId: reqId,
+      route: req.originalUrl,
+      method: req.method,
+      statusCode: status,
+      error: err.stack || err.message || String(err),
+      outcome: "failure",
+    });
 
     if (res.headersSent) {
       return next(err);
     }
 
-    return res.status(status).json({ message });
+    return res.status(status).json({ message, requestId: reqId });
   });
 
   // importantly only setup vite in development and after

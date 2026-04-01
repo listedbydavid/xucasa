@@ -66,6 +66,14 @@ Preferred communication style: Simple, everyday language.
 - **Cleanup Service**: `server/cleanupService.ts` provides list/disable/delete for suspicious accounts with FK-safe deletion.
 - **Seed Gate**: `seedDatabase()` only runs in non-production environments.
 
+### Observability & Audit
+
+- **Structured Logger**: `server/logger.ts` emits JSON-formatted log entries with level, event, timestamp, and request context.
+- **Request Correlation**: `server/requestId.ts` middleware assigns UUID correlation IDs to every request (uses `x-request-id` header or generates new).
+- **Audit Event Tracking**: `server/auditLog.ts` helper combines structured logging with `audit_events` table persistence. Captures event type, outcome, actor, target entities, and metadata.
+- **Instrumented Events**: `auth_login_success/failure`, `auth_register_success`, `onboarding_completed`, `mode_switched`, `swipe_interest_created`, `reverse_offer_created`, `buyer_offer_response`, `buyer_interest_upserted`, `conversation_created`, `coordination_thread_created`, `message_sent`, `showing_request_created`, `showing_status_changed`, `authorization_denied`, `unexpected_server_error`.
+- **Admin Audit Dashboard**: "Audit Log" tab in Admin panel with stats (total events, failures, success rate), event type filter, and event detail cards. API: `GET /api/admin/audit-events`, `GET /api/admin/audit-events/failures`, `GET /api/admin/audit-events/stats`.
+
 ## External Dependencies
 
 ### APIs & Services

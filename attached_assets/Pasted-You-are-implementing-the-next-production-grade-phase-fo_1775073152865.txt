@@ -1,0 +1,156 @@
+You are implementing the next production-grade phase for Xucasa.
+
+This is not a planning exercise.
+Make real code changes, add tests, and provide proof of work.
+
+OBJECTIVE
+
+Add production-grade observability and auditability to the core buyer → agent → listing-agent workflow so we can reliably debug, monitor, and trust the system as it grows.
+
+Focus on the current live workflow:
+- auth / login
+- onboarding routing
+- swipe interest
+- buyer interest creation / updates
+- conversation creation
+- message sending
+- showing request creation
+- showing status transitions
+- coordination thread creation
+- reverse offer creation
+- buyer offer response actions
+- mode switching
+
+We need structured application-level logging, event tracking, and error visibility for these flows.
+
+REQUIREMENTS
+
+1. Add structured logging
+Implement a consistent structured logging utility and use it across the critical workflow.
+
+Requirements:
+- no console.log scattershot
+- use a shared logger abstraction
+- logs must be structured JSON-like objects
+- include:
+  - event name
+  - timestamp
+  - user id if available
+  - role if available
+  - property id if available
+  - conversation id if available
+  - buyer_interest id if available
+  - request id / correlation id if available
+  - outcome: success / failure
+  - error message if failure
+
+Add logging to at least these events:
+- auth_login_success
+- auth_login_failure
+- auth_register_success
+- onboarding_completed
+- mode_switched
+- swipe_interest_created
+- buyer_interest_upserted
+- conversation_created
+- message_sent
+- showing_request_created
+- showing_status_changed
+- coordination_thread_created
+- reverse_offer_created
+- buyer_offer_response
+- authorization_denied
+- unexpected_server_error
+
+2. Add request correlation / request IDs
+For API requests, add or propagate a request ID.
+Requirements:
+- if request already has x-request-id, preserve it
+- otherwise generate one
+- include request ID in logs
+- include request ID in error responses for debugging
+- attach it to request context so handlers can use it
+
+3. Add centralized error handling improvements
+Audit server routes and improve error handling so failures are observable and consistent.
+
+Requirements:
+- unexpected errors should go through a centralized error handler where possible
+- errors should log with request ID and route context
+- avoid silent catches in core workflow paths
+- where silent catches exist in the workflow, replace them with user-visible handling and logs
+
+4. Add domain event tracking table or internal event capture
+Implement a lightweight internal event capture system for critical product events.
+
+Requirements:
+- either create a small database table for app_events / audit_events
+- or implement a well-structured internal storage path already consistent with architecture
+- store critical events for:
+  - swipe
+  - conversation create
+  - message send
+  - showing request create
+  - showing status change
+  - offer create
+  - offer response
+  - mode switch
+- include actor user ID, event type, primary resource IDs, metadata JSON, createdAt
+
+Important:
+- keep this lightweight and production-minded
+- do not add an external analytics provider yet
+- this is internal observability / auditability
+
+5. Add admin/debug visibility
+Expose a safe internal/admin-only way to inspect recent workflow events and failures.
+
+Requirements:
+- admin-only endpoint or dashboard section
+- recent events list
+- recent failures list
+- ability to inspect request ID, event type, metadata, timestamp
+- do not expose sensitive data unnecessarily
+- do not expose to non-admins
+
+6. Add tests
+Add tests for:
+- request ID generation / propagation
+- logger utility output shape
+- critical event persistence for at least a few key actions
+- authorization_denied logging on blocked access
+- mode switch event logging
+- showing status change event logging
+
+Use the existing testing setup and patterns in the repo.
+
+7. Keep scope disciplined
+Do NOT:
+- add external monitoring vendors yet
+- redesign the whole backend
+- add websocket infrastructure
+- change product behavior unless needed for logging/error correctness
+- break current auth, onboarding, or agent-mediated rules
+
+OUTPUT FORMAT
+
+When done, respond with exactly these sections:
+
+1. Objective completed
+2. Changes made
+3. Files modified
+4. Tests added
+5. Commands run
+6. Results
+7. Known gaps
+8. Next recommended step
+
+IMPORTANT EXECUTION RULES
+
+- Do real code changes now
+- Do not just analyze
+- Do not stop at a plan
+- Do not give vague summaries
+- If you hit an issue, solve it and continue
+- Reuse existing architecture patterns where possible
+- Keep changes production-grade, minimal, and maintainable
