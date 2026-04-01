@@ -1138,6 +1138,7 @@ export async function registerRoutes(
           agentMlsId: result.memberKey || null,
           role: "agent",
         });
+        await audit({ req, event: "agent_verified", outcome: "success", userId, metadata: { licenseNumber: licenseNumber.trim(), licenseState } });
         return res.json({
           verified: true,
           user: updated,
@@ -1155,6 +1156,7 @@ export async function registerRoutes(
           brokerageName: brokerageName || null,
           agentVerified: false,
         });
+        await audit({ req, event: "agent_verify_failed", outcome: "failure", userId, metadata: { licenseNumber: licenseNumber.trim(), error: result.error } });
         return res.json({
           verified: false,
           error: result.error || "Could not verify agent license",
@@ -1162,6 +1164,7 @@ export async function registerRoutes(
       }
     } catch (err: any) {
       console.error("Agent verify error:", err);
+      await audit({ req, event: "agent_verified", outcome: "failure", userId: req.user?.claims?.sub, errorMessage: err.message });
       res.status(500).json({ message: "Failed to verify agent license" });
     }
   });
@@ -1182,8 +1185,10 @@ export async function registerRoutes(
         association: association || null,
         brokerageName: brokerageName || null,
       });
+      await audit({ req, event: "agent_info_submitted", outcome: "success", userId, metadata: { licenseNumber: licenseNumber.trim() } });
       res.json(updated);
-    } catch (err) {
+    } catch (err: any) {
+      await audit({ req, event: "agent_info_submitted", outcome: "failure", userId: req.user?.claims?.sub, errorMessage: err.message });
       res.status(500).json({ message: "Failed to save agent information" });
     }
   });
@@ -1382,8 +1387,10 @@ export async function registerRoutes(
       const { agentEmail } = req.body;
       if (!agentEmail) return res.status(400).json({ message: "agentEmail required" });
       const link = await storage.upsertClientAgentLink(req.user.sub, agentEmail.trim().toLowerCase());
+      await audit({ req, event: "agent_invite_created", outcome: "success", userId: req.user.sub, metadata: { agentEmail: agentEmail.trim().toLowerCase() } });
       res.json(link);
     } catch (err: any) {
+      await audit({ req, event: "agent_invite_created", outcome: "failure", userId: req.user?.sub, errorMessage: err.message });
       res.status(500).json({ message: err.message });
     }
   });
@@ -1391,8 +1398,10 @@ export async function registerRoutes(
   app.delete("/api/agent-invite", isAuthenticated, async (req: any, res) => {
     try {
       await storage.deleteClientAgentLink(req.user.sub);
+      await audit({ req, event: "agent_invite_deleted", outcome: "success", userId: req.user.sub });
       res.json({ message: "Removed" });
     } catch (err: any) {
+      await audit({ req, event: "agent_invite_deleted", outcome: "failure", userId: req.user?.sub, errorMessage: err.message });
       res.status(500).json({ message: err.message });
     }
   });
@@ -1726,8 +1735,10 @@ export async function registerRoutes(
       }
 
       const newLead = await storage.createSellLead(lead);
+      await audit({ req, event: "sell_lead_created", outcome: "success", metadata: { email: lead.email, address: lead.address } });
       res.status(201).json({ ...newLead, agentLinked });
     } catch (err: any) {
+      await audit({ req, event: "sell_lead_created", outcome: "failure", errorMessage: err.message });
       res.status(500).json({ message: err.message });
     }
   });
@@ -1830,8 +1841,10 @@ export async function registerRoutes(
       if (phone !== undefined) updates.phone = phone;
       if (mailingAddress !== undefined) updates.mailingAddress = mailingAddress;
       const [updated] = await db.update(users).set(updates).where(eq(users.id, userId)).returning();
+      await audit({ req, event: "profile_updated", outcome: "success", userId, metadata: { fields: Object.keys(updates) } });
       res.json(updated);
-    } catch (err) {
+    } catch (err: any) {
+      await audit({ req, event: "profile_updated", outcome: "failure", userId: req.user?.claims?.sub, errorMessage: err.message });
       res.status(500).json({ message: "Internal Server Error" });
     }
   });
@@ -1877,8 +1890,10 @@ export async function registerRoutes(
         comment: comment.trim(),
         isPublic: true,
       });
+      await audit({ req, event: "review_created", outcome: "success", userId, propertyId, metadata: { rating } });
       res.status(201).json(review);
-    } catch (err) {
+    } catch (err: any) {
+      await audit({ req, event: "review_created", outcome: "failure", userId: req.user?.claims?.sub, errorMessage: err.message });
       res.status(500).json({ message: "Internal Server Error" });
     }
   });
@@ -1905,8 +1920,10 @@ export async function registerRoutes(
         return res.status(400).json({ message: "isPublic must be a boolean" });
       }
       const updated = await storage.updateReviewVisibility(id, isPublic, userId);
+      await audit({ req, event: "review_visibility_changed", outcome: "success", userId, metadata: { reviewId: id, isPublic } });
       res.json(updated);
-    } catch (err) {
+    } catch (err: any) {
+      await audit({ req, event: "review_visibility_changed", outcome: "failure", userId: req.user?.claims?.sub, errorMessage: err.message });
       res.status(500).json({ message: "Internal Server Error" });
     }
   });
@@ -2239,6 +2256,7 @@ export async function registerRoutes(
       }
 
       const updated = await storage.updatePropertyOfferStatus(id, status, adminNotes);
+      await audit({ req, event: "offer_status_changed", outcome: "success", userId, propertyId: offer.propertyId, metadata: { offerId: id, status, previousStatus: offer.status } });
 
       const offerResponseStatuses = ["accepted", "rejected", "declined", "countered"];
       if ((offerResponseStatuses.includes(status) || listingAgentStatuses.includes(status)) && offer.propertyId) {
@@ -2491,8 +2509,10 @@ export async function registerRoutes(
       }
       const userId = req.user?.claims?.sub || null;
       const pitch = await storage.createSellerPitch({ ...body, userId });
+      await audit({ req, event: "seller_pitch_created", outcome: "success", userId, metadata: { email: body.email } });
       res.status(201).json(pitch);
     } catch (err: any) {
+      await audit({ req, event: "seller_pitch_created", outcome: "failure", errorMessage: err.message });
       res.status(500).json({ message: err.message });
     }
   });
@@ -2518,13 +2538,14 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/admin/seller-pitches/:id", isAuthenticated, isAdmin, async (req, res) => {
+  app.patch("/api/admin/seller-pitches/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
       const { status, adminNotes } = req.body;
       if (!status) return res.status(400).json({ message: "Status is required" });
       const updated = await storage.updateSellerPitchStatus(id, status, adminNotes);
+      await audit({ req, event: "admin_seller_pitch_updated", outcome: "success", userId: req.user?.claims?.sub, metadata: { pitchId: id, status } });
       res.json(updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -2717,8 +2738,10 @@ export async function registerRoutes(
       if (parsed.data.status !== undefined) updates.status = parsed.data.status;
       if (parsed.data.adminNotes !== undefined) updates.adminNotes = parsed.data.adminNotes;
       const updated = await authStorage.adminUpdateUser(req.params.id, updates);
+      await audit({ req, event: "admin_user_updated", outcome: "success", userId: (req as any).user?.claims?.sub, metadata: { targetUserId: req.params.id, updates: Object.keys(updates) } });
       res.json(updated);
     } catch (err: any) {
+      await audit({ req, event: "admin_user_updated", outcome: "failure", userId: (req as any).user?.claims?.sub, errorMessage: err.message });
       res.status(500).json({ message: err.message });
     }
   });
@@ -2758,8 +2781,10 @@ export async function registerRoutes(
         await tx.delete(properties).where(eq(properties.agentId, targetId));
         await tx.delete(users).where(eq(users.id, targetId));
       });
+      await audit({ req, event: "admin_user_deleted", outcome: "success", userId: adminSub, metadata: { targetUserId: targetId, targetEmail: existing.email } });
       res.json({ message: "User deleted" });
     } catch (err: any) {
+      await audit({ req, event: "admin_user_deleted", outcome: "failure", userId: (req as any).user?.claims?.sub, errorMessage: err.message });
       res.status(500).json({ message: err.message });
     }
   });
@@ -2786,8 +2811,10 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
       }
       const result = await bulkDisable(parsed.data.userIds, parsed.data.reason);
+      await audit({ req, event: "admin_bulk_disable", outcome: "success", userId: (req as any).user?.claims?.sub, metadata: { count: parsed.data.userIds.length, reason: parsed.data.reason } });
       res.json(result);
     } catch (err: any) {
+      await audit({ req, event: "admin_bulk_disable", outcome: "failure", userId: (req as any).user?.claims?.sub, errorMessage: err.message });
       res.status(500).json({ message: err.message });
     }
   });
@@ -2803,8 +2830,10 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
       }
       const result = await bulkDelete(parsed.data.userIds, { confirm: parsed.data.confirm });
+      await audit({ req, event: "admin_bulk_delete", outcome: "success", userId: (req as any).user?.claims?.sub, metadata: { count: parsed.data.userIds.length } });
       res.json(result);
     } catch (err: any) {
+      await audit({ req, event: "admin_bulk_delete", outcome: "failure", userId: (req as any).user?.claims?.sub, errorMessage: err.message });
       res.status(500).json({ message: err.message });
     }
   });
@@ -3106,6 +3135,7 @@ export async function registerRoutes(
 
       const data = { ...parsed.data, senderId: userId };
       const match = await storage.createBuyerMatch(data);
+      await audit({ req, event: "buyer_match_created", outcome: "success", userId, propertyId: parsed.data.propertyId, metadata: { matchId: match.id, buyerProfileId: parsed.data.buyerProfileId } });
 
       const profile = await storage.getBuyerProfile(parsed.data.buyerProfileId);
       if (profile && parsed.data.propertyId && parsed.data.message) {
@@ -3220,6 +3250,7 @@ export async function registerRoutes(
       return res.status(409).json({ message: "Sync already running. Check back in a moment." });
     }
     // Run async — respond immediately
+    await audit({ req, event: "idx_sync_triggered", outcome: "success", userId: (req as any).user?.claims?.sub });
     res.json({ message: "Sync started" });
     runIdxSync().catch(e => console.error("[IDX] Manual sync error:", e.message));
   });
@@ -3640,9 +3671,11 @@ export async function registerRoutes(
       fs.mkdirSync(path.dirname(ERROR_ARCHIVE_PATH), { recursive: true });
       fs.writeFileSync(ERROR_ARCHIVE_PATH, JSON.stringify(existing, null, 2));
 
+      await audit({ req, event: "admin_error_archive", outcome: "success", userId: (_req as any).user?.claims?.sub, metadata: { count: resolved.length } });
       archiveLock = false;
       res.json({ archived: resolved.length, totalBatches: existing.length, path: "data/error-archive.json" });
-    } catch (err) {
+    } catch (err: any) {
+      await audit({ req: _req, event: "admin_error_archive", outcome: "failure", userId: (_req as any).user?.claims?.sub, errorMessage: err.message });
       archiveLock = false;
       console.error("[Archive Errors] Failed:", err);
       res.status(500).json({ error: "Internal server error" });
@@ -4003,6 +4036,7 @@ export async function registerRoutes(
 
           const relatedBuyer = (convType === "agent_coordination" && buyerUserId) ? buyerUserId : undefined;
           const convo = await storage.getOrCreateConversation(propertyId, resolvedBuyerId, resolvedAgentId, isAgent ? "agent" : "buyer", convType, relatedBuyer);
+          await audit({ req, event: "conversation_created", outcome: "success", userId, propertyId, conversationId: convo.id, metadata: { convType } });
 
           if (initialMessage) {
             await storage.createMessage({
