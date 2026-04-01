@@ -1,0 +1,167 @@
+Before making any auth changes, inspect the current codebase first.
+
+If dual authentication is already fully implemented, do NOT rebuild it.
+
+Instead, I want one consolidated deliverable that does two things:
+1. proves the current dual-auth implementation is complete and working as described
+2. designs the next-step "Set Password / Add Email Login" feature for Google-authenticated users, without implementing it yet
+
+Build this response with the mindset of a top-tier consumer real estate web app engineering team: secure, polished, scalable, production-grade, and explicit.
+
+--------------------------------------------------
+PART 1 — VERIFY CURRENT DUAL-AUTH IMPLEMENTATION
+--------------------------------------------------
+
+I want a concrete verification report based on the ACTUAL current codebase, not a vague reassurance.
+
+## 1. Implementation proof
+Show me the exact current implementation for:
+
+- Google SSO
+- email/password registration
+- email/password login
+- password hashing
+- session creation
+- account linking / duplicate prevention
+- admin login behavior via ADMIN_EMAIL
+- frontend auth page rendering both auth methods
+
+For each one, include:
+- exact file(s)
+- route(s)
+- relevant function names
+- a short explanation of how it works
+
+## 2. Auth flow matrix
+Give me a clear matrix for these flows:
+
+- new Google user
+- new email/password user
+- existing Google user logs in again
+- existing email/password user logs in again
+- Google login with same email as existing email/password account
+- email/password login or signup with same email as existing Google account
+- admin email/password login
+- logout and relogin persistence
+
+For each flow, explain:
+- what route is hit
+- what database record is created or updated
+- what session behavior occurs
+- whether onboarding routing should trigger
+
+## 3. QA checklist
+Create a short but real QA checklist for the above 8 scenarios.
+
+For each test case include:
+- precondition
+- action
+- expected result
+- what to verify in DB/session state if relevant
+
+## 4. Gaps or caveats
+Be honest:
+- what is fully working
+- what has only been lightly implemented
+- what still needs testing
+- any edge cases or security gaps
+- whether forgot password, email verification, or provider-link confirmation are missing or partial
+
+## 5. Manual test instructions
+Give me a practical sequence I can follow in the browser to verify:
+- email signup
+- email login
+- Google login
+- admin login
+- logout and relogin
+
+Important:
+Do not give me a high-level reassurance.
+I want a concrete verification report based on the actual current codebase.
+If something is incomplete, say so explicitly.
+
+--------------------------------------------------
+PART 2 — DESIGN "SET PASSWORD / ADD EMAIL LOGIN" FOR GOOGLE USERS
+--------------------------------------------------
+
+Current likely state:
+- Google users can authenticate with Google
+- email/password users can authenticate with email/password
+- duplicate email handling is already in place
+- but a Google-authenticated user may not currently have a way to add a password and later log in via email/password
+
+Do NOT implement this feature yet.
+
+Instead, give me a clean, production-grade design for it.
+
+## 6. Problem to solve
+Design a secure "Set Password" / "Add Email Login" feature for users who originally signed up with Google SSO and want to later log in with email/password as well.
+
+This feature must:
+- allow a Google-authenticated user to add a password to their existing account
+- preserve email as the canonical identity
+- avoid duplicate accounts
+- prevent account takeover or unauthorized password setting
+
+## 7. Recommended UX
+Tell me:
+- where this feature should live in the product (settings page, account page, etc.)
+- what the entry point is
+- what the user flow should look like
+- what the messaging should say
+- whether the user should be required to re-authenticate before setting a password
+
+## 8. Backend design
+Provide:
+- recommended endpoint(s)
+- expected request/response structure
+- validation rules
+- how password hashing should work
+- how to check that the user is allowed to add a password
+- how to prevent abuse or unauthorized use
+
+## 9. Security model
+Explain:
+- how to confirm the user’s identity before allowing password creation
+- whether recent Google re-auth should be required
+- how to protect against someone taking over a Google-only account
+- what audit/logging should exist
+- any rate-limiting or anti-abuse suggestions
+
+## 10. Schema impact
+Confirm whether the existing passwordHash field is sufficient or whether any new fields are needed.
+If new fields are helpful, recommend them and explain why.
+
+## 11. Edge cases
+Cover:
+- user already has a password
+- user tries to overwrite an existing password
+- user signed up with Google and email later
+- user signed up with email and then used Google
+- future forgot-password compatibility
+- any interaction with email verification
+- any interaction with admin accounts
+
+--------------------------------------------------
+OUTPUT FORMAT
+--------------------------------------------------
+
+Please structure your response exactly like this:
+
+1. Current Auth Audit Summary
+2. Implementation Proof
+3. Auth Flow Matrix
+4. QA Checklist
+5. Gaps / Caveats
+6. Manual Browser Test Plan
+7. Set Password Feature — UX Design
+8. Set Password Feature — Backend / Security Design
+9. Schema / Data Impact
+10. Edge Cases / Recommendations
+
+Important constraints:
+- inspect the actual codebase first
+- do not rebuild or modify current auth unless you find something truly broken
+- do not implement the Set Password feature yet
+- be explicit, concrete, and codebase-grounded
+- call out exact files, routes, functions, and any missing pieces
