@@ -16,6 +16,7 @@ import {
   useVerifyAgent,
 } from "@/hooks/use-client-dashboard";
 import { Link, useLocation } from "wouter";
+import { resolveUserDestination } from "@shared/routing";
 import {
   Heart, Search, User, Home, Clock, BookmarkCheck,
   Trash2, ChevronRight, X, Plus, Edit2, Check, MapPin,
@@ -697,6 +698,7 @@ function ModeSwitcherSection({ user }: { user: any }) {
   const completedModes = modes.filter(m => m.completed);
   const currentMode = user?.currentMode || user?.primaryIntent || "explorer";
   const [switching, setSwitching] = useState(false);
+  const [, setLocation] = useLocation();
 
   if (completedModes.length <= 1) return null;
 
@@ -704,10 +706,13 @@ function ModeSwitcherSection({ user }: { user: any }) {
     if (mode === currentMode || switching) return;
     setSwitching(true);
     try {
-      await apiRequest("POST", "/api/onboarding/switch-mode", { mode });
+      const res = await apiRequest("POST", "/api/onboarding/switch-mode", { mode });
+      const updatedUser = await res.json();
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-    } catch {}
-    setSwitching(false);
+      setLocation(resolveUserDestination(updatedUser));
+    } catch {
+      setSwitching(false);
+    }
   };
 
   return (

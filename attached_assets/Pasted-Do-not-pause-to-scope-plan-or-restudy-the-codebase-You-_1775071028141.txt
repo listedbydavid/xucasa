@@ -1,0 +1,77 @@
+Do not pause to scope, plan, or restudy the codebase.
+
+You already completed the audit and identified the key issue:
+- /api/auth/register is open and lacks sufficient abuse protection
+- production lacks guardrails against test/demo account leakage
+- test data cleanup needs a safe, repeatable mechanism
+
+Your job now is to IMPLEMENT the fixes, not re-audit.
+
+Work in this order and make concrete code changes:
+
+1. Registration and login abuse protection
+- Add rate limiting to register and login
+- Add strict payload validation
+- Add weak-password rejection
+- Log auth attempts and rate-limited attempts
+
+2. Production safeguards against test accounts
+- Block obvious test/demo emails in production using a configurable rule
+- Ensure any seed/demo/test account creation paths are gated from production
+- Add warnings/logging if production attempts occur
+
+3. Safe cleanup system
+- Build a cleanup service/module that can:
+  - identify suspicious/test accounts
+  - disable them safely
+  - delete them safely in the correct dependency order
+- Require an explicit confirmation flag for destructive deletion
+- Log cleanup operations
+
+4. Data protection
+- Add a mechanism to classify test accounts, such as:
+  - isTestAccount boolean, or
+  - source enum
+- Ensure test accounts can be excluded from analytics and internal lists where appropriate
+- Ensure test listings are not publicly surfaced unintentionally
+
+5. Tests
+Add tests for:
+- register/login rate limiting
+- validation failures
+- blocked test emails in production
+- prevention of prod seed/test account creation
+- cleanup service safe ordering / FK-safe deletion behavior
+
+6. Documentation
+Create:
+- ACCOUNT_CREATION_POLICY.md
+- TEST_ACCOUNT_POLICY.md
+- CLEANUP_RUNBOOK.md
+
+Important rules:
+- Do not reply with “here is the plan”
+- Do not reply with “I need to inspect first”
+- Do not stop after partial analysis
+- Make the changes now
+- If you hit a blocker, state the blocker briefly and continue implementing everything else possible
+
+Return your answer in this exact structure:
+- Objective
+- Changes made
+- Files created/modified
+- Cleanup system design
+- Tests added
+- Commands run
+- Results
+- Known gaps
+- Security Summary
+- Next Recommended Step
+
+Proof requirements:
+- show exact files changed
+- show the rate limiting code path
+- show the validation schema
+- show the production guardrails
+- show the cleanup service/module
+- confirm build/test status

@@ -1,0 +1,183 @@
+You are working on Xucasa as a senior staff engineer responsible for security, reliability, and production hardening.
+
+We just completed a full audit of test/suspicious accounts. Now your job is to:
+
+1. CLOSE the real vulnerabilities identified
+2. PREVENT future test account leakage
+3. BUILD a safe, repeatable cleanup system (not one-off SQL)
+
+Do not re-audit. Implement.
+
+==================================================
+PART 1 — AUTH & REGISTRATION LOCKDOWN
+==================================================
+
+The audit confirmed that /api/auth/register is open and unprotected.
+
+Fix this immediately.
+
+Implement:
+
+1. Rate limiting
+- Apply strict rate limits to:
+  - register
+  - login
+  - onboarding endpoints
+- Use IP-based limits
+- Add progressive slowdown or blocking after repeated attempts
+
+2. Bot / abuse protection
+- Add one of:
+  - CAPTCHA (preferred)
+  - or server-side bot detection fallback
+- Make it environment-aware (dev vs prod)
+
+3. Payload validation (strict)
+- Enforce schema validation on register/login
+- Reject:
+  - extra fields
+  - malformed emails
+  - weak passwords (define minimum standard)
+
+4. Account creation rules
+- Block obviously fake/test patterns in production:
+  - emails containing: test, example, e2e, dummy
+- Make this configurable (do not hardcode permanently)
+
+5. Logging
+- Log ALL registration attempts:
+  - success
+  - failure
+  - rate-limited attempts
+
+==================================================
+PART 2 — PREVENT TEST ACCOUNT CREATION IN PROD
+==================================================
+
+Implement guardrails so this never happens again.
+
+1. Environment gating
+- Any seed/test/demo account creation must:
+  - ONLY run in dev/test environments
+  - NEVER run in production
+
+2. Add hard checks:
+- If NODE_ENV === 'production':
+  - block seed scripts
+  - block test account creation paths
+  - log warning if attempted
+
+3. Registration safeguards
+- Prevent automated account spam:
+  - rate limiting (already above)
+  - optional email verification requirement toggle
+
+4. Tagging system
+- Add a field or mechanism to classify users:
+  - isTestAccount (boolean) OR
+  - source (enum: real, test, seed, e2e)
+
+- This allows filtering, cleanup, and analytics protection
+
+==================================================
+PART 3 — SAFE CLEANUP SYSTEM (NOT JUST SQL)
+==================================================
+
+Do NOT just give SQL.
+
+Build a reusable cleanup system.
+
+1. Create a cleanup service/module:
+- Can:
+  - list suspicious accounts
+  - disable accounts
+  - delete accounts safely
+- Must:
+  - handle related records in correct order
+  - avoid FK violations
+
+2. Implement:
+- "disable account" function
+- "delete account safely" function
+
+3. Add safety:
+- require confirmation flag for deletion
+- prevent accidental deletion of real users
+- log all cleanup actions
+
+4. Optional (if easy):
+- admin endpoint OR script to run cleanup safely
+
+==================================================
+PART 4 — DATA PROTECTION IMPROVEMENTS
+==================================================
+
+1. Prevent test data from affecting product:
+- exclude test accounts from:
+  - analytics
+  - admin dashboards (optional flag)
+- ensure test listings are not publicly visible unless intended
+
+2. Password safety
+- enforce minimum password requirements
+- consider rejecting weak passwords
+- ensure hashing is correct and consistent
+
+==================================================
+PART 5 — TESTS
+==================================================
+
+Add tests for:
+
+- rate limiting on register/login
+- blocked test emails in production
+- validation failures
+- cleanup service correctness
+- safe deletion order (no FK breaks)
+- prevention of seed/test execution in production
+
+==================================================
+PART 6 — DOCUMENTATION
+==================================================
+
+Create:
+
+1. ACCOUNT_CREATION_POLICY.md
+- rules for user creation
+- production safeguards
+
+2. TEST_ACCOUNT_POLICY.md
+- how test accounts are handled
+- how they are prevented in production
+
+3. CLEANUP_RUNBOOK.md
+- how to safely disable/delete accounts
+- order of operations
+- rollback instructions
+
+==================================================
+OUTPUT REQUIREMENTS — MANDATORY
+==================================================
+
+Return:
+
+- Objective
+- Findings (from prior audit that you are fixing)
+- Changes made
+- Files created/modified
+- Cleanup system design
+- Tests added
+- Commands run
+- Results (build/test status)
+- Known gaps
+- Security Summary
+- Next Recommended Step
+
+Proof requirements:
+- show rate limiting implementation
+- show validation schema
+- show cleanup service code
+- confirm production safeguards exist
+- confirm build + tests pass
+
+Do not give a high-level answer. Implement real protections.
