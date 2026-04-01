@@ -72,3 +72,16 @@ As of the last audit, these unique constraints are verified aligned:
 | notification_preferences | notification_preferences_user_id_unique | user_id |
 
 Additionally, `buyer_interest` has a composite unique index `buyer_interest_property_buyer_idx` on `(property_id, buyer_user_id)`.
+
+## Known Idempotency Issue
+
+The `buyer_interest.agent_coordination_conversation_id` foreign key has a generated constraint name that exceeds PostgreSQL's 63-character identifier limit:
+
+- Drizzle expects: `buyer_interest_agent_coordination_conversation_id_conversations_id_fk` (69 chars)
+- Postgres stores: `buyer_interest_agent_coordination_conversation_id_conversations` (63 chars, truncated)
+
+This causes `drizzle-kit push` to re-apply the FK rename on every run (drop truncated, add full-length, Postgres truncates again). This is a known drizzle-kit limitation with very long auto-generated FK names.
+
+**Impact:** None. The FK is functionally correct. The drift check script (`db-check-drift.sh`) explicitly accounts for this and does not report it as unexpected drift.
+
+**Permanent fix (if desired):** Rename the column `agentCoordinationConversationId` to something shorter (e.g., `agentCoordConvoId`) so the generated FK name fits within 63 characters. This would require a schema migration and storage layer update.

@@ -46,8 +46,12 @@ Preferred communication style: Simple, everyday language.
 ### Database
 
 - **Database**: PostgreSQL.
-- **ORM**: Drizzle ORM (`drizzle-orm/node-postgres`) with `drizzle-kit` for migrations.
-- **Schema**: Includes tables for users, sessions, properties, saved items, search history, user homes, buyer/seller profiles, agent contacts, and notifications.
+- **ORM**: Drizzle ORM (`drizzle-orm/node-postgres`) with `drizzle-kit push` (push-based, no migration files).
+- **Schema**: `shared/schema.ts` is the single source of truth. Includes tables for users, sessions, properties, saved items, search history, user homes, buyer/seller profiles, agent contacts, conversations, messages, showing requests, buyer interest, property offers, and notifications.
+- **Migration Strategy**: Push-based via `drizzle-kit push --force` (non-interactive). See `MIGRATION_STRATEGY.md` for full details.
+- **Post-Merge**: `scripts/post-merge.sh` runs `npm install` + `drizzle-kit push --force` + DB connectivity check. Timeout: 60s.
+- **Schema Drift**: Detected via `scripts/db-check-drift.sh` and `scripts/db-verify-constraints.sh`. See `SCHEMA_DRIFT_POLICY.md`.
+- **Known Issue**: `buyer_interest.agent_coordination_conversation_id` FK name exceeds Postgres 63-char limit, causing harmless re-application on each push. Documented in `SCHEMA_DRIFT_POLICY.md`.
 
 ### Authentication
 
