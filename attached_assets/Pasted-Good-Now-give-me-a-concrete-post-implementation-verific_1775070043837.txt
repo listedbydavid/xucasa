@@ -1,0 +1,98 @@
+Good. Now give me a concrete post-implementation verification report for onboarding routing.
+
+Do not summarize vaguely. I want proof of the CURRENT live code behavior.
+
+## 1. Routing matrix
+Show me exactly where the user lands after login/signup for each case:
+
+- new buyer user after email signup
+- new buyer user after Google signup
+- new homeowner user after email signup
+- new agent-intent user after email signup
+- new explorer user after signup
+- returning buyer with onboarding complete
+- returning homeowner with onboarding complete
+- returning agent-intent user with onboarding complete but verification pending
+- returning explorer with onboarding complete
+- user with onboarding incomplete
+- user who has multiple completed profiles and currentMode set to buyer
+- user who has multiple completed profiles and currentMode set to homeowner
+- user who has multiple completed profiles and currentMode set to agent
+
+For each case include:
+- auth method
+- onboardingCompleted
+- primaryIntent
+- currentMode
+- destination route
+- which code path determines that destination
+
+## 2. Source of truth
+Show me the exact shared routing/helper logic now used for destination resolution.
+
+I want:
+- exact file(s)
+- function name(s)
+- where Google auth uses it
+- where email login/register uses it
+- where onboarding completion uses it
+- where route guards use it
+
+If routing logic is duplicated in multiple places, say so explicitly.
+
+## 3. Route guard behavior
+Show the final route policy for:
+- /auth
+- /onboarding
+- /search
+- /swipe
+- /property/:id
+- /dashboard
+- /agent
+- /admin
+- /sell
+- /home-report
+
+For each route:
+- public or protected
+- requires auth?
+- requires onboardingCompleted?
+- special cases?
+
+## 4. Mode switching behavior
+Show exactly how the new switch-mode flow works:
+- endpoint
+- validation rules
+- what happens if profile is incomplete
+- what happens if user switches to agent mode but is not verified
+- what route the user lands on after switching
+- what UI is shown in dashboard
+
+## 5. Edge case audit
+Tell me whether these are handled correctly now:
+- user refreshes during onboarding
+- user logs out mid-onboarding and logs back in
+- user has onboardingCompleted=true but currentMode=null
+- user has primaryIntent set but currentMode missing
+- explorer later activates buyer mode
+- homeowner later activates buyer mode
+- agent-intent user tries to access verified-agent-only areas before verification
+- completed user hits /onboarding manually
+- incomplete user hits /dashboard manually
+
+## 6. Manual QA checklist
+Give me a short browser QA checklist for onboarding routing:
+- exact actions
+- expected destination
+- what to verify
+
+## 7. Remaining gaps
+Be honest:
+- what is still fragile
+- what is still duplicated
+- any redirect loop risks
+- any UX rough edges
+- any cleanup still needed
+
+Important:
+I want actual current behavior from the codebase, not intended behavior.
