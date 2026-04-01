@@ -39,6 +39,7 @@ export const users = pgTable("users", {
   agentProfileCompleted: boolean("agent_profile_completed").default(false),
   agentVerificationStatus: varchar("agent_verification_status"),
   currentMode: varchar("current_mode"),
+  accountSource: varchar("account_source").default("real"),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

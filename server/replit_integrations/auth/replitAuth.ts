@@ -6,6 +6,17 @@ import connectPg from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import { authStorage } from "./storage";
 import { resolveUserDestination } from "@shared/routing";
+import {
+  registerRateLimit,
+  loginRateLimit,
+  registerSchema,
+  loginSchema,
+  isBlockedEmail,
+  logAuthAttempt,
+  checkProgressiveBlock,
+  recordFailedAttempt,
+  clearFailedAttempts,
+} from "../../authMiddleware";
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
@@ -79,6 +90,17 @@ export async function setupAuth(app: Express) {
             const firstName = profile.name?.givenName || "";
             const lastName = profile.name?.familyName || "";
             const profileImageUrl = profile.photos?.[0]?.value || "";
+
+            if (process.env.NODE_ENV === "production" && isBlockedEmail(email)) {
+              console.log(`[Auth:Audit] action=google_oauth result=blocked_email email=${email} timestamp=${new Date().toISOString()}`);
+              return done(new Error("This email domain is not allowed for registration"));
+            }
+
+            const existingUser = await authStorage.getUserByEmail(email);
+            if (existingUser && (existingUser.status === "disabled" || existingUser.status === "suspended" || existingUser.status === "banned")) {
+              console.log(`[Auth:Audit] action=google_oauth result=account_disabled email=${email} timestamp=${new Date().toISOString()}`);
+              return done(new Error("This account has been disabled"));
+            }
 
             const user = await upsertUser({
               id: profile.id,
@@ -155,25 +177,34 @@ export async function setupAuth(app: Express) {
     }
   );
 
-  app.post("/api/auth/register", async (req, res) => {
+  app.post("/api/auth/register", registerRateLimit, async (req, res) => {
     try {
-      const { email, password, firstName, lastName } = req.body;
-      if (!email || !password) {
-        return res.status(400).json({ message: "Email and password are required" });
+      if (checkProgressiveBlock(req, res)) return;
+      const parsed = registerSchema.safeParse(req.body);
+      if (!parsed.success) {
+        logAuthAttempt("register", "validation_failed", req, req.body?.email);
+        const errors = parsed.error.flatten();
+        return res.status(400).json({ message: "Validation failed", errors: errors.fieldErrors });
       }
-      if (password.length < 6) {
-        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      const { email, password, firstName, lastName } = parsed.data;
+
+      if (process.env.NODE_ENV === "production" && isBlockedEmail(email)) {
+        logAuthAttempt("register", "blocked_email", req, email);
+        return res.status(400).json({ message: "This email domain is not allowed for registration" });
       }
+
       const existing = await authStorage.getUserByEmail(email);
       if (existing) {
+        logAuthAttempt("register", "duplicate_email", req, email);
         return res.status(409).json({ message: "An account with this email already exists" });
       }
       const passwordHash = await bcrypt.hash(password, 10);
       const user = await authStorage.upsertUser({
         email,
-        firstName: firstName || "",
-        lastName: lastName || "",
+        firstName,
+        lastName,
         passwordHash,
+        accountSource: "real",
       });
       const sessionUser = {
         claims: {
@@ -187,33 +218,50 @@ export async function setupAuth(app: Express) {
       req.login(sessionUser, (err) => {
         if (err) {
           console.error("[Auth] Session login error after register:", err);
+          logAuthAttempt("register", "session_error", req, email);
           return res.status(500).json({ message: "Registration succeeded but login failed" });
         }
-        console.log("[Auth] Email registration success for:", email);
+        logAuthAttempt("register", "success", req, email);
         return res.json({ ok: true, user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, onboardingCompleted: user.onboardingCompleted, currentMode: user.currentMode, primaryIntent: user.primaryIntent } });
       });
     } catch (err: any) {
       console.error("[Auth] Registration error:", err);
+      logAuthAttempt("register", "error", req, req.body?.email);
       return res.status(500).json({ message: "Registration failed" });
     }
   });
 
-  app.post("/api/auth/login", async (req, res) => {
+  app.post("/api/auth/login", loginRateLimit, async (req, res) => {
     try {
-      const { email, password, rememberMe } = req.body;
-      if (!email || !password) {
-        return res.status(400).json({ message: "Email and password are required" });
+      if (checkProgressiveBlock(req, res)) return;
+      const parsed = loginSchema.safeParse(req.body);
+      if (!parsed.success) {
+        logAuthAttempt("login", "validation_failed", req, req.body?.email);
+        recordFailedAttempt(req);
+        const errors = parsed.error.flatten();
+        return res.status(400).json({ message: "Validation failed", errors: errors.fieldErrors });
       }
+      const { email, password, rememberMe } = parsed.data;
+
       const user = await authStorage.getUserByEmail(email);
       if (!user || !user.passwordHash) {
+        logAuthAttempt("login", "invalid_credentials", req, email);
+        recordFailedAttempt(req);
         return res.status(401).json({ message: "Invalid email or password" });
+      }
+      if (user.status === "disabled" || user.status === "suspended" || user.status === "banned") {
+        logAuthAttempt("login", "account_disabled", req, email);
+        recordFailedAttempt(req);
+        return res.status(403).json({ message: "This account has been disabled. Please contact support." });
       }
       const valid = await bcrypt.compare(password, user.passwordHash);
       if (!valid) {
+        logAuthAttempt("login", "invalid_password", req, email);
+        recordFailedAttempt(req);
         return res.status(401).json({ message: "Invalid email or password" });
       }
       if (rememberMe) {
-        req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
+        req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
       }
       const sessionUser = {
         claims: {
@@ -227,13 +275,16 @@ export async function setupAuth(app: Express) {
       req.login(sessionUser, (err) => {
         if (err) {
           console.error("[Auth] Session login error:", err);
+          logAuthAttempt("login", "session_error", req, email);
           return res.status(500).json({ message: "Login failed" });
         }
-        console.log("[Auth] Email login success for:", email, rememberMe ? "(remember me)" : "");
+        logAuthAttempt("login", "success", req, email);
+        clearFailedAttempts(req);
         return res.json({ ok: true, user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, onboardingCompleted: user.onboardingCompleted, currentMode: user.currentMode, primaryIntent: user.primaryIntent } });
       });
     } catch (err: any) {
       console.error("[Auth] Login error:", err);
+      logAuthAttempt("login", "error", req, req.body?.email);
       return res.status(500).json({ message: "Login failed" });
     }
   });

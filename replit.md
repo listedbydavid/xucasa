@@ -54,6 +54,13 @@ Preferred communication style: Simple, everyday language.
 - **Providers**: Google OAuth 2.0 SSO and email/password via bcryptjs.
 - **Sessions**: `express-session` backed by PostgreSQL with secure cookies and "Remember Me" option.
 - **Roles**: Supports Admin and Agent roles.
+- **Rate Limiting**: `express-rate-limit` on register (5/15min), login (10/15min), and onboarding (10/15min) endpoints.
+- **Validation**: Strict Zod schemas for register/login; passwords require 8+ chars with uppercase, lowercase, and digit.
+- **Production Email Blocking**: Configurable blocked email patterns list in `server/authMiddleware.ts`.
+- **Account Source Tracking**: `accountSource` field on users (real/test/seed/e2e) for filtering test accounts.
+- **Audit Logging**: All auth attempts logged with IP, email, action, result, and timestamp.
+- **Cleanup Service**: `server/cleanupService.ts` provides list/disable/delete for suspicious accounts with FK-safe deletion.
+- **Seed Gate**: `seedDatabase()` only runs in non-production environments.
 
 ## External Dependencies
 

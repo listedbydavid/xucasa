@@ -16,6 +16,8 @@ import { getNearbySchools } from "./schoolService";
 import { getZoningData } from "./zoningData";
 import { runIdxSync, isSyncInProgress, idxConfigured, getLastSyncLog, getSyncLogs, startIdxAutoSync, verifyAgentLicense, getRealtyFeedToken, realtyFeedODataFetch, REALTYFEED_API_BASE } from "./idxSync";
 import { sendNotificationEmail, sendTestEmail, isEmailConfigured } from "./emailService";
+import { onboardingRateLimit } from "./authMiddleware";
+import { listSuspiciousAccounts, disableAccount, deleteAccountSafely, bulkDisable, bulkDelete } from "./cleanupService";
 
 const ERROR_ARCHIVE_PATH = path.join(process.cwd(), "data", "error-archive.json");
 
@@ -865,7 +867,7 @@ export async function registerRoutes(
 
   // ── Onboarding Endpoints ──────────────────────────────────────────────────────
 
-  app.post("/api/onboarding/intent", isAuthenticated, async (req: any, res) => {
+  app.post("/api/onboarding/intent", onboardingRateLimit, isAuthenticated, async (req: any, res) => {
     try {
       const { authStorage } = await import("./replit_integrations/auth/storage");
       const userId = req.user.claims.sub;
@@ -894,7 +896,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/onboarding/buyer", isAuthenticated, async (req: any, res) => {
+  app.post("/api/onboarding/buyer", onboardingRateLimit, isAuthenticated, async (req: any, res) => {
     try {
       const { authStorage } = await import("./replit_integrations/auth/storage");
       const userId = req.user.claims.sub;
@@ -957,7 +959,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/onboarding/homeowner", isAuthenticated, async (req: any, res) => {
+  app.post("/api/onboarding/homeowner", onboardingRateLimit, isAuthenticated, async (req: any, res) => {
     try {
       const { authStorage } = await import("./replit_integrations/auth/storage");
       const userId = req.user.claims.sub;
@@ -1008,7 +1010,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/onboarding/agent", isAuthenticated, async (req: any, res) => {
+  app.post("/api/onboarding/agent", onboardingRateLimit, isAuthenticated, async (req: any, res) => {
     try {
       const { authStorage } = await import("./replit_integrations/auth/storage");
       const userId = req.user.claims.sub;
@@ -1042,7 +1044,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/onboarding/switch-mode", isAuthenticated, async (req: any, res) => {
+  app.post("/api/onboarding/switch-mode", onboardingRateLimit, isAuthenticated, async (req: any, res) => {
     try {
       const { authStorage } = await import("./replit_integrations/auth/storage");
       const userId = req.user.claims.sub;
@@ -2601,11 +2603,15 @@ export async function registerRoutes(
 
   // ── Admin User Management ─────────────────────────────────────────────────
 
-  app.get("/api/admin/users", isAuthenticated, isAdmin, async (_req, res) => {
+  app.get("/api/admin/users", isAuthenticated, isAdmin, async (req, res) => {
     try {
       const allUsers = await authStorage.getAllUsers();
+      const excludeTest = req.query.excludeTest === "true";
+      const filtered = excludeTest
+        ? allUsers.filter((u) => !u.accountSource || u.accountSource === "real")
+        : allUsers;
       const usersWithActivity = await Promise.all(
-        allUsers.map(async (u) => {
+        filtered.map(async (u) => {
           const activity = await authStorage.getUserActivity(u.id);
           return { ...u, activity };
         })
@@ -2689,6 +2695,51 @@ export async function registerRoutes(
         await tx.delete(users).where(eq(users.id, targetId));
       });
       res.json({ message: "User deleted" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Admin Cleanup ─────────────────────────────────────────────────────────
+
+  app.post("/api/admin/cleanup/list", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const suspicious = await listSuspiciousAccounts();
+      res.json(suspicious);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/cleanup/disable", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        userIds: z.array(z.string()).min(1),
+        reason: z.string().min(1),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
+      }
+      const result = await bulkDisable(parsed.data.userIds, parsed.data.reason);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/cleanup/delete", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const schema = z.object({
+        userIds: z.array(z.string()).min(1),
+        confirm: z.literal(true, { errorMap: () => ({ message: "confirm must be true" }) }),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
+      }
+      const result = await bulkDelete(parsed.data.userIds, { confirm: parsed.data.confirm });
+      res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -3109,8 +3160,11 @@ export async function registerRoutes(
     runIdxSync().catch(e => console.error("[IDX] Manual sync error:", e.message));
   });
 
-  // Seed data function to be called on startup
-  seedDatabase().catch(console.error);
+  if (process.env.NODE_ENV === "production") {
+    console.warn("[Startup] seedDatabase() skipped — production environment");
+  } else {
+    seedDatabase().catch(console.error);
+  }
 
   // Start scheduled IDX auto-sync (no-op if not configured)
   startIdxAutoSync();
