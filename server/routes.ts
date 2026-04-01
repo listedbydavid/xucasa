@@ -879,7 +879,7 @@ export async function registerRoutes(
         const updated = await authStorage.updateOnboarding(userId, {
           primaryIntent: parsed.data.intent,
           onboardingCompleted: true,
-          currentMode: null,
+          currentMode: "explorer",
         });
         res.json(updated);
         return;
@@ -1039,6 +1039,39 @@ export async function registerRoutes(
       res.json(updated);
     } catch (err) {
       res.status(500).json({ message: "Failed to save agent data" });
+    }
+  });
+
+  app.post("/api/onboarding/switch-mode", isAuthenticated, async (req: any, res) => {
+    try {
+      const { authStorage } = await import("./replit_integrations/auth/storage");
+      const userId = req.user.claims.sub;
+      const modeSchema = z.object({
+        mode: z.enum(["buyer", "homeowner", "agent", "explorer"]),
+      });
+      const parsed = modeSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Invalid mode" });
+
+      const user = await authStorage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const modeMap: Record<string, string | undefined> = {
+        buyer: user.buyerProfileCompleted ? "buyer" : undefined,
+        homeowner: user.homeownerProfileCompleted ? "homeowner" : undefined,
+        agent: user.agentProfileCompleted ? "agent" : undefined,
+        explorer: "explorer",
+      };
+
+      if (!modeMap[parsed.data.mode]) {
+        return res.status(400).json({ message: "Complete this profile first before switching to it" });
+      }
+
+      const updated = await authStorage.updateOnboarding(userId, {
+        currentMode: parsed.data.mode,
+      });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to switch mode" });
     }
   });
 

@@ -14,6 +14,15 @@ function GoogleIcon({ className }: { className?: string }) {
   );
 }
 
+function getIntentDestination(user: any): string {
+  if (!user?.onboardingCompleted) return "/onboarding";
+  const mode = user.currentMode || user.primaryIntent;
+  if (mode === "buyer" || mode === "explorer") return "/swipe";
+  if (mode === "homeowner") return "/home-report";
+  if (mode === "agent") return "/agent";
+  return "/dashboard";
+}
+
 export default function AuthPage() {
   const { user, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
@@ -28,7 +37,7 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
 
   if (isAuthenticated) {
-    setLocation(user?.onboardingCompleted ? "/dashboard" : "/onboarding");
+    setLocation(getIntentDestination(user));
     return null;
   }
 
@@ -61,7 +70,7 @@ export default function AuthPage() {
         return;
       }
 
-      window.location.href = data.user?.onboardingCompleted ? "/dashboard" : "/onboarding";
+      window.location.href = getIntentDestination(data.user);
     } catch {
       setError("Network error. Please try again.");
       setLoading(false);

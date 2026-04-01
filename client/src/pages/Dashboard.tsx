@@ -23,7 +23,7 @@ import {
   Flame, Activity, ExternalLink, Camera, Loader2,
   UserPlus, CalendarDays, Mail, CheckCircle2, AlertCircle,
   FolderPlus, FolderOpen, MoreHorizontal, Pencil, List,
-  Briefcase, ShieldCheck, BadgeCheck,
+  Briefcase, ShieldCheck, BadgeCheck, Compass,
   FileText, DollarSign, ThumbsUp, ThumbsDown, Eye,
   ArrowRightLeft, Shield, Banknote, MessageSquare,
   Bell, Archive, CheckCheck, Info, TrendingDown, Settings, Send,
@@ -201,7 +201,7 @@ function ProfileSection({ user }: { user: any }) {
                 <div>
                   <label className="block text-xs font-bold text-muted-foreground mb-1">Email</label>
                   <input value={user?.email || ""} disabled className="w-full bg-muted border-2 border-border rounded-lg px-3 py-2 text-sm text-muted-foreground cursor-not-allowed" />
-                  <p className="text-xs text-muted-foreground mt-1">Email is managed by your Replit account</p>
+                  <p className="text-xs text-muted-foreground mt-1">Email cannot be changed</p>
                 </div>
                 <div className="flex gap-2 pt-1">
                   <button onClick={handleSave} disabled={isPending} className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-primary/90 transition-colors disabled:opacity-50" data-testid="button-save-profile">
@@ -241,6 +241,8 @@ function ProfileSection({ user }: { user: any }) {
       </div>
 
       <BuyerCriteriaSection />
+
+      <ModeSwitcherSection user={user} />
 
       <AgentVerificationSection user={user} />
 
@@ -679,6 +681,60 @@ function AgentForm({
         >
           Cancel
         </button>
+      </div>
+    </div>
+  );
+}
+
+function ModeSwitcherSection({ user }: { user: any }) {
+  const modes = [
+    { key: "buyer", label: "Buyer", icon: Search, completed: user?.buyerProfileCompleted, color: "text-blue-500 bg-blue-500/10", activeColor: "border-blue-500 bg-blue-500/10" },
+    { key: "homeowner", label: "Homeowner", icon: Home, completed: user?.homeownerProfileCompleted, color: "text-green-500 bg-green-500/10", activeColor: "border-green-500 bg-green-500/10" },
+    { key: "agent", label: "Agent", icon: Briefcase, completed: user?.agentProfileCompleted, color: "text-purple-500 bg-purple-500/10", activeColor: "border-purple-500 bg-purple-500/10" },
+    { key: "explorer", label: "Explorer", icon: Compass, completed: true, color: "text-amber-500 bg-amber-500/10", activeColor: "border-amber-500 bg-amber-500/10" },
+  ];
+
+  const completedModes = modes.filter(m => m.completed);
+  const currentMode = user?.currentMode || user?.primaryIntent || "explorer";
+  const [switching, setSwitching] = useState(false);
+
+  if (completedModes.length <= 1) return null;
+
+  const handleSwitch = async (mode: string) => {
+    if (mode === currentMode || switching) return;
+    setSwitching(true);
+    try {
+      await apiRequest("POST", "/api/onboarding/switch-mode", { mode });
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+    } catch {}
+    setSwitching(false);
+  };
+
+  return (
+    <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+      <h3 className="font-bold text-foreground mb-1 flex items-center gap-2">
+        <ArrowRightLeft className="w-4 h-4 text-muted-foreground" />
+        Active Mode
+      </h3>
+      <p className="text-sm text-muted-foreground mb-4">Switch between your completed profiles.</p>
+      <div className="flex flex-wrap gap-2">
+        {completedModes.map(m => (
+          <button
+            key={m.key}
+            onClick={() => handleSwitch(m.key)}
+            disabled={switching}
+            data-testid={`switch-mode-${m.key}`}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all disabled:opacity-50 ${
+              currentMode === m.key
+                ? `${m.activeColor} shadow-sm`
+                : "border-border text-muted-foreground hover:border-primary/30"
+            }`}
+          >
+            <m.icon className={`w-4 h-4 ${currentMode === m.key ? m.color.split(" ")[0] : ""}`} />
+            {m.label}
+            {currentMode === m.key && <CheckCircle2 className="w-3.5 h-3.5 ml-1" />}
+          </button>
+        ))}
       </div>
     </div>
   );

@@ -137,13 +137,25 @@ export async function setupAuth(app: Express) {
           console.error("[Auth] Google OAuth failed — no user returned. Info:", info);
           return res.redirect("/?auth=failed");
         }
-        req.logIn(user, (loginErr) => {
+        req.logIn(user, async (loginErr) => {
           if (loginErr) {
             console.error("[Auth] Session login error:", loginErr.message || loginErr);
             return res.redirect("/?auth=failed");
           }
           console.log("[Auth] Google OAuth success for:", (user as any)?.claims?.email);
-          return res.redirect("/");
+          try {
+            const dbUser = await authStorage.getUser((user as any)?.claims?.sub);
+            if (!dbUser?.onboardingCompleted) {
+              return res.redirect("/onboarding");
+            }
+            const mode = dbUser.currentMode || dbUser.primaryIntent;
+            if (mode === "buyer" || mode === "explorer") return res.redirect("/swipe");
+            if (mode === "homeowner") return res.redirect("/home-report");
+            if (mode === "agent") return res.redirect("/agent");
+            return res.redirect("/dashboard");
+          } catch {
+            return res.redirect("/dashboard");
+          }
         });
       })(req, res, next);
     }
@@ -184,7 +196,7 @@ export async function setupAuth(app: Express) {
           return res.status(500).json({ message: "Registration succeeded but login failed" });
         }
         console.log("[Auth] Email registration success for:", email);
-        return res.json({ ok: true, user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName } });
+        return res.json({ ok: true, user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, onboardingCompleted: user.onboardingCompleted, currentMode: user.currentMode, primaryIntent: user.primaryIntent } });
       });
     } catch (err: any) {
       console.error("[Auth] Registration error:", err);
@@ -224,7 +236,7 @@ export async function setupAuth(app: Express) {
           return res.status(500).json({ message: "Login failed" });
         }
         console.log("[Auth] Email login success for:", email, rememberMe ? "(remember me)" : "");
-        return res.json({ ok: true, user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName } });
+        return res.json({ ok: true, user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, onboardingCompleted: user.onboardingCompleted, currentMode: user.currentMode, primaryIntent: user.primaryIntent } });
       });
     } catch (err: any) {
       console.error("[Auth] Login error:", err);

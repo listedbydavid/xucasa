@@ -56,7 +56,11 @@ export default function Onboarding() {
   const presetIntent = searchParams.get("intent") as Intent | null;
 
   if (user?.onboardingCompleted && !reentry) {
-    setLocation("/dashboard");
+    const mode = (user as any).currentMode || (user as any).primaryIntent;
+    if (mode === "buyer" || mode === "explorer") setLocation("/swipe");
+    else if (mode === "homeowner") setLocation("/home-report");
+    else if (mode === "agent") setLocation("/agent");
+    else setLocation("/dashboard");
     return null;
   }
 
