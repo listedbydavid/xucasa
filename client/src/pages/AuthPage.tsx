@@ -218,9 +218,9 @@ export default function AuthPage() {
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    placeholder={mode === "register" ? "Create a password (8+ chars, upper, lower, digit)" : "Password"}
+                    placeholder={mode === "register" ? "Password (10+ chars, upper, lower, digit, symbol)" : "Password"}
                     required
-                    minLength={mode === "register" ? 8 : 6}
+                    minLength={mode === "register" ? 10 : 6}
                     className={`${inputClass} pr-10`}
                     data-testid="input-auth-password"
                   />

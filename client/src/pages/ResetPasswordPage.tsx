@@ -15,7 +15,7 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
-  const passwordValid = password.length >= 8 && /[A-Z]/.test(password) && /[a-z]/.test(password) && /[0-9]/.test(password);
+  const passwordValid = password.length >= 10 && /[A-Z]/.test(password) && /[a-z]/.test(password) && /[0-9]/.test(password) && /[^A-Za-z0-9]/.test(password);
   const passwordsMatch = password === confirmPassword && confirmPassword.length > 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -24,7 +24,7 @@ export default function ResetPasswordPage() {
     setLoading(true);
 
     if (!passwordValid) {
-      setError("Password must be at least 8 characters with an uppercase letter, lowercase letter, and digit.");
+      setError("Password must be at least 10 characters with an uppercase letter, lowercase letter, digit, and special character.");
       setLoading(false);
       return;
     }
@@ -116,7 +116,7 @@ export default function ResetPasswordPage() {
                 onChange={e => setPassword(e.target.value)}
                 placeholder="New password"
                 required
-                minLength={8}
+                minLength={10}
                 className={inputClass}
                 data-testid="input-reset-password"
               />
@@ -138,7 +138,7 @@ export default function ResetPasswordPage() {
                 onChange={e => setConfirmPassword(e.target.value)}
                 placeholder="Confirm new password"
                 required
-                minLength={8}
+                minLength={10}
                 className={`${inputClass} pr-4`}
                 data-testid="input-reset-confirm-password"
               />
@@ -146,8 +146,8 @@ export default function ResetPasswordPage() {
 
             {password.length > 0 && (
               <div className="space-y-1 text-xs" data-testid="password-requirements">
-                <p className={password.length >= 8 ? "text-green-600" : "text-muted-foreground"}>
-                  {password.length >= 8 ? "\u2713" : "\u2022"} At least 8 characters
+                <p className={password.length >= 10 ? "text-green-600" : "text-muted-foreground"}>
+                  {password.length >= 10 ? "\u2713" : "\u2022"} At least 10 characters
                 </p>
                 <p className={/[A-Z]/.test(password) ? "text-green-600" : "text-muted-foreground"}>
                   {/[A-Z]/.test(password) ? "\u2713" : "\u2022"} One uppercase letter
@@ -157,6 +157,9 @@ export default function ResetPasswordPage() {
                 </p>
                 <p className={/[0-9]/.test(password) ? "text-green-600" : "text-muted-foreground"}>
                   {/[0-9]/.test(password) ? "\u2713" : "\u2022"} One digit
+                </p>
+                <p className={/[^A-Za-z0-9]/.test(password) ? "text-green-600" : "text-muted-foreground"}>
+                  {/[^A-Za-z0-9]/.test(password) ? "\u2713" : "\u2022"} One special character
                 </p>
                 {confirmPassword.length > 0 && (
                   <p className={passwordsMatch ? "text-green-600" : "text-destructive"}>

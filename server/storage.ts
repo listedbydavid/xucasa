@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db, pool } from "./db";
 import {
   properties,
   savedProperties,
@@ -285,6 +285,7 @@ export interface IStorage {
   claimPasswordResetToken(tokenHash: string): Promise<PasswordResetToken | undefined>;
   invalidatePasswordResetTokensForUser(userId: string): Promise<void>;
   updateUserPasswordHash(userId: string, passwordHash: string): Promise<void>;
+  invalidateUserSessions(userId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1766,6 +1767,14 @@ export class DatabaseStorage implements IStorage {
     await db.update(users)
       .set({ passwordHash, updatedAt: new Date() })
       .where(eq(users.id, userId));
+  }
+
+  async invalidateUserSessions(userId: string): Promise<number> {
+    const result = await pool.query(
+      `DELETE FROM sessions WHERE sess::text LIKE $1`,
+      [`%"sub":"${userId}"%`]
+    );
+    return result.rowCount || 0;
   }
 }
 

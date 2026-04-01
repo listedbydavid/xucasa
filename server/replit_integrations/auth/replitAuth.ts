@@ -18,6 +18,7 @@ import {
   checkProgressiveBlock,
   recordFailedAttempt,
   clearFailedAttempts,
+  checkForgotPasswordRateLimit,
 } from "../../authMiddleware";
 import { audit, executeWithAudit } from "../../auditLog";
 import { storage } from "../../storage";
@@ -312,10 +313,11 @@ export async function setupAuth(app: Express) {
 
   const resetPasswordSchema = z.object({
     token: z.string().min(1, "Token is required"),
-    password: z.string().min(8, "Password must be at least 8 characters")
+    password: z.string().min(10, "Password must be at least 10 characters")
       .regex(/[A-Z]/, "Password must contain an uppercase letter")
       .regex(/[a-z]/, "Password must contain a lowercase letter")
-      .regex(/[0-9]/, "Password must contain a digit"),
+      .regex(/[0-9]/, "Password must contain a digit")
+      .regex(/[^A-Za-z0-9]/, "Password must contain a special character"),
     confirmPassword: z.string().min(1, "Please confirm your password"),
   }).refine(data => data.password === data.confirmPassword, {
     message: "Passwords do not match",
@@ -336,6 +338,12 @@ export async function setupAuth(app: Express) {
 
     const { email } = parsed.data;
     const genericResponse = { message: "If an account with that email exists, we've sent reset instructions." };
+
+    const rateCheck = checkForgotPasswordRateLimit(req, email);
+    if (rateCheck.limited) {
+      await audit({ req, event: "forgot_password_rate_limited", outcome: "failure", error: rateCheck.reason, metadata: { email } });
+      return res.json(genericResponse);
+    }
 
     try {
       await executeWithAudit(
@@ -417,7 +425,9 @@ export async function setupAuth(app: Express) {
           await storage.updateUserPasswordHash(claimed.userId, newPasswordHash);
           await storage.invalidatePasswordResetTokensForUser(claimed.userId);
 
-          return { data: null, auditOverrides: { resourceType: "user", resourceId: claimed.userId } };
+          const sessionsDeleted = await storage.invalidateUserSessions(claimed.userId);
+
+          return { data: null, auditOverrides: { resourceType: "user", resourceId: claimed.userId, metadata: { sessionsInvalidated: sessionsDeleted } } };
         }
       );
 

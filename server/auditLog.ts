@@ -6,6 +6,17 @@ import type { InsertAuditEvent } from "@shared/schema";
 const AUDIT_RETRY_COUNT = 2;
 const AUDIT_RETRY_DELAY_MS = 200;
 
+const CRITICAL_EVENTS = new Set([
+  "password_reset_completed",
+  "forgot_password_requested",
+  "conversation_created",
+  "coordination_thread_created",
+  "showing_request_created",
+  "showing_status_changed",
+  "reverse_offer_created",
+  "buyer_offer_response",
+]);
+
 interface AuditParams {
   req?: any;
   event: string;
@@ -42,7 +53,7 @@ async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function persistAuditWithRetry(auditEvent: InsertAuditEvent, requestId: string | null): Promise<void> {
+async function persistAuditWithRetry(auditEvent: InsertAuditEvent, requestId: string | null): Promise<boolean> {
   const validationErrors = validateAuditEvent(auditEvent);
   if (validationErrors.length > 0) {
     logger.error({
@@ -51,7 +62,7 @@ async function persistAuditWithRetry(auditEvent: InsertAuditEvent, requestId: st
       auditEventType: auditEvent.eventType,
       requestId,
     });
-    return;
+    return false;
   }
 
   let lastError: Error | null = null;
@@ -59,7 +70,7 @@ async function persistAuditWithRetry(auditEvent: InsertAuditEvent, requestId: st
   for (let attempt = 0; attempt <= AUDIT_RETRY_COUNT; attempt++) {
     try {
       await storage.createAuditEvent(auditEvent);
-      return;
+      return true;
     } catch (err) {
       lastError = err as Error;
 
@@ -79,16 +90,20 @@ async function persistAuditWithRetry(auditEvent: InsertAuditEvent, requestId: st
 
   logger.error({
     event: "audit_final_failure",
+    level: "critical",
     auditEventType: auditEvent.eventType,
     outcome: auditEvent.outcome,
     actorUserId: auditEvent.actorUserId,
     error: lastError?.message || "unknown",
     retriesExhausted: AUDIT_RETRY_COUNT,
     requestId,
+    isCriticalEvent: CRITICAL_EVENTS.has(auditEvent.eventType || ""),
   });
+
+  return false;
 }
 
-export async function audit(params: AuditParams): Promise<void> {
+export async function audit(params: AuditParams): Promise<boolean> {
   const reqCtx = params.req ? extractLogContext(params.req) : {};
   const requestId = reqCtx.requestId || null;
 
@@ -127,7 +142,7 @@ export async function audit(params: AuditParams): Promise<void> {
     metadata: params.metadata || null,
   };
 
-  await persistAuditWithRetry(auditEvent, requestId);
+  return await persistAuditWithRetry(auditEvent, requestId);
 }
 
 export interface AuditContext {
@@ -141,6 +156,7 @@ export interface AuditContext {
   resourceType?: string | null;
   resourceId?: string | null;
   metadata?: Record<string, unknown> | null;
+  critical?: boolean;
 }
 
 export interface AuditedResult<T> {
@@ -156,6 +172,7 @@ export async function executeWithAudit<T>(
     context.req.requestId = context.req.headers?.["x-request-id"] || randomUUID();
   }
 
+  const isCritical = context.critical !== undefined ? context.critical : CRITICAL_EVENTS.has(context.event);
   const userId = context.userId || context.req.user?.claims?.sub || null;
 
   try {
@@ -163,7 +180,7 @@ export async function executeWithAudit<T>(
 
     const merged = { ...context, ...result.auditOverrides };
 
-    await audit({
+    const persisted = await audit({
       req: context.req,
       event: context.event,
       outcome: "success",
@@ -177,11 +194,22 @@ export async function executeWithAudit<T>(
       metadata: merged.metadata,
     });
 
+    if (!persisted && isCritical) {
+      logger.error({
+        event: "critical_audit_failure_post_action",
+        level: "critical",
+        actionEvent: context.event,
+        userId,
+        requestId: context.req.requestId,
+        message: "Critical action completed but audit persistence failed. Action flagged as unverified.",
+      });
+    }
+
     return result.data;
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
 
-    await audit({
+    const persisted = await audit({
       req: context.req,
       event: context.event,
       outcome: "failure",
@@ -196,6 +224,54 @@ export async function executeWithAudit<T>(
       metadata: context.metadata,
     });
 
+    if (!persisted && isCritical) {
+      logger.error({
+        event: "critical_audit_failure_on_error",
+        level: "critical",
+        actionEvent: context.event,
+        userId,
+        requestId: context.req.requestId,
+        error: errorMessage,
+        message: "Critical action failed AND audit persistence failed.",
+      });
+    }
+
+    throw err;
+  }
+}
+
+let auditContextActive = false;
+
+export function isAuditContextActive(): boolean {
+  return auditContextActive;
+}
+
+export function setAuditContextActive(active: boolean): void {
+  auditContextActive = active;
+}
+
+export async function executeWithAuditGuard<T>(
+  context: AuditContext,
+  handler: () => Promise<AuditedResult<T>>
+): Promise<T> {
+  const prev = auditContextActive;
+  auditContextActive = true;
+  try {
+    return await executeWithAudit(context, handler);
+  } finally {
+    auditContextActive = prev;
+  }
+}
+
+export function requireAuditContext(operationName: string): void {
+  if (!auditContextActive) {
+    const err = new Error(`AUDIT_GUARD: Mutation "${operationName}" attempted outside audit context. All mutations must go through executeWithAudit.`);
+    logger.error({
+      event: "audit_guard_violation",
+      level: "critical",
+      operation: operationName,
+      stack: err.stack,
+    });
     throw err;
   }
 }

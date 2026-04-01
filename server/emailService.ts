@@ -369,10 +369,10 @@ export async function sendPasswordResetEmail(to: string, resetToken: string, rec
   }
 
   try {
-    const baseUrl = process.env.REPLIT_DEV_DOMAIN
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : process.env.REPL_SLUG
-        ? `https://${process.env.REPL_SLUG}.repl.co`
+    const baseUrl = process.env.REPLIT_DEPLOYMENT_URL
+      ? process.env.REPLIT_DEPLOYMENT_URL
+      : process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
         : "https://xucasa.com";
     const resetLink = `${baseUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
 

@@ -1,0 +1,109 @@
+Before we publish to production, I need a full verification of whether the forgot-password flow is actually functional across environments.
+
+Do NOT guess. Inspect code, config, logs, and database state.
+
+--------------------------------------------------
+
+## 1. DEV ENVIRONMENT (current)
+
+Check the last forgot-password attempt and show:
+
+- Did POST /api/auth/forgot-password execute successfully?
+- Was a password_reset_tokens record created?
+  - show the row (masked token is fine)
+  - show expiresAt and usedAt
+- Did the backend attempt to send an email?
+  - which function was called?
+  - did it succeed or fail?
+- Are email provider credentials configured in dev?
+  - list required env vars
+  - show whether they are present or missing (do NOT expose secrets)
+- What reset URL is generated?
+  - confirm domain (localhost, dev domain, etc.)
+
+--------------------------------------------------
+
+## 2. PRODUCTION CONFIG
+
+Inspect production environment configuration (without exposing secrets):
+
+- Are email provider env vars present in production?
+- Is the email service wired to real delivery (not stubbed)?
+- What domain will reset links use in production?
+- Will emails actually send in production given current config?
+
+--------------------------------------------------
+
+## 3. ACCOUNT TYPE CHECK
+
+For the email I used:
+
+- Does the user exist?
+- Is it:
+  - email/password account
+  - Google-only account
+- Based on current logic, should a reset email be sent?
+
+--------------------------------------------------
+
+## 4. RATE LIMITING / BLOCKING
+
+- Was my request rate-limited?
+- Are there any guards that would silently skip sending email?
+
+--------------------------------------------------
+
+## 5. ROOT CAUSE
+
+Give a single clear answer:
+
+Why did I not receive an email?
+
+Choose one (or more with explanation):
+- dev email not configured
+- production-only email setup
+- Google-only account behavior
+- email send failure
+- rate limiting
+- route bug
+- token not created
+- something else (explain)
+
+--------------------------------------------------
+
+## 6. GO / NO-GO DECISION
+
+Answer clearly:
+
+Is it SAFE to publish and test this in production right now?
+
+- YES or NO
+
+If NO:
+- list exact blockers
+
+If YES:
+- list exactly how to safely test in production
+  (including test account and steps)
+
+--------------------------------------------------
+
+## 7. FIX (if needed)
+
+If anything is misconfigured or broken:
+- fix it now
+- show the changes
+- explain how to verify after fix
+
+--------------------------------------------------
+
+## OUTPUT FORMAT
+
+1. What happened in dev
+2. What production will do
+3. Root cause
+4. Safe to publish: YES / NO
+5. Required fixes (if any)
+6. How to test safely
+
+--------------------------------------------------

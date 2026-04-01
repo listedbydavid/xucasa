@@ -130,6 +130,57 @@ export const onboardingRateLimit = rateLimit({
 
 export { checkProgressiveBlock };
 
+const forgotPasswordIpTracker = new Map<string, number[]>();
+const forgotPasswordEmailTracker = new Map<string, number[]>();
+
+const FORGOT_PW_IP_LIMIT = 5;
+const FORGOT_PW_IP_WINDOW_MS = 10 * 60 * 1000;
+const FORGOT_PW_EMAIL_LIMIT = 3;
+const FORGOT_PW_EMAIL_WINDOW_MS = 60 * 60 * 1000;
+
+function pruneTimestamps(timestamps: number[], windowMs: number): number[] {
+  const cutoff = Date.now() - windowMs;
+  return timestamps.filter(t => t > cutoff);
+}
+
+export function checkForgotPasswordRateLimit(req: Request, email: string): { limited: boolean; reason?: string } {
+  const ip = req.ip || "unknown";
+  const now = Date.now();
+
+  let ipTimestamps = pruneTimestamps(forgotPasswordIpTracker.get(ip) || [], FORGOT_PW_IP_WINDOW_MS);
+  if (ipTimestamps.length >= FORGOT_PW_IP_LIMIT) {
+    return { limited: true, reason: `ip_limit_exceeded:${ip}` };
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  let emailTimestamps = pruneTimestamps(forgotPasswordEmailTracker.get(normalizedEmail) || [], FORGOT_PW_EMAIL_WINDOW_MS);
+  if (emailTimestamps.length >= FORGOT_PW_EMAIL_LIMIT) {
+    return { limited: true, reason: `email_limit_exceeded:${normalizedEmail}` };
+  }
+
+  ipTimestamps.push(now);
+  emailTimestamps.push(now);
+  forgotPasswordIpTracker.set(ip, ipTimestamps);
+  forgotPasswordEmailTracker.set(normalizedEmail, emailTimestamps);
+
+  return { limited: false };
+}
+
+setInterval(() => {
+  const ipCutoff = Date.now() - FORGOT_PW_IP_WINDOW_MS;
+  for (const [ip, timestamps] of forgotPasswordIpTracker) {
+    const pruned = timestamps.filter(t => t > ipCutoff);
+    if (pruned.length === 0) forgotPasswordIpTracker.delete(ip);
+    else forgotPasswordIpTracker.set(ip, pruned);
+  }
+  const emailCutoff = Date.now() - FORGOT_PW_EMAIL_WINDOW_MS;
+  for (const [email, timestamps] of forgotPasswordEmailTracker) {
+    const pruned = timestamps.filter(t => t > emailCutoff);
+    if (pruned.length === 0) forgotPasswordEmailTracker.delete(email);
+    else forgotPasswordEmailTracker.set(email, pruned);
+  }
+}, 15 * 60 * 1000);
+
 const trimmedEmail = z
   .string()
   .transform((v) => v.trim().toLowerCase())
@@ -140,10 +191,11 @@ export const registerSchema = z
     email: trimmedEmail,
     password: z
       .string()
-      .min(8, "Password must be at least 8 characters")
+      .min(10, "Password must be at least 10 characters")
       .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
       .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-      .regex(/[0-9]/, "Password must contain at least one number"),
+      .regex(/[0-9]/, "Password must contain at least one number")
+      .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
     firstName: z.string().max(100, "First name must be 100 characters or less").optional().default(""),
     lastName: z.string().max(100, "Last name must be 100 characters or less").optional().default(""),
   })

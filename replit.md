@@ -58,9 +58,9 @@ Preferred communication style: Simple, everyday language.
 - **Providers**: Google OAuth 2.0 SSO and email/password via bcryptjs.
 - **Sessions**: `express-session` backed by PostgreSQL with secure cookies and "Remember Me" option.
 - **Roles**: Supports Admin and Agent roles.
-- **Rate Limiting**: `express-rate-limit` on register (5/15min), login (10/15min), and onboarding (10/15min) endpoints.
-- **Validation**: Strict Zod schemas for register/login; passwords require 8+ chars with uppercase, lowercase, and digit.
-- **Password Reset Flow**: `POST /api/auth/forgot-password` (rate-limited, no user enumeration — always returns 200), `POST /api/auth/reset-password` (token validation, expiry, strong password enforcement). Tokens are SHA-256 hashed in DB (`password_reset_tokens` table), 1-hour expiry, single-use. Branded HTML email sent via Gmail API (`sendPasswordResetEmail`). Frontend: "Forgot password?" on login form, `/reset-password?token=...` page with real-time password strength checklist.
+- **Rate Limiting**: `express-rate-limit` on register (5/15min), login (10/15min), onboarding (10/15min). Forgot-password has dual rate limiting: per-IP (5/10min) + per-email (3/hour) with `forgot_password_rate_limited` audit event on block.
+- **Validation**: Strict Zod schemas for register/login/reset; passwords require 10+ chars with uppercase, lowercase, digit, and special character.
+- **Password Reset Flow**: `POST /api/auth/forgot-password` (dual rate-limited, no user enumeration — always returns 200), `POST /api/auth/reset-password` (atomic token claim via single UPDATE...WHERE...RETURNING, strong password enforcement). Tokens are SHA-256 hashed in DB (`password_reset_tokens` table), 1-hour expiry, single-use. Branded HTML email sent via Gmail API (`sendPasswordResetEmail`). On successful reset: all user sessions are invalidated via `invalidateUserSessions`. Frontend: "Forgot password?" on login form, `/reset-password?token=...` page with real-time password strength checklist (10+ chars, uppercase, lowercase, digit, symbol).
 - **Production Email Blocking**: Configurable blocked email patterns list in `server/authMiddleware.ts`.
 - **Account Source Tracking**: `accountSource` field on users (real/test/seed/e2e) for filtering test accounts.
 - **Audit Logging**: All auth attempts logged with IP, email, action, result, and timestamp.
