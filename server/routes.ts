@@ -18,7 +18,7 @@ import { runIdxSync, isSyncInProgress, idxConfigured, getLastSyncLog, getSyncLog
 import { sendNotificationEmail, sendTestEmail, isEmailConfigured } from "./emailService";
 import { onboardingRateLimit } from "./authMiddleware";
 import { listSuspiciousAccounts, disableAccount, deleteAccountSafely, bulkDisable, bulkDelete } from "./cleanupService";
-import { audit } from "./auditLog";
+import { audit, executeWithAudit } from "./auditLog";
 import { logger } from "./logger";
 
 const ERROR_ARCHIVE_PATH = path.join(process.cwd(), "data", "error-archive.json");
@@ -870,222 +870,244 @@ export async function registerRoutes(
   // ── Onboarding Endpoints ──────────────────────────────────────────────────────
 
   app.post("/api/onboarding/intent", onboardingRateLimit, isAuthenticated, async (req: any, res) => {
-    try {
-      const { authStorage } = await import("./replit_integrations/auth/storage");
-      const userId = req.user.claims.sub;
-      const intentSchema = z.object({
-        intent: z.enum(["buyer", "homeowner", "agent", "explorer"]),
-      });
-      const parsed = intentSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: "Invalid intent" });
+    const userId = req.user.claims.sub;
+    const intentSchema = z.object({
+      intent: z.enum(["buyer", "homeowner", "agent", "explorer"]),
+    });
+    const parsed = intentSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid intent" });
 
-      if (parsed.data.intent === "explorer") {
-        const updated = await authStorage.updateOnboarding(userId, {
-          primaryIntent: parsed.data.intent,
-          onboardingCompleted: true,
-          currentMode: "explorer",
-        });
-        audit({ req, event: "onboarding_completed", outcome: "success", userId, metadata: { intent: "explorer" } });
-        res.json(updated);
-        return;
-      }
-      const updated = await authStorage.updateOnboarding(userId, {
-        primaryIntent: parsed.data.intent,
-        currentMode: parsed.data.intent,
-      });
-      res.json(updated);
+    try {
+      const result = await executeWithAudit(
+        { req, event: "onboarding_completed", userId, metadata: { intent: parsed.data.intent } },
+        async () => {
+          const { authStorage } = await import("./replit_integrations/auth/storage");
+          if (parsed.data.intent === "explorer") {
+            const updated = await authStorage.updateOnboarding(userId, {
+              primaryIntent: parsed.data.intent,
+              onboardingCompleted: true,
+              currentMode: "explorer",
+            });
+            return { data: updated };
+          }
+          const updated = await authStorage.updateOnboarding(userId, {
+            primaryIntent: parsed.data.intent,
+            currentMode: parsed.data.intent,
+          });
+          return { data: updated };
+        }
+      );
+      res.json(result);
     } catch (err) {
-      audit({ req, event: "onboarding_completed", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
-      res.status(500).json({ message: "Failed to save intent", requestId: (req as any).requestId });
+      res.status(500).json({ message: "Failed to save intent", requestId: req.requestId });
     }
   });
 
   app.post("/api/onboarding/buyer", onboardingRateLimit, isAuthenticated, async (req: any, res) => {
+    const userId = req.user.claims.sub;
+    const buyerSchema = z.object({
+      budget: z.string().optional(),
+      areas: z.array(z.string()).optional(),
+      beds: z.number().optional(),
+      baths: z.number().optional(),
+      timeline: z.string().optional(),
+      hasAgent: z.boolean().optional(),
+    });
+    const parsed = buyerSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid buyer data" });
+
     try {
-      const { authStorage } = await import("./replit_integrations/auth/storage");
-      const userId = req.user.claims.sub;
-      const buyerSchema = z.object({
-        budget: z.string().optional(),
-        areas: z.array(z.string()).optional(),
-        beds: z.number().optional(),
-        baths: z.number().optional(),
-        timeline: z.string().optional(),
-        hasAgent: z.boolean().optional(),
-      });
-      const parsed = buyerSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: "Invalid buyer data" });
+      const result = await executeWithAudit(
+        { req, event: "onboarding_completed", userId, metadata: { intent: "buyer" } },
+        async () => {
+          const { authStorage } = await import("./replit_integrations/auth/storage");
+          function parseBudgetString(s: string): number {
+            const matches = s.match(/\$?([\d.]+)\s*([KkMm])?/g);
+            if (!matches || matches.length === 0) return 0;
+            const last = matches[matches.length - 1];
+            const m = last.match(/\$?([\d.]+)\s*([KkMm])?/);
+            if (!m) return 0;
+            const num = parseFloat(m[1]);
+            const unit = (m[2] || '').toUpperCase();
+            if (unit === 'M') return Math.round(num * 1000000);
+            if (unit === 'K') return Math.round(num * 1000);
+            return Math.round(num);
+          }
+          const budgetAmount = parsed.data.budget ? parseBudgetString(parsed.data.budget) : 0;
+          const profileData = {
+            preApprovalAmount: budgetAmount,
+            preferredCities: parsed.data.areas || [],
+            minBeds: parsed.data.beds || null,
+            minBaths: parsed.data.baths ? String(parsed.data.baths) : null,
+            moveInTimeline: parsed.data.timeline || null,
+            hasAgent: parsed.data.hasAgent ?? false,
+          };
 
-      function parseBudgetString(s: string): number {
-        const matches = s.match(/\$?([\d.]+)\s*([KkMm])?/g);
-        if (!matches || matches.length === 0) return 0;
-        const last = matches[matches.length - 1];
-        const m = last.match(/\$?([\d.]+)\s*([KkMm])?/);
-        if (!m) return 0;
-        const num = parseFloat(m[1]);
-        const unit = (m[2] || '').toUpperCase();
-        if (unit === 'M') return Math.round(num * 1000000);
-        if (unit === 'K') return Math.round(num * 1000);
-        return Math.round(num);
-      }
-      const budgetAmount = parsed.data.budget ? parseBudgetString(parsed.data.budget) : 0;
-      const profileData = {
-        preApprovalAmount: budgetAmount,
-        preferredCities: parsed.data.areas || [],
-        minBeds: parsed.data.beds || null,
-        minBaths: parsed.data.baths ? String(parsed.data.baths) : null,
-        moveInTimeline: parsed.data.timeline || null,
-        hasAgent: parsed.data.hasAgent ?? false,
-      };
+          const existing = await storage.getUserBuyerProfile(userId);
+          if (existing) {
+            await storage.updateBuyerProfile(existing.id, userId, profileData);
+          } else {
+            await storage.createBuyerProfile({
+              userId,
+              displayName: "My Search",
+              ...profileData,
+              isPreApproved: false,
+              homeTypes: [],
+              mustHaves: [],
+              dealBreakers: [],
+            });
+          }
 
-      const existing = await storage.getUserBuyerProfile(userId);
-      if (existing) {
-        await storage.updateBuyerProfile(existing.id, userId, profileData);
-      } else {
-        await storage.createBuyerProfile({
-          userId,
-          displayName: "My Search",
-          ...profileData,
-          isPreApproved: false,
-          homeTypes: [],
-          mustHaves: [],
-          dealBreakers: [],
-        });
-      }
-
-      const updated = await authStorage.updateOnboarding(userId, {
-        buyerProfileCompleted: true,
-        onboardingCompleted: true,
-        currentMode: "buyer",
-      });
-      audit({ req, event: "onboarding_completed", outcome: "success", userId, metadata: { intent: "buyer" } });
-      res.json(updated);
+          const updated = await authStorage.updateOnboarding(userId, {
+            buyerProfileCompleted: true,
+            onboardingCompleted: true,
+            currentMode: "buyer",
+          });
+          return { data: updated };
+        }
+      );
+      res.json(result);
     } catch (err) {
-      audit({ req, event: "onboarding_completed", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message, metadata: { intent: "buyer" } });
-      res.status(500).json({ message: "Failed to save buyer profile", requestId: (req as any).requestId });
+      res.status(500).json({ message: "Failed to save buyer profile", requestId: req.requestId });
     }
   });
 
   app.post("/api/onboarding/homeowner", onboardingRateLimit, isAuthenticated, async (req: any, res) => {
+    const userId = req.user.claims.sub;
+    const homeSchema = z.object({
+      address: z.string().min(1),
+      beds: z.number().optional(),
+      baths: z.number().optional(),
+      sqft: z.number().optional(),
+      yearBuilt: z.number().optional(),
+      sellingIntent: z.string().optional(),
+    });
+    const parsed = homeSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid homeowner data" });
+
     try {
-      const { authStorage } = await import("./replit_integrations/auth/storage");
-      const userId = req.user.claims.sub;
-      const homeSchema = z.object({
-        address: z.string().min(1),
-        beds: z.number().optional(),
-        baths: z.number().optional(),
-        sqft: z.number().optional(),
-        yearBuilt: z.number().optional(),
-        sellingIntent: z.string().optional(),
-      });
-      const parsed = homeSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: "Invalid homeowner data" });
+      const result = await executeWithAudit(
+        { req, event: "onboarding_completed", userId, metadata: { intent: "homeowner" } },
+        async () => {
+          const { authStorage } = await import("./replit_integrations/auth/storage");
+          const addressParts = parsed.data.address.split(",").map(s => s.trim());
+          const streetPart = addressParts[0] || "";
+          const streetMatch = streetPart.match(/^(\d+)\s+(.+)$/);
 
-      const addressParts = parsed.data.address.split(",").map(s => s.trim());
-      const streetPart = addressParts[0] || "";
-      const streetMatch = streetPart.match(/^(\d+)\s+(.+)$/);
+          const homeData = {
+            nickname: "My Home",
+            addressStreetNumber: streetMatch ? streetMatch[1] : null,
+            addressStreetName: streetMatch ? streetMatch[2] : streetPart,
+            addressCity: addressParts[1] || null,
+            addressState: addressParts[2]?.replace(/\s*\d{5}.*/, '').trim() || "CA",
+            addressZip: addressParts[2]?.match(/\d{5}/)?.[0] || null,
+            beds: parsed.data.beds || null,
+            baths: parsed.data.baths ? String(parsed.data.baths) : null,
+            sqft: parsed.data.sqft || null,
+            yearBuilt: parsed.data.yearBuilt || null,
+            notes: parsed.data.sellingIntent || null,
+          };
 
-      const homeData = {
-        nickname: "My Home",
-        addressStreetNumber: streetMatch ? streetMatch[1] : null,
-        addressStreetName: streetMatch ? streetMatch[2] : streetPart,
-        addressCity: addressParts[1] || null,
-        addressState: addressParts[2]?.replace(/\s*\d{5}.*/, '').trim() || "CA",
-        addressZip: addressParts[2]?.match(/\d{5}/)?.[0] || null,
-        beds: parsed.data.beds || null,
-        baths: parsed.data.baths ? String(parsed.data.baths) : null,
-        sqft: parsed.data.sqft || null,
-        yearBuilt: parsed.data.yearBuilt || null,
-        notes: parsed.data.sellingIntent || null,
-      };
+          const existingHomes = await storage.getUserHomes(userId);
+          if (existingHomes.length > 0) {
+            await storage.updateUserHome(existingHomes[0].id, userId, homeData);
+          } else {
+            await storage.createUserHome(userId, homeData);
+          }
 
-      const existingHomes = await storage.getUserHomes(userId);
-      if (existingHomes.length > 0) {
-        await storage.updateUserHome(existingHomes[0].id, userId, homeData);
-      } else {
-        await storage.createUserHome(userId, homeData);
-      }
-
-      const updated = await authStorage.updateOnboarding(userId, {
-        homeownerProfileCompleted: true,
-        onboardingCompleted: true,
-        currentMode: "homeowner",
-      });
-      audit({ req, event: "onboarding_completed", outcome: "success", userId, metadata: { intent: "homeowner" } });
-      res.json(updated);
+          const updated = await authStorage.updateOnboarding(userId, {
+            homeownerProfileCompleted: true,
+            onboardingCompleted: true,
+            currentMode: "homeowner",
+          });
+          return { data: updated };
+        }
+      );
+      res.json(result);
     } catch (err) {
-      audit({ req, event: "onboarding_completed", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message, metadata: { intent: "homeowner" } });
-      res.status(500).json({ message: "Failed to save homeowner data", requestId: (req as any).requestId });
+      res.status(500).json({ message: "Failed to save homeowner data", requestId: req.requestId });
     }
   });
 
   app.post("/api/onboarding/agent", onboardingRateLimit, isAuthenticated, async (req: any, res) => {
+    const userId = req.user.claims.sub;
+    const agentSchema = z.object({
+      licenseNumber: z.string().min(2).max(30),
+      licenseState: z.string().default("CA"),
+      brokerageName: z.string().optional(),
+      mlsId: z.string().optional(),
+      association: z.string().optional(),
+    });
+    const parsed = agentSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid agent data" });
+
     try {
-      const { authStorage } = await import("./replit_integrations/auth/storage");
-      const userId = req.user.claims.sub;
-      const agentSchema = z.object({
-        licenseNumber: z.string().min(2).max(30),
-        licenseState: z.string().default("CA"),
-        brokerageName: z.string().optional(),
-        mlsId: z.string().optional(),
-        association: z.string().optional(),
-      });
-      const parsed = agentSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: "Invalid agent data" });
+      const result = await executeWithAudit(
+        { req, event: "onboarding_completed", userId, metadata: { intent: "agent" } },
+        async () => {
+          const { authStorage } = await import("./replit_integrations/auth/storage");
+          await authStorage.updateAgentInfo(userId, {
+            licenseNumber: parsed.data.licenseNumber,
+            licenseState: parsed.data.licenseState,
+            brokerageName: parsed.data.brokerageName || null,
+            agentMlsId: parsed.data.mlsId || null,
+            association: parsed.data.association || null,
+          });
 
-      await authStorage.updateAgentInfo(userId, {
-        licenseNumber: parsed.data.licenseNumber,
-        licenseState: parsed.data.licenseState,
-        brokerageName: parsed.data.brokerageName || null,
-        agentMlsId: parsed.data.mlsId || null,
-        association: parsed.data.association || null,
-      });
-
-      const updated = await authStorage.updateOnboarding(userId, {
-        agentProfileCompleted: true,
-        agentVerificationStatus: "pending",
-        onboardingCompleted: true,
-        currentMode: "agent",
-      });
-      audit({ req, event: "onboarding_completed", outcome: "success", userId, metadata: { intent: "agent" } });
-      res.json(updated);
+          const updated = await authStorage.updateOnboarding(userId, {
+            agentProfileCompleted: true,
+            agentVerificationStatus: "pending",
+            onboardingCompleted: true,
+            currentMode: "agent",
+          });
+          return { data: updated };
+        }
+      );
+      res.json(result);
     } catch (err) {
-      audit({ req, event: "onboarding_completed", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message, metadata: { intent: "agent" } });
-      res.status(500).json({ message: "Failed to save agent data", requestId: (req as any).requestId });
+      res.status(500).json({ message: "Failed to save agent data", requestId: req.requestId });
     }
   });
 
   app.post("/api/onboarding/switch-mode", onboardingRateLimit, isAuthenticated, async (req: any, res) => {
+    const userId = req.user.claims.sub;
+    const modeSchema = z.object({
+      mode: z.enum(["buyer", "homeowner", "agent", "explorer"]),
+    });
+    const parsed = modeSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid mode" });
+
     try {
-      const { authStorage } = await import("./replit_integrations/auth/storage");
-      const userId = req.user.claims.sub;
-      const modeSchema = z.object({
-        mode: z.enum(["buyer", "homeowner", "agent", "explorer"]),
-      });
-      const parsed = modeSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: "Invalid mode" });
+      const result = await executeWithAudit(
+        { req, event: "mode_switched", userId, metadata: { newMode: parsed.data.mode } },
+        async () => {
+          const { authStorage } = await import("./replit_integrations/auth/storage");
+          const user = await authStorage.getUser(userId);
+          if (!user) throw new Error("User not found");
 
-      const user = await authStorage.getUser(userId);
-      if (!user) return res.status(404).json({ message: "User not found" });
+          const modeMap: Record<string, string | undefined> = {
+            buyer: user.buyerProfileCompleted ? "buyer" : undefined,
+            homeowner: user.homeownerProfileCompleted ? "homeowner" : undefined,
+            agent: user.agentProfileCompleted ? "agent" : undefined,
+            explorer: "explorer",
+          };
 
-      const modeMap: Record<string, string | undefined> = {
-        buyer: user.buyerProfileCompleted ? "buyer" : undefined,
-        homeowner: user.homeownerProfileCompleted ? "homeowner" : undefined,
-        agent: user.agentProfileCompleted ? "agent" : undefined,
-        explorer: "explorer",
-      };
+          if (!modeMap[parsed.data.mode]) {
+            throw new Error("Complete this profile first before switching to it");
+          }
 
-      if (!modeMap[parsed.data.mode]) {
-        return res.status(400).json({ message: "Complete this profile first before switching to it" });
-      }
-
-      const updated = await authStorage.updateOnboarding(userId, {
-        currentMode: parsed.data.mode,
-      });
-      audit({ req, event: "mode_switched", outcome: "success", userId, metadata: { newMode: parsed.data.mode } });
-      res.json(updated);
+          const updated = await authStorage.updateOnboarding(userId, {
+            currentMode: parsed.data.mode,
+          });
+          return { data: updated };
+        }
+      );
+      res.json(result);
     } catch (err) {
-      audit({ req, event: "mode_switched", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
-      res.status(500).json({ message: "Failed to switch mode", requestId: (req as any).requestId });
+      const msg = (err as Error).message;
+      if (msg === "User not found") return res.status(404).json({ message: msg });
+      if (msg.includes("Complete this profile")) return res.status(400).json({ message: msg });
+      res.status(500).json({ message: "Failed to switch mode", requestId: req.requestId });
     }
   });
 
@@ -1918,77 +1940,84 @@ export async function registerRoutes(
   // ── Swipe Interest & Reverse Offers ──────────────────────────────────────
 
   app.post("/api/swipe-interest", isAuthenticated, async (req: any, res) => {
+    const buyerUserId = req.user.claims.sub;
+    const { propertyId } = req.body;
+    if (!propertyId) return res.status(400).json({ message: "propertyId required" });
+
     try {
-      const buyerUserId = req.user.claims.sub;
-      const { propertyId } = req.body;
-      if (!propertyId) return res.status(400).json({ message: "propertyId required" });
+      const result = await executeWithAudit(
+        { req, event: "swipe_interest_created", userId: buyerUserId, propertyId },
+        async () => {
+          const prop = await storage.getProperty(propertyId);
+          if (!prop) throw new Error("Property not found");
 
-      const prop = await storage.getProperty(propertyId);
-      if (!prop) return res.status(404).json({ message: "Property not found" });
+          const assignedAgent = await storage.resolveAndAssignAgent(buyerUserId);
+          await storage.upsertBuyerInterest(propertyId, buyerUserId, "swipe", assignedAgent?.id || null, prop?.agentId || null);
 
-      const assignedAgent = await storage.resolveAndAssignAgent(buyerUserId);
-      await storage.upsertBuyerInterest(propertyId, buyerUserId, "swipe", assignedAgent?.id || null, prop?.agentId || null);
+          const existing = await storage.getExistingSwipeNotification(buyerUserId, propertyId);
+          if (existing) return { data: { message: "Already notified", notification: existing, _status: 200 } };
 
-      const existing = await storage.getExistingSwipeNotification(buyerUserId, propertyId);
-      if (existing) return res.status(200).json({ message: "Already notified", notification: existing });
+          if (!assignedAgent) throw new Error("No agent assigned. Please contact support.");
 
-      if (!assignedAgent) {
-        return res.status(400).json({ message: "No agent assigned. Please contact support." });
-      }
+          const sellerRepresented = !!(prop.agentId || prop.listingAgentEmail);
+          const listingAgentEmail = prop.listingAgentEmail || null;
 
-      const sellerRepresented = !!(prop.agentId || prop.listingAgentEmail);
-      const listingAgentEmail = prop.listingAgentEmail || null;
+          const n = await storage.createSwipeNotification({
+            buyerUserId,
+            propertyId,
+            notifiedParty: "assigned_agent",
+            notifiedUserId: assignedAgent.id,
+            notifiedEmail: assignedAgent.email || "",
+            buyerRepresented: true,
+            sellerRepresented,
+            buyerAgentEmail: assignedAgent.email || null,
+            listingAgentEmail,
+            status: "notified",
+          });
 
-      const n = await storage.createSwipeNotification({
-        buyerUserId,
-        propertyId,
-        notifiedParty: "assigned_agent",
-        notifiedUserId: assignedAgent.id,
-        notifiedEmail: assignedAgent.email || "",
-        buyerRepresented: true,
-        sellerRepresented,
-        buyerAgentEmail: assignedAgent.email || null,
-        listingAgentEmail,
-        status: "notified",
-      });
-
-      audit({ req, event: "swipe_interest_created", outcome: "success", userId: buyerUserId, propertyId, metadata: { notificationId: n.id } });
-      res.status(201).json({
-        message: "Interest registered",
-        notifications: [n],
-        buyerRepresented: true,
-        sellerRepresented,
-      });
+          return {
+            data: { message: "Interest registered", notifications: [n], buyerRepresented: true, sellerRepresented, _status: 201 },
+            auditOverrides: { metadata: { notificationId: n.id } },
+          };
+        }
+      );
+      const status = (result as any)._status || 200;
+      res.status(status).json(result);
     } catch (err) {
-      audit({ req, event: "swipe_interest_created", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
-      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
+      const msg = (err as Error).message;
+      if (msg === "Property not found") return res.status(404).json({ message: msg });
+      if (msg.includes("No agent assigned")) return res.status(400).json({ message: msg });
+      res.status(500).json({ message: "Internal Server Error", requestId: req.requestId });
     }
   });
 
   app.post("/api/property-offers", isAuthenticated, async (req: any, res) => {
+    const creatorId = req.user.claims.sub;
+    const {
+      propertyId, buyerUserId, offerPrice, escrowLengthDays,
+      inspectionContingencyDays, loanContingencyDays, appraisalContingencyDays,
+      insuranceContingencyDays, disclosureReviewDays, leasedLienedItemsDays,
+      sellerConcessions, sellerConcessionNotes,
+      buydownOffered, buydownType, buydownAmount,
+      additionalTerms, swipeNotificationId,
+    } = req.body;
+
+    if (!propertyId || !buyerUserId) {
+      return res.status(400).json({ message: "propertyId and buyerUserId required" });
+    }
+
     try {
-      const creatorId = req.user.claims.sub;
-      const {
-        propertyId, buyerUserId, offerPrice, escrowLengthDays,
-        inspectionContingencyDays, loanContingencyDays, appraisalContingencyDays,
-        insuranceContingencyDays, disclosureReviewDays, leasedLienedItemsDays,
-        sellerConcessions, sellerConcessionNotes,
-        buydownOffered, buydownType, buydownAmount,
-        additionalTerms, swipeNotificationId,
-      } = req.body;
-
-      if (!propertyId || !buyerUserId) {
-        return res.status(400).json({ message: "propertyId and buyerUserId required" });
-      }
-
+      const result = await executeWithAudit(
+        { req, event: "reverse_offer_created", userId: creatorId, propertyId, metadata: { buyerUserId, offerPrice } },
+        async () => {
       const prop = await storage.getProperty(propertyId);
-      if (!prop) return res.status(404).json({ message: "Property not found" });
+      if (!prop) throw new Error("Property not found");
 
       const creator = await storage.getUser(creatorId);
       const isAdmin = creator?.email === process.env.ADMIN_EMAIL;
       const isListingAgent = prop.agentId === creatorId;
       if (!isListingAgent && !isAdmin) {
-        return res.status(403).json({ message: "Only the listing agent or admin can create reverse offers" });
+        throw new Error("Only the listing agent or admin can create reverse offers");
       }
 
       const buyerProfile = await storage.getUserBuyerProfile(buyerUserId);
@@ -2100,11 +2129,18 @@ export async function registerRoutes(
         }
       }
 
-      audit({ req, event: "reverse_offer_created", outcome: "success", userId: creatorId, propertyId, resourceType: "property_offer", resourceId: String(offer.id), metadata: { buyerUserId, offerPrice: offerPrice || prop.price } });
-      res.status(201).json(offer);
+      return {
+            data: offer,
+            auditOverrides: { resourceType: "property_offer", resourceId: String(offer.id), metadata: { buyerUserId, offerPrice: offerPrice || prop.price } },
+          };
+        }
+      );
+      res.status(201).json(result);
     } catch (err) {
-      audit({ req, event: "reverse_offer_created", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
-      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
+      const msg = (err as Error).message;
+      if (msg === "Property not found") return res.status(404).json({ message: msg });
+      if (msg.includes("Only the listing agent")) return res.status(403).json({ message: msg });
+      res.status(500).json({ message: "Internal Server Error", requestId: req.requestId });
     }
   });
 
@@ -2292,30 +2328,33 @@ export async function registerRoutes(
   });
 
   app.post("/api/property-offers/:id/buyer-response", isAuthenticated, async (req: any, res) => {
+    const userId = req.user.claims.sub;
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+
+    const { action, counterMessage } = req.body;
+    if (!action || !["accept", "decline", "counter"].includes(action)) {
+      return res.status(400).json({ message: "action must be accept, decline, or counter" });
+    }
+    if (action === "counter" && !counterMessage) {
+      return res.status(400).json({ message: "counterMessage required for counter action" });
+    }
+
     try {
-      const userId = req.user.claims.sub;
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
-
-      const { action, counterMessage } = req.body;
-      if (!action || !["accept", "decline", "counter"].includes(action)) {
-        return res.status(400).json({ message: "action must be accept, decline, or counter" });
-      }
-      if (action === "counter" && !counterMessage) {
-        return res.status(400).json({ message: "counterMessage required for counter action" });
-      }
-
+      const result = await executeWithAudit(
+        { req, event: "buyer_offer_response", userId, resourceType: "property_offer", resourceId: String(id) },
+        async () => {
       const offers = await db.select().from(propertyOffers).where(eq(propertyOffers.id, id));
       const offer = offers[0];
-      if (!offer) return res.status(404).json({ message: "Offer not found" });
+      if (!offer) throw new Error("Offer not found");
 
       if (offer.buyerUserId !== userId) {
-        return res.status(403).json({ message: "Only the buyer can respond to this offer" });
+        throw new Error("Only the buyer can respond to this offer");
       }
 
       const respondableStatuses = ["sent_to_buyer", "viewed"];
       if (!respondableStatuses.includes(offer.status)) {
-        return res.status(409).json({ message: `This offer has already been ${offer.status}. No further action is needed.` });
+        throw new Error(`CONFLICT:This offer has already been ${offer.status}. No further action is needed.`);
       }
 
       const statusMap: Record<string, string> = { accept: "accepted", decline: "declined", counter: "countered" };
@@ -2412,11 +2451,19 @@ export async function registerRoutes(
         trySendNotificationEmail(listingAgentId, "offer_response", `Buyer has ${statusLabel} the offer`, action === "counter" ? `Counter: ${counterMessage.substring(0, 200)}` : `The offer has been ${statusLabel}.`, `/conversations/${coordConvo.id}`, offer.propertyId, coordConvo.id);
       }
 
-      audit({ req, event: "buyer_offer_response", outcome: "success", userId, propertyId: offer.propertyId, resourceType: "property_offer", resourceId: String(id), metadata: { action, newStatus } });
-      res.json({ success: true, status: newStatus });
+      return {
+            data: { success: true, status: newStatus },
+            auditOverrides: { propertyId: offer.propertyId, metadata: { action, newStatus } },
+          };
+        }
+      );
+      res.json(result);
     } catch (err) {
-      audit({ req, event: "buyer_offer_response", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
-      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
+      const msg = (err as Error).message;
+      if (msg === "Offer not found") return res.status(404).json({ message: msg });
+      if (msg.includes("Only the buyer")) return res.status(403).json({ message: msg });
+      if (msg.startsWith("CONFLICT:")) return res.status(409).json({ message: msg.replace("CONFLICT:", "") });
+      res.status(500).json({ message: "Internal Server Error", requestId: req.requestId });
     }
   });
 
@@ -3668,40 +3715,44 @@ export async function registerRoutes(
   // ── Buyer Interest API ────────────────────────────────────────────────────
 
   app.post("/api/buyer-interest", isAuthenticated, async (req: any, res) => {
+    const userId = req.user.claims.sub;
+    const { propertyId, source } = req.body;
+    if (!propertyId) return res.status(400).json({ message: "propertyId required" });
+
     try {
-      const userId = req.user.claims.sub;
-      const { propertyId, source } = req.body;
-      if (!propertyId) return res.status(400).json({ message: "propertyId required" });
+      const result = await executeWithAudit(
+        { req, event: "buyer_interest_upserted", userId, propertyId, metadata: { source: source || "swipe" } },
+        async () => {
+          const prop = await storage.getProperty(propertyId);
+          const assignedAgent = await storage.resolveAndAssignAgent(userId);
+          const bi = await storage.upsertBuyerInterest(
+            propertyId, userId, source || "swipe",
+            assignedAgent?.id || null,
+            prop?.agentId || null
+          );
 
-      const prop = await storage.getProperty(propertyId);
-      const assignedAgent = await storage.resolveAndAssignAgent(userId);
-      const result = await storage.upsertBuyerInterest(
-        propertyId, userId, source || "swipe",
-        assignedAgent?.id || null,
-        prop?.agentId || null
+          if (assignedAgent && (source === "swipe" || !source)) {
+            const buyer = await storage.getUser(userId);
+            const buyerName = buyer?.firstName ? `${buyer.firstName} ${buyer.lastName || ""}`.trim() : "A buyer";
+            const propTitle = prop?.title || `Property #${propertyId}`;
+            await storage.createNotification({
+              userId: assignedAgent.id,
+              type: "buyer_interest",
+              title: `${buyerName} is interested in a property`,
+              message: `${buyerName} expressed interest in ${propTitle}`,
+              propertyId,
+              linkUrl: `/agent/dashboard`,
+              read: false,
+              archived: false,
+            });
+          }
+
+          return { data: bi, auditOverrides: { buyerInterestId: bi.id } };
+        }
       );
-
-      if (assignedAgent && (source === "swipe" || !source)) {
-        const buyer = await storage.getUser(userId);
-        const buyerName = buyer?.firstName ? `${buyer.firstName} ${buyer.lastName || ""}`.trim() : "A buyer";
-        const propTitle = prop?.title || `Property #${propertyId}`;
-        await storage.createNotification({
-          userId: assignedAgent.id,
-          type: "buyer_interest",
-          title: `${buyerName} is interested in a property`,
-          message: `${buyerName} expressed interest in ${propTitle}`,
-          propertyId,
-          linkUrl: `/agent/dashboard`,
-          read: false,
-          archived: false,
-        });
-      }
-
-      audit({ req, event: "buyer_interest_upserted", outcome: "success", userId, propertyId, buyerInterestId: result.id, metadata: { source: source || "swipe" } });
       res.status(201).json(result);
     } catch (err) {
-      audit({ req, event: "buyer_interest_upserted", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
-      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
+      res.status(500).json({ message: "Internal Server Error", requestId: req.requestId });
     }
   });
 
@@ -3761,33 +3812,36 @@ export async function registerRoutes(
   });
 
   app.patch("/api/buyer-interest/:id", isAuthenticated, async (req: any, res) => {
+    const userId = req.user.claims.sub;
+    const id = parseInt(req.params.id);
+    const { stage } = req.body;
+
+    const existing = await db.select().from(buyerInterest).where(eq(buyerInterest.id, id)).limit(1);
+    if (!existing.length) return res.status(404).json({ message: "Not found" });
+
+    const isAssignedAgent = existing[0].assignedAgentUserId === userId;
+    if (!isAssignedAgent && existing[0].buyerUserId !== userId) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    const validStages = ["interested", "agent_reviewing", "coordinating", "showing_scheduled", "offer_stage", "closed", "archived"];
+    if (stage && !validStages.includes(stage)) {
+      return res.status(400).json({ message: `Invalid stage. Must be one of: ${validStages.join(", ")}` });
+    }
+
     try {
-      const userId = req.user.claims.sub;
-      const id = parseInt(req.params.id);
-      const { stage } = req.body;
-
-      const existing = await db.select().from(buyerInterest).where(eq(buyerInterest.id, id)).limit(1);
-      if (!existing.length) return res.status(404).json({ message: "Not found" });
-
-      const isAssignedAgent = existing[0].assignedAgentUserId === userId;
-      if (!isAssignedAgent && existing[0].buyerUserId !== userId) {
-        return res.status(403).json({ message: "Access denied" });
-      }
-
-      const validStages = ["interested", "agent_reviewing", "coordinating", "showing_scheduled", "offer_stage", "closed", "archived"];
-      if (stage && !validStages.includes(stage)) {
-        return res.status(400).json({ message: `Invalid stage. Must be one of: ${validStages.join(", ")}` });
-      }
-
-      const updates: any = { updatedAt: new Date() };
-      if (stage) updates.stage = stage;
-
-      const [updated] = await db.update(buyerInterest).set(updates).where(eq(buyerInterest.id, id)).returning();
-      audit({ req, event: "buyer_interest_upserted", outcome: "success", userId, buyerInterestId: id, metadata: { stage } });
-      res.json(updated);
+      const result = await executeWithAudit(
+        { req, event: "buyer_interest_upserted", userId, buyerInterestId: id, metadata: { stage } },
+        async () => {
+          const updates: any = { updatedAt: new Date() };
+          if (stage) updates.stage = stage;
+          const [updated] = await db.update(buyerInterest).set(updates).where(eq(buyerInterest.id, id)).returning();
+          return { data: updated };
+        }
+      );
+      res.json(result);
     } catch (err) {
-      audit({ req, event: "buyer_interest_upserted", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
-      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
+      res.status(500).json({ message: "Internal Server Error", requestId: req.requestId });
     }
   });
 
@@ -3941,43 +3995,48 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Invalid role for conversation creation" });
       }
 
-      const actualBuyerIdForInterest = (convType === "agent_coordination" && buyerUserId) ? buyerUserId : resolvedBuyerId;
-      await storage.upsertBuyerInterest(propertyId, actualBuyerIdForInterest, msgType || "inquiry", isAgent ? userId : resolvedAgentId, prop.agentId || null);
+      const convoResult = await executeWithAudit(
+        { req, event: "conversation_created", userId, propertyId, metadata: { type: convType } },
+        async () => {
+          const actualBuyerIdForInterest = (convType === "agent_coordination" && buyerUserId) ? buyerUserId : resolvedBuyerId;
+          await storage.upsertBuyerInterest(propertyId, actualBuyerIdForInterest, msgType || "inquiry", isAgent ? userId : resolvedAgentId, prop.agentId || null);
 
-      const relatedBuyer = (convType === "agent_coordination" && buyerUserId) ? buyerUserId : undefined;
-      const convo = await storage.getOrCreateConversation(propertyId, resolvedBuyerId, resolvedAgentId, isAgent ? "agent" : "buyer", convType, relatedBuyer);
+          const relatedBuyer = (convType === "agent_coordination" && buyerUserId) ? buyerUserId : undefined;
+          const convo = await storage.getOrCreateConversation(propertyId, resolvedBuyerId, resolvedAgentId, isAgent ? "agent" : "buyer", convType, relatedBuyer);
 
-      if (initialMessage) {
-        await storage.createMessage({
-          conversationId: convo.id,
-          senderUserId: userId,
-          type: msgType || "text",
-          content: initialMessage,
-        });
+          if (initialMessage) {
+            await storage.createMessage({
+              conversationId: convo.id,
+              senderUserId: userId,
+              type: msgType || "text",
+              content: initialMessage,
+            });
 
-        const recipientId = isAgent && convType !== "agent_coordination" ? resolvedBuyerId : resolvedAgentId;
-        const senderName = callerUser?.firstName ? `${callerUser.firstName} ${callerUser.lastName || ""}`.trim() : (isAgent ? "Your agent" : "A buyer");
-        await storage.createNotification({
-          userId: recipientId,
-          type: "message_received",
-          title: `New message from ${senderName}`,
-          message: initialMessage.substring(0, 200),
-          propertyId,
-          linkUrl: `/conversations/${convo.id}`,
-          read: false,
-          archived: false,
-        });
-        trySendNotificationEmail(recipientId, "message_received", `New message from ${senderName}`, initialMessage.substring(0, 200), `/conversations/${convo.id}`, propertyId, convo.id);
-      }
+            const recipientId = isAgent && convType !== "agent_coordination" ? resolvedBuyerId : resolvedAgentId;
+            const senderName = callerUser?.firstName ? `${callerUser.firstName} ${callerUser.lastName || ""}`.trim() : (isAgent ? "Your agent" : "A buyer");
+            await storage.createNotification({
+              userId: recipientId,
+              type: "message_received",
+              title: `New message from ${senderName}`,
+              message: initialMessage.substring(0, 200),
+              propertyId,
+              linkUrl: `/conversations/${convo.id}`,
+              read: false,
+              archived: false,
+            });
+            trySendNotificationEmail(recipientId, "message_received", `New message from ${senderName}`, initialMessage.substring(0, 200), `/conversations/${convo.id}`, propertyId, convo.id);
+          }
 
-      audit({ req, event: "conversation_created", outcome: "success", userId, propertyId, conversationId: convo.id, metadata: { type: convType } });
-      if (convType === "agent_coordination") {
-        audit({ req, event: "coordination_thread_created", outcome: "success", userId, propertyId, conversationId: convo.id });
-      }
-      res.status(201).json(sanitizeConversationForCaller(convo, userId, callerRole || "user"));
+          if (convType === "agent_coordination") {
+            audit({ req, event: "coordination_thread_created", outcome: "success", userId, propertyId, conversationId: convo.id });
+          }
+
+          return { data: convo, auditOverrides: { conversationId: convo.id } };
+        }
+      );
+      res.status(201).json(sanitizeConversationForCaller(convoResult, userId, callerRole || "user"));
     } catch (err) {
-      audit({ req, event: "conversation_created", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
-      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
+      res.status(500).json({ message: "Internal Server Error", requestId: req.requestId });
     }
   });
 
@@ -4023,50 +4082,53 @@ export async function registerRoutes(
 
   app.post("/api/conversations/:id/messages", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const conversationId = parseInt(req.params.id);
-      const convo = await storage.getConversation(conversationId);
-      if (!convo) return res.status(404).json({ message: "Conversation not found" });
-      const access = await validateConversationAccess(convo, userId);
-      if (!access.allowed) {
-        audit({ req, event: "authorization_denied", outcome: "failure", userId, conversationId, metadata: { reason: access.reason, action: "send_message" } });
-        return res.status(403).json({ message: access.reason });
-      }
+    const userId = req.user.claims.sub;
+    const conversationId = parseInt(req.params.id);
+    const convo = await storage.getConversation(conversationId);
+    if (!convo) return res.status(404).json({ message: "Conversation not found" });
+    const access = await validateConversationAccess(convo, userId);
+    if (!access.allowed) {
+      audit({ req, event: "authorization_denied", outcome: "failure", userId, conversationId, metadata: { reason: access.reason, action: "send_message" } });
+      return res.status(403).json({ message: access.reason });
+    }
 
-      const { content, type } = req.body;
-      if (!content) return res.status(400).json({ message: "content required" });
+    const { content, type } = req.body;
+    if (!content) return res.status(400).json({ message: "content required" });
 
-      const msg = await storage.createMessage({
-        conversationId,
-        senderUserId: userId,
-        type: type || "text",
-        content,
-      });
+    const result = await executeWithAudit(
+        { req, event: "message_sent", userId, conversationId, propertyId: convo.propertyId, metadata: { type: type || "text" } },
+        async () => {
+          const msg = await storage.createMessage({
+            conversationId,
+            senderUserId: userId,
+            type: type || "text",
+            content,
+          });
 
-      const role = convo.buyerUserId === userId ? 'buyer' : 'agent';
-      await storage.updateConversationReadAt(conversationId, userId, role);
+          const role = convo.buyerUserId === userId ? 'buyer' : 'agent';
+          await storage.updateConversationReadAt(conversationId, userId, role);
 
-      const recipientId = convo.buyerUserId === userId ? convo.agentUserId : convo.buyerUserId;
-      const sender = await storage.getUser(userId);
-      const senderName = sender?.firstName ? `${sender.firstName} ${sender.lastName || ""}`.trim() : "Someone";
-      await storage.createNotification({
-        userId: recipientId,
-        type: "message_received",
-        title: `New message from ${senderName}`,
-        message: content.substring(0, 200),
-        propertyId: convo.propertyId,
-        linkUrl: `/conversations/${conversationId}`,
-        read: false,
-        archived: false,
-      });
-      trySendNotificationEmail(recipientId, "message_received", `New message from ${senderName}`, content.substring(0, 200), `/conversations/${conversationId}`, convo.propertyId, conversationId);
+          const recipientId = convo.buyerUserId === userId ? convo.agentUserId : convo.buyerUserId;
+          const sender = await storage.getUser(userId);
+          const senderName = sender?.firstName ? `${sender.firstName} ${sender.lastName || ""}`.trim() : "Someone";
+          await storage.createNotification({
+            userId: recipientId,
+            type: "message_received",
+            title: `New message from ${senderName}`,
+            message: content.substring(0, 200),
+            propertyId: convo.propertyId,
+            linkUrl: `/conversations/${conversationId}`,
+            read: false,
+            archived: false,
+          });
+          trySendNotificationEmail(recipientId, "message_received", `New message from ${senderName}`, content.substring(0, 200), `/conversations/${conversationId}`, convo.propertyId, conversationId);
 
-      const msgWithSender = { ...msg, sender };
-      audit({ req, event: "message_sent", outcome: "success", userId, conversationId, propertyId: convo.propertyId, metadata: { type: type || "text" } });
-      res.status(201).json(msgWithSender);
+          return { data: { ...msg, sender } };
+        }
+      );
+      res.status(201).json(result);
     } catch (err) {
-      audit({ req, event: "message_sent", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
-      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
+      res.status(500).json({ message: "Internal Server Error", requestId: req.requestId });
     }
   });
 
@@ -4092,281 +4154,295 @@ export async function registerRoutes(
   });
 
   app.post("/api/showing-requests", isAuthenticated, async (req: any, res) => {
+    const userId = req.user.claims.sub;
+    const { propertyId, requestedDates, notes } = req.body;
+    if (!propertyId || !requestedDates || !Array.isArray(requestedDates) || requestedDates.length === 0) {
+      return res.status(400).json({ message: "propertyId and requestedDates required" });
+    }
+
     try {
-      const userId = req.user.claims.sub;
-      const { propertyId, requestedDates, notes } = req.body;
-      if (!propertyId || !requestedDates || !Array.isArray(requestedDates) || requestedDates.length === 0) {
-        return res.status(400).json({ message: "propertyId and requestedDates required" });
-      }
+      const result = await executeWithAudit(
+        { req, event: "showing_request_created", userId, propertyId },
+        async () => {
+          const prop = await storage.getProperty(propertyId);
+          if (!prop) throw new Error("Property not found");
 
-      const prop = await storage.getProperty(propertyId);
-      if (!prop) return res.status(404).json({ message: "Property not found" });
+          const assignedAgent = await storage.resolveAndAssignAgent(userId);
+          if (!assignedAgent) throw new Error("No agent assigned");
+          const agentId = assignedAgent.id;
 
-      const assignedAgent = await storage.resolveAndAssignAgent(userId);
-      if (!assignedAgent) return res.status(400).json({ message: "No agent assigned" });
-      const agentId = assignedAgent.id;
+          await storage.upsertBuyerInterest(propertyId, userId, "showing_request", agentId, prop.agentId || null);
+          const convo = await storage.getOrCreateConversation(propertyId, userId, agentId, "buyer", "buyer");
 
-      await storage.upsertBuyerInterest(propertyId, userId, "showing_request", agentId, prop.agentId || null);
+          const request = await storage.createShowingRequest({
+            conversationId: convo.id,
+            propertyId,
+            buyerUserId: userId,
+            agentUserId: agentId,
+            requestedDates,
+            notes: notes || null,
+          });
 
-      const convo = await storage.getOrCreateConversation(propertyId, userId, agentId, "buyer", "buyer");
+          const buyer = await storage.getUser(userId);
+          const buyerName = buyer?.firstName ? `${buyer.firstName} ${buyer.lastName || ""}`.trim() : "A buyer";
+          const dateStr = requestedDates.slice(0, 2).join(", ");
+          await storage.createMessage({
+            conversationId: convo.id,
+            senderUserId: userId,
+            type: "showing_request",
+            content: `Showing request for ${dateStr}${notes ? ` — ${notes}` : ""}`,
+            metadata: { showingRequestId: request.id, requestedDates },
+          });
 
-      const request = await storage.createShowingRequest({
-        conversationId: convo.id,
-        propertyId,
-        buyerUserId: userId,
-        agentUserId: agentId,
-        requestedDates,
-        notes: notes || null,
-      });
+          await storage.createNotification({
+            userId: agentId,
+            type: "showing_request",
+            title: `Showing request from ${buyerName}`,
+            message: `Requested dates: ${dateStr}`,
+            propertyId,
+            linkUrl: `/conversations/${convo.id}`,
+            read: false,
+            archived: false,
+          });
+          trySendNotificationEmail(agentId, "showing_request", `Showing request from ${buyerName}`, `Requested dates: ${dateStr}`, `/conversations/${convo.id}`, propertyId, convo.id);
 
-      const buyer = await storage.getUser(userId);
-      const buyerName = buyer?.firstName ? `${buyer.firstName} ${buyer.lastName || ""}`.trim() : "A buyer";
-      const dateStr = requestedDates.slice(0, 2).join(", ");
-      await storage.createMessage({
-        conversationId: convo.id,
-        senderUserId: userId,
-        type: "showing_request",
-        content: `Showing request for ${dateStr}${notes ? ` — ${notes}` : ""}`,
-        metadata: { showingRequestId: request.id, requestedDates },
-      });
-
-      await storage.createNotification({
-        userId: agentId,
-        type: "showing_request",
-        title: `Showing request from ${buyerName}`,
-        message: `Requested dates: ${dateStr}`,
-        propertyId,
-        linkUrl: `/conversations/${convo.id}`,
-        read: false,
-        archived: false,
-      });
-      trySendNotificationEmail(agentId, "showing_request", `Showing request from ${buyerName}`, `Requested dates: ${dateStr}`, `/conversations/${convo.id}`, propertyId, convo.id);
-
-      audit({ req, event: "showing_request_created", outcome: "success", userId, propertyId, conversationId: convo.id, resourceType: "showing_request", resourceId: String(request.id) });
-      res.status(201).json(request);
+          return {
+            data: request,
+            auditOverrides: { conversationId: convo.id, resourceType: "showing_request", resourceId: String(request.id) },
+          };
+        }
+      );
+      res.status(201).json(result);
     } catch (err) {
-      audit({ req, event: "showing_request_created", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
-      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
+      const msg = (err as Error).message;
+      if (msg === "Property not found") return res.status(404).json({ message: msg });
+      if (msg === "No agent assigned") return res.status(400).json({ message: msg });
+      res.status(500).json({ message: "Internal Server Error", requestId: req.requestId });
     }
   });
 
   app.patch("/api/showing-requests/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const id = parseInt(req.params.id);
-      const { status, confirmedDate } = req.body;
-      if (!status) return res.status(400).json({ message: "status required" });
+    const userId = req.user.claims.sub;
+    const id = parseInt(req.params.id);
+    const { status, confirmedDate } = req.body;
+    if (!status) return res.status(400).json({ message: "status required" });
 
-      const existing = await storage.getShowingRequest(id);
-      if (!existing) return res.status(404).json({ message: "Showing request not found" });
+    const existing = await storage.getShowingRequest(id);
+    if (!existing) return res.status(404).json({ message: "Showing request not found" });
 
-      const prop = await storage.getProperty(existing.propertyId);
-      const isAssignedAgent = existing.agentUserId === userId;
-      const isBuyerUser = existing.buyerUserId === userId;
-      const isListingAgent = prop?.agentId === userId;
+    const prop = await storage.getProperty(existing.propertyId);
+    const isAssignedAgent = existing.agentUserId === userId;
+    const isBuyerUser = existing.buyerUserId === userId;
+    const isListingAgent = prop?.agentId === userId;
 
-      if (!isAssignedAgent && !isBuyerUser && !isListingAgent) {
-        audit({ req, event: "authorization_denied", outcome: "failure", userId, resourceType: "showing_request", resourceId: String(id), metadata: { reason: "not_participant" } });
-        return res.status(403).json({ message: "Access denied" });
-      }
+    if (!isAssignedAgent && !isBuyerUser && !isListingAgent) {
+      audit({ req, event: "authorization_denied", outcome: "failure", userId, resourceType: "showing_request", resourceId: String(id), metadata: { reason: "not_participant" } });
+      return res.status(403).json({ message: "Access denied" });
+    }
 
-      const currentStatus = existing.status;
+    const currentStatus = existing.status;
 
-      const validTransitions: Record<string, Record<string, string[]>> = {
-        assignedAgent: {
-          requested: ["under_review"],
-          under_review: ["sent_to_listing_agent"],
-          sent_to_listing_agent: [],
-          confirmed: ["completed"],
-          alternate_proposed: ["under_review", "sent_to_listing_agent"],
-          declined: [],
-          completed: [],
-          cancelled: [],
-        },
-        listingAgent: {
-          sent_to_listing_agent: ["confirmed", "alternate_proposed", "declined"],
-          confirmed: ["completed"],
-          alternate_proposed: [],
-          declined: [],
-          completed: [],
-        },
-        buyer: {
-          requested: ["cancelled"],
-          under_review: ["cancelled"],
-          sent_to_listing_agent: ["cancelled"],
-        },
-      };
+    const validTransitions: Record<string, Record<string, string[]>> = {
+      assignedAgent: {
+        requested: ["under_review"],
+        under_review: ["sent_to_listing_agent"],
+        sent_to_listing_agent: [],
+        confirmed: ["completed"],
+        alternate_proposed: ["under_review", "sent_to_listing_agent"],
+        declined: [],
+        completed: [],
+        cancelled: [],
+      },
+      listingAgent: {
+        sent_to_listing_agent: ["confirmed", "alternate_proposed", "declined"],
+        confirmed: ["completed"],
+        alternate_proposed: [],
+        declined: [],
+        completed: [],
+      },
+      buyer: {
+        requested: ["cancelled"],
+        under_review: ["cancelled"],
+        sent_to_listing_agent: ["cancelled"],
+      },
+    };
 
-      let allowedNext: string[] = [];
-      if (isAssignedAgent) {
-        allowedNext = [...allowedNext, ...(validTransitions.assignedAgent[currentStatus] || [])];
-      }
-      if (isListingAgent) {
-        allowedNext = [...allowedNext, ...(validTransitions.listingAgent[currentStatus] || [])];
-      }
-      if (isBuyerUser) {
-        allowedNext = [...allowedNext, ...(validTransitions.buyer[currentStatus] || [])];
-      }
-      allowedNext = [...new Set(allowedNext)];
+    let allowedNext: string[] = [];
+    if (isAssignedAgent) {
+      allowedNext = [...allowedNext, ...(validTransitions.assignedAgent[currentStatus] || [])];
+    }
+    if (isListingAgent) {
+      allowedNext = [...allowedNext, ...(validTransitions.listingAgent[currentStatus] || [])];
+    }
+    if (isBuyerUser) {
+      allowedNext = [...allowedNext, ...(validTransitions.buyer[currentStatus] || [])];
+    }
+    allowedNext = [...new Set(allowedNext)];
 
-      if (!allowedNext.includes(status)) {
-        return res.status(403).json({ message: `Cannot transition from '${currentStatus}' to '${status}' with your role. Allowed: ${allowedNext.join(", ") || "none"}` });
-      }
+    if (!allowedNext.includes(status)) {
+      return res.status(403).json({ message: `Cannot transition from '${currentStatus}' to '${status}' with your role. Allowed: ${allowedNext.join(", ") || "none"}` });
+    }
 
-      const updated = await storage.updateShowingRequestStatus(
-        id,
-        status,
-        confirmedDate ? new Date(confirmedDate) : undefined,
+    const roleLabel = isListingAgent ? "listing_agent" : isAssignedAgent ? "assigned_agent" : "buyer";
+      const result = await executeWithAudit(
+        { req, event: "showing_status_changed", userId, propertyId: existing.propertyId, resourceType: "showing_request", resourceId: String(id), metadata: { from: currentStatus, to: status, role: roleLabel } },
+        async () => {
+          const updated = await storage.updateShowingRequestStatus(
+            id,
+            status,
+            confirmedDate ? new Date(confirmedDate) : undefined,
+          );
+
+          if (status === "confirmed") {
+            const now = new Date();
+            await db.update(buyerInterest)
+              .set({ stage: "showing_scheduled", lastActivityAt: now, updatedAt: now })
+              .where(and(eq(buyerInterest.propertyId, updated.propertyId), eq(buyerInterest.buyerUserId, updated.buyerUserId)));
+          }
+
+          const statusMsg = status === "confirmed"
+            ? `Showing confirmed${confirmedDate ? ` for ${new Date(confirmedDate).toLocaleDateString()}` : ""}`
+            : status === "alternate_proposed"
+            ? `Alternate date proposed${confirmedDate ? `: ${new Date(confirmedDate).toLocaleDateString()}` : ""}`
+            : `Showing ${(status || "").replace(/_/g, " ")}`;
+
+          if (isAssignedAgent && status === "sent_to_listing_agent" && prop?.agentId && prop.agentId !== userId) {
+            const listingAgentId = prop.agentId;
+            const coordConvo = await storage.getOrCreateConversation(
+              updated.propertyId, userId, listingAgentId, "agent", "agent_coordination", updated.buyerUserId
+            );
+            audit({ req, event: "coordination_thread_created", outcome: "success", userId, propertyId: updated.propertyId, conversationId: coordConvo.id, metadata: { trigger: "showing_forwarded" } });
+
+            const agentUser = await storage.getUser(userId);
+            const agentName = agentUser?.firstName ? `${agentUser.firstName} ${agentUser.lastName || ""}`.trim() : "Buyer's agent";
+            const dateStr = existing.requestedDates
+              ? (Array.isArray(existing.requestedDates) ? (existing.requestedDates as string[]).slice(0, 2).join(", ") : "")
+              : "";
+            await storage.createMessage({
+              conversationId: coordConvo.id,
+              senderUserId: userId,
+              type: "showing_request",
+              content: `Showing request from ${agentName} for a buyer — Requested dates: ${dateStr}${existing.notes ? ` — ${existing.notes}` : ""}`,
+              metadata: { showingRequestId: id, requestedDates: existing.requestedDates },
+            });
+
+            await storage.createNotification({
+              userId: listingAgentId,
+              type: "showing_request",
+              title: `New showing request from ${agentName}`,
+              message: `Requested dates: ${dateStr}`,
+              propertyId: updated.propertyId,
+              linkUrl: `/conversations/${coordConvo.id}`,
+              read: false,
+              archived: false,
+            });
+            trySendNotificationEmail(listingAgentId, "showing_request", `New showing request from ${agentName}`, `Requested dates: ${dateStr}`, `/conversations/${coordConvo.id}`, updated.propertyId, coordConvo.id);
+
+            const buyerConvoId = updated.conversationId;
+            if (buyerConvoId) {
+              await storage.createMessage({
+                conversationId: buyerConvoId,
+                senderUserId: userId,
+                type: "system",
+                content: "Your agent is coordinating with the listing agent for this showing",
+              });
+            }
+          }
+
+          if (isListingAgent && !isAssignedAgent) {
+            const biRecord = await db.select().from(buyerInterest)
+              .where(and(eq(buyerInterest.propertyId, updated.propertyId), eq(buyerInterest.buyerUserId, updated.buyerUserId)))
+              .limit(1);
+            const coordConvoId = biRecord[0]?.agentCoordinationConversationId;
+            const buyerConvoId = biRecord[0]?.buyerConversationId || updated.conversationId;
+            if (coordConvoId) {
+              await storage.createMessage({
+                conversationId: coordConvoId,
+                senderUserId: userId,
+                type: "system",
+                content: statusMsg,
+              });
+            }
+            const sender = await storage.getUser(userId);
+            const senderName = sender?.firstName || "Listing Agent";
+            const notificationType = status === "confirmed" ? "showing_confirmed" : status === "declined" ? "showing_declined" : "showing_update";
+            const notifTitle = `Showing ${(status || "").replace(/_/g, " ")}`;
+            const notifMsg = confirmedDate ? `Confirmed for ${new Date(confirmedDate).toLocaleDateString()}` : `Showing has been ${(status || "").replace(/_/g, " ")}`;
+
+            await storage.createNotification({
+              userId: updated.agentUserId,
+              type: notificationType,
+              title: `${notifTitle} by ${senderName}`,
+              message: notifMsg,
+              propertyId: updated.propertyId,
+              linkUrl: coordConvoId ? `/conversations/${coordConvoId}` : undefined,
+              read: false,
+              archived: false,
+            });
+            if (coordConvoId) {
+              trySendNotificationEmail(updated.agentUserId, notificationType, `${notifTitle} by ${senderName}`, notifMsg, `/conversations/${coordConvoId}`, updated.propertyId, coordConvoId);
+            }
+
+            if (buyerConvoId && ["confirmed", "declined", "completed"].includes(status)) {
+              await storage.createMessage({
+                conversationId: buyerConvoId,
+                senderUserId: updated.agentUserId,
+                type: "system",
+                content: statusMsg,
+              });
+              await storage.createNotification({
+                userId: updated.buyerUserId,
+                type: notificationType,
+                title: notifTitle,
+                message: notifMsg,
+                propertyId: updated.propertyId,
+                linkUrl: `/conversations/${buyerConvoId}`,
+                read: false,
+                archived: false,
+              });
+              trySendNotificationEmail(updated.buyerUserId, notificationType, notifTitle, notifMsg, `/conversations/${buyerConvoId}`, updated.propertyId, buyerConvoId);
+            }
+          } else {
+            if (updated.conversationId) {
+              await storage.createMessage({
+                conversationId: updated.conversationId,
+                senderUserId: userId,
+                type: "system",
+                content: statusMsg,
+              });
+            }
+            const recipientId = updated.buyerUserId === userId ? updated.agentUserId : updated.buyerUserId;
+            const sender = await storage.getUser(userId);
+            const senderName = sender?.firstName || "Agent";
+            const notificationType = status === "confirmed" ? "showing_confirmed" : status === "declined" ? "showing_declined" : "showing_update";
+            const notifTitle = `Showing ${(status || "").replace(/_/g, " ")} by ${senderName}`;
+            const notifMsg = confirmedDate ? `Confirmed for ${new Date(confirmedDate).toLocaleDateString()}` : `Showing has been ${(status || "").replace(/_/g, " ")}`;
+            await storage.createNotification({
+              userId: recipientId,
+              type: notificationType,
+              title: notifTitle,
+              message: notifMsg,
+              propertyId: updated.propertyId,
+              linkUrl: `/conversations/${updated.conversationId}`,
+              read: false,
+              archived: false,
+            });
+            trySendNotificationEmail(recipientId, notificationType, notifTitle, notifMsg, `/conversations/${updated.conversationId}`, updated.propertyId, updated.conversationId);
+          }
+
+          return { data: updated };
+        }
       );
 
-      if (status === "confirmed") {
-        const now = new Date();
-        await db.update(buyerInterest)
-          .set({ stage: "showing_scheduled", lastActivityAt: now, updatedAt: now })
-          .where(and(eq(buyerInterest.propertyId, updated.propertyId), eq(buyerInterest.buyerUserId, updated.buyerUserId)));
-      }
-
-      const statusMsg = status === "confirmed"
-        ? `Showing confirmed${confirmedDate ? ` for ${new Date(confirmedDate).toLocaleDateString()}` : ""}`
-        : status === "alternate_proposed"
-        ? `Alternate date proposed${confirmedDate ? `: ${new Date(confirmedDate).toLocaleDateString()}` : ""}`
-        : `Showing ${(status || "").replace(/_/g, " ")}`;
-
-      if (isAssignedAgent && status === "sent_to_listing_agent" && prop?.agentId && prop.agentId !== userId) {
-        const listingAgentId = prop.agentId;
-        const coordConvo = await storage.getOrCreateConversation(
-          updated.propertyId, userId, listingAgentId, "agent", "agent_coordination", updated.buyerUserId
-        );
-        audit({ req, event: "coordination_thread_created", outcome: "success", userId, propertyId: updated.propertyId, conversationId: coordConvo.id, metadata: { trigger: "showing_forwarded" } });
-
-        const agentUser = await storage.getUser(userId);
-        const agentName = agentUser?.firstName ? `${agentUser.firstName} ${agentUser.lastName || ""}`.trim() : "Buyer's agent";
-        const dateStr = existing.requestedDates
-          ? (Array.isArray(existing.requestedDates) ? (existing.requestedDates as string[]).slice(0, 2).join(", ") : "")
-          : "";
-        await storage.createMessage({
-          conversationId: coordConvo.id,
-          senderUserId: userId,
-          type: "showing_request",
-          content: `Showing request from ${agentName} for a buyer — Requested dates: ${dateStr}${existing.notes ? ` — ${existing.notes}` : ""}`,
-          metadata: { showingRequestId: id, requestedDates: existing.requestedDates },
-        });
-
-        await storage.createNotification({
-          userId: listingAgentId,
-          type: "showing_request",
-          title: `New showing request from ${agentName}`,
-          message: `Requested dates: ${dateStr}`,
-          propertyId: updated.propertyId,
-          linkUrl: `/conversations/${coordConvo.id}`,
-          read: false,
-          archived: false,
-        });
-        trySendNotificationEmail(listingAgentId, "showing_request", `New showing request from ${agentName}`, `Requested dates: ${dateStr}`, `/conversations/${coordConvo.id}`, updated.propertyId, coordConvo.id);
-
-        const buyerConvoId = updated.conversationId;
-        if (buyerConvoId) {
-          await storage.createMessage({
-            conversationId: buyerConvoId,
-            senderUserId: userId,
-            type: "system",
-            content: "Your agent is coordinating with the listing agent for this showing",
-          });
-        }
-      }
-
       if (isListingAgent && !isAssignedAgent) {
-        const biRecord = await db.select().from(buyerInterest)
-          .where(and(eq(buyerInterest.propertyId, updated.propertyId), eq(buyerInterest.buyerUserId, updated.buyerUserId)))
-          .limit(1);
-        const coordConvoId = biRecord[0]?.agentCoordinationConversationId;
-        const buyerConvoId = biRecord[0]?.buyerConversationId || updated.conversationId;
-        if (coordConvoId) {
-          await storage.createMessage({
-            conversationId: coordConvoId,
-            senderUserId: userId,
-            type: "system",
-            content: statusMsg,
-          });
-        }
-        const sender = await storage.getUser(userId);
-        const senderName = sender?.firstName || "Listing Agent";
-        const notificationType = status === "confirmed" ? "showing_confirmed" : status === "declined" ? "showing_declined" : "showing_update";
-        const notifTitle = `Showing ${(status || "").replace(/_/g, " ")}`;
-        const notifMsg = confirmedDate ? `Confirmed for ${new Date(confirmedDate).toLocaleDateString()}` : `Showing has been ${(status || "").replace(/_/g, " ")}`;
-
-        await storage.createNotification({
-          userId: updated.agentUserId,
-          type: notificationType,
-          title: `${notifTitle} by ${senderName}`,
-          message: notifMsg,
-          propertyId: updated.propertyId,
-          linkUrl: coordConvoId ? `/conversations/${coordConvoId}` : undefined,
-          read: false,
-          archived: false,
-        });
-        if (coordConvoId) {
-          trySendNotificationEmail(updated.agentUserId, notificationType, `${notifTitle} by ${senderName}`, notifMsg, `/conversations/${coordConvoId}`, updated.propertyId, coordConvoId);
-        }
-
-        if (buyerConvoId && ["confirmed", "declined", "completed"].includes(status)) {
-          await storage.createMessage({
-            conversationId: buyerConvoId,
-            senderUserId: updated.agentUserId,
-            type: "system",
-            content: statusMsg,
-          });
-          await storage.createNotification({
-            userId: updated.buyerUserId,
-            type: notificationType,
-            title: notifTitle,
-            message: notifMsg,
-            propertyId: updated.propertyId,
-            linkUrl: `/conversations/${buyerConvoId}`,
-            read: false,
-            archived: false,
-          });
-          trySendNotificationEmail(updated.buyerUserId, notificationType, notifTitle, notifMsg, `/conversations/${buyerConvoId}`, updated.propertyId, buyerConvoId);
-        }
-      } else {
-        if (updated.conversationId) {
-          await storage.createMessage({
-            conversationId: updated.conversationId,
-            senderUserId: userId,
-            type: "system",
-            content: statusMsg,
-          });
-        }
-        const recipientId = updated.buyerUserId === userId ? updated.agentUserId : updated.buyerUserId;
-        const sender = await storage.getUser(userId);
-        const senderName = sender?.firstName || "Agent";
-        const notificationType = status === "confirmed" ? "showing_confirmed" : status === "declined" ? "showing_declined" : "showing_update";
-        const notifTitle = `Showing ${(status || "").replace(/_/g, " ")} by ${senderName}`;
-        const notifMsg = confirmedDate ? `Confirmed for ${new Date(confirmedDate).toLocaleDateString()}` : `Showing has been ${(status || "").replace(/_/g, " ")}`;
-        await storage.createNotification({
-          userId: recipientId,
-          type: notificationType,
-          title: notifTitle,
-          message: notifMsg,
-          propertyId: updated.propertyId,
-          linkUrl: `/conversations/${updated.conversationId}`,
-          read: false,
-          archived: false,
-        });
-        trySendNotificationEmail(recipientId, notificationType, notifTitle, notifMsg, `/conversations/${updated.conversationId}`, updated.propertyId, updated.conversationId);
-      }
-
-      audit({ req, event: "showing_status_changed", outcome: "success", userId, propertyId: updated.propertyId, resourceType: "showing_request", resourceId: String(id), metadata: { from: currentStatus, to: status, role: isListingAgent ? "listing_agent" : isAssignedAgent ? "assigned_agent" : "buyer" } });
-
-      if (isListingAgent && !isAssignedAgent) {
-        const { buyerUserId: _b, ...sanitizedUpdated } = updated as any;
+        const { buyerUserId: _b, ...sanitizedUpdated } = result as any;
         res.json({ ...sanitizedUpdated, buyerUserId: "[redacted]" });
       } else {
-        res.json(updated);
+        res.json(result);
       }
     } catch (err) {
-      audit({ req, event: "showing_status_changed", outcome: "failure", userId: req.user?.claims?.sub, error: (err as Error).message });
-      res.status(500).json({ message: "Internal Server Error", requestId: (req as any).requestId });
+      res.status(500).json({ message: "Internal Server Error", requestId: req.requestId });
     }
   });
 

@@ -666,6 +666,7 @@ export const auditEvents = pgTable("audit_events", {
   resourceId: text("resource_id"),
   requestId: text("request_id"),
   outcome: text("outcome"),
+  errorMessage: text("error_message"),
   metadata: jsonb("metadata"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
