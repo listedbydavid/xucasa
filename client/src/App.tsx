@@ -52,6 +52,7 @@ import Buyers from "@/pages/Buyers";
 import Admin from "@/pages/Admin";
 import HomeReport from "@/pages/HomeReport";
 import AuthPage from "@/pages/AuthPage";
+import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import ConversationThread from "@/pages/ConversationThread";
 import Onboarding from "@/pages/Onboarding";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
@@ -70,6 +71,7 @@ function Router() {
       <Route path="/swipe" component={Swipe} />
       <Route path="/property/:id" component={PropertyDetail} />
       <Route path="/auth" component={AuthPage} />
+      <Route path="/reset-password" component={ResetPasswordPage} />
       <Route path="/privacy" component={PrivacyPolicy} />
       <Route path="/terms" component={TermsOfService} />
       <Route path="/onboarding">{() => <AuthOnlyRoute component={Onboarding} />}</Route>

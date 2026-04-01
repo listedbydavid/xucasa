@@ -361,3 +361,60 @@ export async function sendTestEmail(to: string, recipientName?: string): Promise
     return { sent: false, reason: err.message };
   }
 }
+
+export async function sendPasswordResetEmail(to: string, resetToken: string, recipientName?: string): Promise<{ sent: boolean; reason?: string }> {
+  const configured = await isEmailConfigured();
+  if (!configured) {
+    return { sent: false, reason: "Email service not configured" };
+  }
+
+  try {
+    const baseUrl = process.env.REPLIT_DEV_DOMAIN
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+      : process.env.REPL_SLUG
+        ? `https://${process.env.REPL_SLUG}.repl.co`
+        : "https://xucasa.com";
+    const resetLink = `${baseUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
+
+    const subject = `Reset your password \u2014 ${BRAND.name}`;
+    const greeting = recipientName ? `Hi ${escapeHtml(recipientName)},` : "Hi,";
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:32px 16px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <tr><td style="background:linear-gradient(135deg,${BRAND.primaryColor},#1d4ed8);padding:24px 32px;">
+          <table width="100%"><tr>
+            <td><span style="font-size:24px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">${BRAND.logoText}</span></td>
+            <td align="right"><span style="font-size:12px;color:rgba(255,255,255,0.8);">${BRAND.tagline}</span></td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#18181b;line-height:1.3;">Password Reset Request</h1>
+          <p style="margin:0 0 16px;color:#71717a;font-size:14px;">${greeting}</p>
+          <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.6;">We received a request to reset your password. Click the button below to set a new password.</p>
+          <a href="${resetLink}" style="display:inline-block;padding:12px 24px;background-color:${BRAND.primaryColor};color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:16px;">Reset Password</a>
+          <p style="margin:16px 0 0;color:#71717a;font-size:13px;line-height:1.5;">This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email.</p>
+          <p style="margin:8px 0 0;color:#a1a1aa;font-size:12px;">If the button doesn't work, copy and paste this URL into your browser:<br><span style="word-break:break-all;">${resetLink}</span></p>
+        </td></tr>
+        <tr><td style="padding:24px 32px;border-top:1px solid #e4e4e7;background-color:#fafafa;">
+          <p style="margin:0;font-size:12px;color:#a1a1aa;">This email was sent by ${BRAND.name}. If you didn't request this, no action is needed.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    await sendViaGmail(to, subject, html);
+    console.log(`[Email] Password reset email sent to ${to}`);
+    return { sent: true };
+  } catch (err: any) {
+    console.error(`[Email] Password reset email failed:`, err.message);
+    resetEmailConfigCache();
+    return { sent: false, reason: err.message };
+  }
+}

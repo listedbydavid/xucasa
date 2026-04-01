@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { Mail, Lock, User, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff, Loader2, ArrowLeft, CheckCircle } from "lucide-react";
 import { resolveUserDestination } from "@shared/routing";
 
 function GoogleIcon({ className }: { className?: string }) {
@@ -18,13 +18,14 @@ function GoogleIcon({ className }: { className?: string }) {
 export default function AuthPage() {
   const { user, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -36,9 +37,22 @@ export default function AuthPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setSuccess("");
     setLoading(true);
 
     try {
+      if (mode === "forgot") {
+        const res = await fetch("/api/auth/forgot-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        });
+        const data = await res.json();
+        setSuccess(data.message || "If an account with that email exists, we've sent reset instructions.");
+        setLoading(false);
+        return;
+      }
+
       const endpoint = mode === "register" ? "/api/auth/register" : "/api/auth/login";
       const body: any = { email, password };
       if (mode === "register") {
@@ -76,152 +90,217 @@ export default function AuthPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-display font-bold text-foreground" data-testid="text-auth-title">
-            {mode === "login" ? "Welcome back" : "Create your account"}
+            {mode === "forgot" ? "Reset your password" : mode === "login" ? "Welcome back" : "Create your account"}
           </h1>
           <p className="text-muted-foreground mt-2">
-            {mode === "login"
+            {mode === "forgot"
+              ? "Enter your email and we'll send you reset instructions"
+              : mode === "login"
               ? "Sign in to access your saved homes and searches"
               : "Join xucasa to save homes, track searches, and more"}
           </p>
         </div>
 
         <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-5">
-          <a
-            href="/api/auth/google"
-            className="w-full flex items-center justify-center gap-3 bg-white dark:bg-background border-2 border-border hover:border-primary/30 text-foreground py-3 rounded-xl font-semibold text-sm hover:shadow-md active:scale-[.98] transition-all"
-            data-testid="button-google-signin"
-          >
-            <GoogleIcon className="w-5 h-5" />
-            Continue with Google
-          </a>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-card px-3 text-muted-foreground font-medium">or</span>
-            </div>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === "register" && (
-              <div className="grid grid-cols-2 gap-3">
+          {mode === "forgot" ? (
+            <>
+              <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <input
-                    type="text"
-                    value={firstName}
-                    onChange={e => setFirstName(e.target.value)}
-                    placeholder="First name"
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="Email address"
+                    required
                     className={inputClass}
-                    data-testid="input-auth-first-name"
+                    data-testid="input-forgot-email"
                   />
                 </div>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    type="text"
-                    value={lastName}
-                    onChange={e => setLastName(e.target.value)}
-                    placeholder="Last name"
-                    className={inputClass}
-                    data-testid="input-auth-last-name"
-                  />
+
+                {error && (
+                  <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2" data-testid="text-auth-error">
+                    {error}
+                  </p>
+                )}
+
+                {success && (
+                  <div className="flex items-start gap-2 text-sm text-green-700 bg-green-50 dark:text-green-400 dark:bg-green-900/20 rounded-lg px-3 py-2" data-testid="text-forgot-success">
+                    <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>{success}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading || !email || !!success}
+                  className="w-full py-3 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  data-testid="button-forgot-submit"
+                >
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Send reset instructions
+                </button>
+              </form>
+
+              <button
+                onClick={() => { setMode("login"); setError(""); setSuccess(""); }}
+                className="flex items-center gap-1 text-sm text-primary font-semibold hover:underline mx-auto"
+                data-testid="button-back-to-login"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Back to sign in
+              </button>
+            </>
+          ) : (
+            <>
+              <a
+                href="/api/auth/google"
+                className="w-full flex items-center justify-center gap-3 bg-white dark:bg-background border-2 border-border hover:border-primary/30 text-foreground py-3 rounded-xl font-semibold text-sm hover:shadow-md active:scale-[.98] transition-all"
+                data-testid="button-google-signin"
+              >
+                <GoogleIcon className="w-5 h-5" />
+                Continue with Google
+              </a>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-card px-3 text-muted-foreground font-medium">or</span>
                 </div>
               </div>
-            )}
 
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="Email address"
-                required
-                className={inputClass}
-                data-testid="input-auth-email"
-              />
-            </div>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {mode === "register" && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <input
+                        type="text"
+                        value={firstName}
+                        onChange={e => setFirstName(e.target.value)}
+                        placeholder="First name"
+                        className={inputClass}
+                        data-testid="input-auth-first-name"
+                      />
+                    </div>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <input
+                        type="text"
+                        value={lastName}
+                        onChange={e => setLastName(e.target.value)}
+                        placeholder="Last name"
+                        className={inputClass}
+                        data-testid="input-auth-last-name"
+                      />
+                    </div>
+                  </div>
+                )}
 
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder={mode === "register" ? "Create a password (6+ chars)" : "Password"}
-                required
-                minLength={6}
-                className={`${inputClass} pr-10`}
-                data-testid="input-auth-password"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                data-testid="button-toggle-password"
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="Email address"
+                    required
+                    className={inputClass}
+                    data-testid="input-auth-email"
+                  />
+                </div>
 
-            {mode === "login" && (
-              <label className="flex items-center gap-2 cursor-pointer select-none" data-testid="label-remember-me">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={e => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary accent-primary"
-                  data-testid="input-remember-me"
-                />
-                <span className="text-sm text-muted-foreground">Remember me for 30 days</span>
-              </label>
-            )}
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder={mode === "register" ? "Create a password (8+ chars, upper, lower, digit)" : "Password"}
+                    required
+                    minLength={mode === "register" ? 8 : 6}
+                    className={`${inputClass} pr-10`}
+                    data-testid="input-auth-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    data-testid="button-toggle-password"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
 
-            {error && (
-              <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2" data-testid="text-auth-error">
-                {error}
+                {mode === "login" && (
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 cursor-pointer select-none" data-testid="label-remember-me">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={e => setRememberMe(e.target.checked)}
+                        className="w-4 h-4 rounded border-border text-primary focus:ring-primary accent-primary"
+                        data-testid="input-remember-me"
+                      />
+                      <span className="text-sm text-muted-foreground">Remember me</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => { setMode("forgot"); setError(""); setSuccess(""); }}
+                      className="text-sm text-primary font-semibold hover:underline"
+                      data-testid="button-forgot-password"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                )}
+
+                {error && (
+                  <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2" data-testid="text-auth-error">
+                    {error}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loading || !email || !password}
+                  className="w-full py-3 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  data-testid="button-auth-submit"
+                >
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {mode === "login" ? "Sign in" : "Create account"}
+                </button>
+              </form>
+
+              <p className="text-center text-sm text-muted-foreground">
+                {mode === "login" ? (
+                  <>
+                    Don't have an account?{" "}
+                    <button
+                      onClick={() => { setMode("register"); setError(""); }}
+                      className="text-primary font-semibold hover:underline"
+                      data-testid="button-switch-to-register"
+                    >
+                      Sign up
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    Already have an account?{" "}
+                    <button
+                      onClick={() => { setMode("login"); setError(""); }}
+                      className="text-primary font-semibold hover:underline"
+                      data-testid="button-switch-to-login"
+                    >
+                      Sign in
+                    </button>
+                  </>
+                )}
               </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading || !email || !password}
-              className="w-full py-3 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              data-testid="button-auth-submit"
-            >
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {mode === "login" ? "Sign in" : "Create account"}
-            </button>
-          </form>
-
-          <p className="text-center text-sm text-muted-foreground">
-            {mode === "login" ? (
-              <>
-                Don't have an account?{" "}
-                <button
-                  onClick={() => { setMode("register"); setError(""); }}
-                  className="text-primary font-semibold hover:underline"
-                  data-testid="button-switch-to-register"
-                >
-                  Sign up
-                </button>
-              </>
-            ) : (
-              <>
-                Already have an account?{" "}
-                <button
-                  onClick={() => { setMode("login"); setError(""); }}
-                  className="text-primary font-semibold hover:underline"
-                  data-testid="button-switch-to-login"
-                >
-                  Sign in
-                </button>
-              </>
-            )}
-          </p>
+            </>
+          )}
         </div>
       </div>
     </div>

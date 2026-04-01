@@ -60,6 +60,7 @@ Preferred communication style: Simple, everyday language.
 - **Roles**: Supports Admin and Agent roles.
 - **Rate Limiting**: `express-rate-limit` on register (5/15min), login (10/15min), and onboarding (10/15min) endpoints.
 - **Validation**: Strict Zod schemas for register/login; passwords require 8+ chars with uppercase, lowercase, and digit.
+- **Password Reset Flow**: `POST /api/auth/forgot-password` (rate-limited, no user enumeration — always returns 200), `POST /api/auth/reset-password` (token validation, expiry, strong password enforcement). Tokens are SHA-256 hashed in DB (`password_reset_tokens` table), 1-hour expiry, single-use. Branded HTML email sent via Gmail API (`sendPasswordResetEmail`). Frontend: "Forgot password?" on login form, `/reset-password?token=...` page with real-time password strength checklist.
 - **Production Email Blocking**: Configurable blocked email patterns list in `server/authMiddleware.ts`.
 - **Account Source Tracking**: `accountSource` field on users (real/test/seed/e2e) for filtering test accounts.
 - **Audit Logging**: All auth attempts logged with IP, email, action, result, and timestamp.
@@ -70,8 +71,9 @@ Preferred communication style: Simple, everyday language.
 
 - **Structured Logger**: `server/logger.ts` emits JSON-formatted log entries with level, event, timestamp, and request context.
 - **Request Correlation**: `server/requestId.ts` middleware assigns UUID correlation IDs to every request (uses `x-request-id` header or generates new).
-- **Audit Event Tracking**: `server/auditLog.ts` provides `audit()` for fire-and-forget logging and `executeWithAudit<T>()` generic wrapper that auto-handles success/failure audit logging and DB persistence. Handler returns `{ data, auditOverrides? }`. All critical mutation routes use `executeWithAudit`, eliminating manual try/catch audit duplication.
-- **Instrumented Events**: `auth_login_success/failure`, `auth_register_success`, `onboarding_completed`, `mode_switched`, `swipe_interest_created`, `reverse_offer_created`, `buyer_offer_response`, `buyer_interest_upserted`, `conversation_created`, `coordination_thread_created`, `message_sent`, `showing_request_created`, `showing_status_changed`, `authorization_denied`, `unexpected_server_error`.
+- **Audit Event Tracking**: `server/auditLog.ts` provides `audit()` for fire-and-forget logging and `executeWithAudit<T>()` generic wrapper that auto-handles success/failure audit logging and DB persistence. Handler returns `{ data, auditOverrides? }`. All critical mutation routes use `executeWithAudit`, eliminating manual try/catch audit duplication. Includes 2x retry with 200ms backoff on persistence failures, `validateAuditEvent()` shape checking, and structured `audit_retry_attempt`/`audit_final_failure`/`audit_validation_failed` health events.
+- **Instrumented Events**: `auth_login_success/failure`, `auth_register_success`, `forgot_password_requested`, `forgot_password_email_sent`, `password_reset_completed`, `password_reset_token_invalid/expired`, `onboarding_completed`, `mode_switched`, `swipe_interest_created`, `reverse_offer_created`, `buyer_offer_response`, `buyer_interest_upserted`, `conversation_created`, `coordination_thread_created`, `message_sent`, `showing_request_created`, `showing_status_changed`, `authorization_denied`, `unexpected_server_error`.
+- **Audit Scripts**: `scripts/find-unaudited-mutations.ts` scans all server route files for POST/PUT/PATCH/DELETE handlers missing `audit()` or `executeWithAudit` calls. `scripts/verify-audit-integrity.ts` checks DB integrity (null events, invalid outcomes, orphaned user refs, event distribution, system health events).
 - **Admin Audit Dashboard**: "Audit Log" tab in Admin panel with stats (total events, failures, success rate), event type filter, and event detail cards. API: `GET /api/admin/audit-events`, `GET /api/admin/audit-events/failures`, `GET /api/admin/audit-events/stats`.
 
 ## External Dependencies

@@ -3,6 +3,9 @@ import { storage } from "./storage";
 import { randomUUID } from "crypto";
 import type { InsertAuditEvent } from "@shared/schema";
 
+const AUDIT_RETRY_COUNT = 2;
+const AUDIT_RETRY_DELAY_MS = 200;
+
 interface AuditParams {
   req?: any;
   event: string;
@@ -16,6 +19,73 @@ interface AuditParams {
   resourceId?: string | null;
   error?: string | null;
   metadata?: Record<string, unknown> | null;
+}
+
+function validateAuditEvent(event: InsertAuditEvent): string[] {
+  const errors: string[] = [];
+  if (!event.eventType || typeof event.eventType !== "string" || event.eventType.trim() === "") {
+    errors.push("eventType is required and must be a non-empty string");
+  }
+  if (!event.outcome || !["success", "failure"].includes(event.outcome)) {
+    errors.push("outcome must be 'success' or 'failure'");
+  }
+  if (event.outcome === "failure" && event.errorMessage && typeof event.errorMessage !== "string") {
+    errors.push("errorMessage must be a string when provided");
+  }
+  if (event.metadata && typeof event.metadata !== "object") {
+    errors.push("metadata must be an object when provided");
+  }
+  return errors;
+}
+
+async function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function persistAuditWithRetry(auditEvent: InsertAuditEvent, requestId: string | null): Promise<void> {
+  const validationErrors = validateAuditEvent(auditEvent);
+  if (validationErrors.length > 0) {
+    logger.error({
+      event: "audit_validation_failed",
+      errors: validationErrors,
+      auditEventType: auditEvent.eventType,
+      requestId,
+    });
+    return;
+  }
+
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= AUDIT_RETRY_COUNT; attempt++) {
+    try {
+      await storage.createAuditEvent(auditEvent);
+      return;
+    } catch (err) {
+      lastError = err as Error;
+
+      if (attempt < AUDIT_RETRY_COUNT) {
+        logger.warn({
+          event: "audit_retry_attempt",
+          attempt: attempt + 1,
+          maxRetries: AUDIT_RETRY_COUNT,
+          auditEventType: auditEvent.eventType,
+          error: lastError.message,
+          requestId,
+        });
+        await sleep(AUDIT_RETRY_DELAY_MS * (attempt + 1));
+      }
+    }
+  }
+
+  logger.error({
+    event: "audit_final_failure",
+    auditEventType: auditEvent.eventType,
+    outcome: auditEvent.outcome,
+    actorUserId: auditEvent.actorUserId,
+    error: lastError?.message || "unknown",
+    retriesExhausted: AUDIT_RETRY_COUNT,
+    requestId,
+  });
 }
 
 export async function audit(params: AuditParams): Promise<void> {
@@ -42,29 +112,22 @@ export async function audit(params: AuditParams): Promise<void> {
     logger.info(logCtx);
   }
 
-  try {
-    const auditEvent: InsertAuditEvent = {
-      eventType: params.event,
-      actorUserId: params.userId || reqCtx.userId || null,
-      actorRole: params.role || null,
-      propertyId: params.propertyId || null,
-      conversationId: params.conversationId || null,
-      buyerInterestId: params.buyerInterestId || null,
-      resourceType: params.resourceType || null,
-      resourceId: params.resourceId || null,
-      requestId,
-      outcome: params.outcome,
-      errorMessage: params.error || null,
-      metadata: params.metadata || null,
-    };
-    await storage.createAuditEvent(auditEvent);
-  } catch (err) {
-    logger.error({
-      event: "audit_persist_failed",
-      error: (err as Error).message,
-      requestId,
-    });
-  }
+  const auditEvent: InsertAuditEvent = {
+    eventType: params.event,
+    actorUserId: params.userId || reqCtx.userId || null,
+    actorRole: params.role || null,
+    propertyId: params.propertyId || null,
+    conversationId: params.conversationId || null,
+    buyerInterestId: params.buyerInterestId || null,
+    resourceType: params.resourceType || null,
+    resourceId: params.resourceId || null,
+    requestId,
+    outcome: params.outcome,
+    errorMessage: params.error || null,
+    metadata: params.metadata || null,
+  };
+
+  await persistAuditWithRetry(auditEvent, requestId);
 }
 
 export interface AuditContext {
