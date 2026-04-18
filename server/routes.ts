@@ -1127,9 +1127,9 @@ export async function registerRoutes(
 
   // Agent verification
   app.post("/api/agent/verify", isAuthenticated, async (req: any, res) => {
+    const { licenseNumber, licenseState, association, brokerageName } = req.body || {};
     try {
       const userId = req.user.claims.sub;
-      const { licenseNumber, licenseState, association, brokerageName } = req.body;
 
       if (!licenseNumber || typeof licenseNumber !== "string" || licenseNumber.trim().length < 2) {
         return res.status(400).json({ message: "License number is required" });
@@ -1147,7 +1147,17 @@ export async function registerRoutes(
       return res.json(result);
     } catch (err: any) {
       console.error("Agent verify error:", err);
-      await audit({ req, event: "agent_verify_failed", outcome: "failure", userId: req.user?.claims?.sub, errorMessage: err.message });
+      await audit({
+        req,
+        event: "agent_verify_failed",
+        outcome: "failure",
+        userId: req.user?.claims?.sub,
+        errorMessage: err.message,
+        metadata: {
+          licenseNumber: typeof licenseNumber === "string" ? licenseNumber.trim() : undefined,
+          licenseState: licenseState || undefined,
+        },
+      });
       res.status(500).json({ message: "Failed to verify agent license" });
     }
   });
