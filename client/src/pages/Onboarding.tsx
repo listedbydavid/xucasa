@@ -133,8 +133,11 @@ export default function Onboarding() {
       const data: AgentVerifyResult = await res.json();
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       setAgentVerifyResult(data);
-    } catch {
-      toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" });
+    } catch (err: any) {
+      setAgentVerifyResult({
+        verified: false,
+        error: err?.message || "Verification request failed. Please try again.",
+      });
     } finally {
       setLoading(false);
     }
