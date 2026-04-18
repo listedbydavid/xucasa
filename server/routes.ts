@@ -1077,8 +1077,20 @@ export async function registerRoutes(
       });
 
       return res.json(verifyResult);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Onboarding agent error:", err);
+      await audit({
+        req,
+        event: "agent_verify_failed",
+        outcome: "failure",
+        userId,
+        errorMessage: err?.message,
+        metadata: {
+          licenseNumber: parsed.data.licenseNumber.trim(),
+          licenseState: parsed.data.licenseState,
+          source: "onboarding",
+        },
+      });
       res.status(500).json({ message: "Failed to save agent data", requestId: req.requestId });
     }
   });
