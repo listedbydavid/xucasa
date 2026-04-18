@@ -67,13 +67,22 @@ export const buyerInterest = pgTable("buyer_interest", {
 
 ## Post-Merge Flow
 
-The `scripts/post-merge.sh` script runs automatically after task merges:
+`scripts/post-merge.sh` runs automatically after task merges:
 
-1. `npm install` — installs any new dependencies
-2. `npx drizzle-kit push --force` — applies schema changes non-interactively
-3. Database connectivity verification — confirms the database is reachable
+1. `npm install` — installs dependencies
+2. `drizzle-kit push --force` with a 45-second hard timeout and closed stdin
+   - If it completes cleanly → done
+   - If it times out (interactive prompt detected) → `scripts/apply-safe-constraints.mjs` runs first to pre-apply constraints via direct SQL, then drizzle-kit push retries
+3. Database connectivity verification
 
-If any step fails, the script exits with a non-zero code and the merge setup is marked as failed.
+### Adding a new constraint that will prompt interactively
+
+Before merging any schema change that adds `.unique()`, `.notNull()`, or changes a column type on a table with existing data:
+
+1. Add an entry to the `CONSTRAINTS` array in `scripts/apply-safe-constraints.mjs`
+2. Test locally: `node scripts/apply-safe-constraints.mjs`
+3. Then test: `npx drizzle-kit push --force`
+4. Merge — post-merge will be clean
 
 ## Recovery from Schema Drift
 
