@@ -44,6 +44,10 @@ const CONSTRAINTS = [
   {
     type: 'sql',
     description: 'buyer_interest composite unique index',
+    existsCheck: {
+      sql: `SELECT 1 FROM pg_indexes WHERE indexname = $1`,
+      params: ['buyer_interest_property_buyer_idx'],
+    },
     sql: `
       CREATE UNIQUE INDEX IF NOT EXISTS buyer_interest_property_buyer_idx
       ON buyer_interest (property_id, buyer_user_id);
@@ -141,6 +145,13 @@ async function applyConstraints() {
         console.log(`  ✓ Applied NOT NULL: ${entry.table}.${entry.column}`);
 
       } else if (entry.type === 'sql') {
+        if (entry.existsCheck) {
+          const exists = await client.query(entry.existsCheck.sql, entry.existsCheck.params || []);
+          if (exists.rows.length > 0) {
+            console.log(`  ✓ Already exists: ${entry.description}`);
+            continue;
+          }
+        }
         await client.query(entry.sql);
         console.log(`  ✓ Applied: ${entry.description}`);
       }
