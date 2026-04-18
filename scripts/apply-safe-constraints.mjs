@@ -110,6 +110,36 @@ async function applyConstraints() {
         `);
         console.log(`  ✓ Applied partial index: ${entry.constraint}`);
 
+      } else if (entry.type === 'not_null') {
+        const colInfo = await client.query(`
+          SELECT is_nullable FROM information_schema.columns
+          WHERE table_name = $1 AND column_name = $2
+        `, [entry.table, entry.column]);
+
+        if (colInfo.rows.length === 0) {
+          console.error(`  ✗ Cannot apply NOT NULL on ${entry.table}.${entry.column}: column does not exist`);
+          process.exit(1);
+        }
+
+        if (colInfo.rows[0].is_nullable === 'NO') {
+          console.log(`  ✓ Already NOT NULL: ${entry.table}.${entry.column}`);
+          continue;
+        }
+
+        const nulls = await client.query(`
+          SELECT count(*) AS cnt FROM ${entry.table} WHERE ${entry.column} IS NULL
+        `);
+
+        if (parseInt(nulls.rows[0].cnt, 10) > 0) {
+          console.error(`  ✗ Cannot apply NOT NULL on ${entry.table}.${entry.column}: ${nulls.rows[0].cnt} null rows exist`);
+          process.exit(1);
+        }
+
+        await client.query(`
+          ALTER TABLE ${entry.table} ALTER COLUMN ${entry.column} SET NOT NULL
+        `);
+        console.log(`  ✓ Applied NOT NULL: ${entry.table}.${entry.column}`);
+
       } else if (entry.type === 'sql') {
         await client.query(entry.sql);
         console.log(`  ✓ Applied: ${entry.description}`);
