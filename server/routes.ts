@@ -1040,31 +1040,45 @@ export async function registerRoutes(
     });
     const parsed = agentSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Invalid agent data" });
+    if (!/^[A-Za-z0-9\-. ]{2,30}$/.test(parsed.data.licenseNumber.trim())) {
+      return res.status(400).json({ message: "License number contains invalid characters" });
+    }
 
     try {
-      const result = await executeWithAudit(
-        { req, event: "onboarding_completed", userId, metadata: { intent: "agent" } },
-        async () => {
-          const { authStorage } = await import("./replit_integrations/auth/storage");
-          await authStorage.updateAgentInfo(userId, {
-            licenseNumber: parsed.data.licenseNumber,
-            licenseState: parsed.data.licenseState,
-            brokerageName: parsed.data.brokerageName || null,
-            agentMlsId: parsed.data.mlsId || null,
-            association: parsed.data.association || null,
-          });
+      const { authStorage } = await import("./replit_integrations/auth/storage");
+      const license = parsed.data.licenseNumber.trim();
 
-          const updated = await authStorage.updateOnboarding(userId, {
-            agentProfileCompleted: true,
-            agentVerificationStatus: "pending",
-            onboardingCompleted: true,
-            currentMode: "agent",
-          });
-          return { data: updated };
-        }
-      );
-      res.json(result);
+      await authStorage.updateAgentInfo(userId, {
+        licenseNumber: license,
+        licenseState: parsed.data.licenseState,
+        brokerageName: parsed.data.brokerageName || null,
+        agentMlsId: parsed.data.mlsId || null,
+        association: parsed.data.association || null,
+      });
+      await authStorage.updateOnboarding(userId, {
+        agentProfileCompleted: true,
+        onboardingCompleted: true,
+        currentMode: "agent",
+      });
+
+      const verifyResult = await runAgentVerificationFlow(req, userId, {
+        licenseNumber: license,
+        licenseState: parsed.data.licenseState || null,
+        association: parsed.data.association || null,
+        brokerageName: parsed.data.brokerageName || null,
+      });
+
+      await audit({
+        req,
+        event: "onboarding_completed",
+        outcome: "success",
+        userId,
+        metadata: { intent: "agent", verified: verifyResult.verified },
+      });
+
+      return res.json(verifyResult);
     } catch (err) {
+      console.error("Onboarding agent error:", err);
       res.status(500).json({ message: "Failed to save agent data", requestId: req.requestId });
     }
   });
@@ -1114,7 +1128,6 @@ export async function registerRoutes(
   // Agent verification
   app.post("/api/agent/verify", isAuthenticated, async (req: any, res) => {
     try {
-      const { authStorage } = await import("./replit_integrations/auth/storage");
       const userId = req.user.claims.sub;
       const { licenseNumber, licenseState, association, brokerageName } = req.body;
 
@@ -1125,46 +1138,16 @@ export async function registerRoutes(
         return res.status(400).json({ message: "License number contains invalid characters" });
       }
 
-      const result = await verifyAgentLicense(licenseNumber.trim(), licenseState || undefined);
-
-      if (result.verified) {
-        const updated = await authStorage.updateAgentInfo(userId, {
-          licenseNumber: licenseNumber.trim(),
-          licenseState: licenseState || null,
-          association: association || null,
-          brokerageName: result.officeName || brokerageName || null,
-          agentVerified: true,
-          agentVerifiedAt: new Date(),
-          agentMlsId: result.memberKey || null,
-          role: "agent",
-        });
-        await audit({ req, event: "agent_verified", outcome: "success", userId, metadata: { licenseNumber: licenseNumber.trim(), licenseState } });
-        return res.json({
-          verified: true,
-          user: updated,
-          mlsInfo: {
-            memberName: result.memberName,
-            officeName: result.officeName,
-            memberEmail: result.memberEmail,
-          },
-        });
-      } else {
-        await authStorage.updateAgentInfo(userId, {
-          licenseNumber: licenseNumber.trim(),
-          licenseState: licenseState || null,
-          association: association || null,
-          brokerageName: brokerageName || null,
-          agentVerified: false,
-        });
-        await audit({ req, event: "agent_verify_failed", outcome: "failure", userId, metadata: { licenseNumber: licenseNumber.trim(), error: result.error } });
-        return res.json({
-          verified: false,
-          error: result.error || "Could not verify agent license",
-        });
-      }
+      const result = await runAgentVerificationFlow(req, userId, {
+        licenseNumber: licenseNumber.trim(),
+        licenseState: licenseState || null,
+        association: association || null,
+        brokerageName: brokerageName || null,
+      });
+      return res.json(result);
     } catch (err: any) {
       console.error("Agent verify error:", err);
-      await audit({ req, event: "agent_verified", outcome: "failure", userId: req.user?.claims?.sub, errorMessage: err.message });
+      await audit({ req, event: "agent_verify_failed", outcome: "failure", userId: req.user?.claims?.sub, errorMessage: err.message });
       res.status(500).json({ message: "Failed to verify agent license" });
     }
   });
@@ -4524,6 +4507,64 @@ export async function registerRoutes(
   });
 
   return httpServer;
+}
+
+async function runAgentVerificationFlow(
+  req: any,
+  userId: string,
+  input: { licenseNumber: string; licenseState: string | null; association: string | null; brokerageName: string | null },
+): Promise<{ verified: boolean; user?: any; mlsInfo?: { memberName?: string; officeName?: string; memberEmail?: string }; error?: string }> {
+  const result = await verifyAgentLicense(input.licenseNumber, input.licenseState || undefined);
+
+  if (result.verified) {
+    const updated = await authStorage.updateAgentInfo(userId, {
+      licenseNumber: input.licenseNumber,
+      licenseState: input.licenseState,
+      association: input.association,
+      brokerageName: result.officeName || input.brokerageName,
+      agentVerified: true,
+      agentVerifiedAt: new Date(),
+      agentMlsId: result.memberKey || null,
+      role: "agent",
+      agentVerificationStatus: "verified",
+    });
+    await audit({
+      req,
+      event: "agent_verified",
+      outcome: "success",
+      userId,
+      metadata: { licenseNumber: input.licenseNumber, licenseState: input.licenseState, memberKey: result.memberKey },
+    });
+    return {
+      verified: true,
+      user: updated,
+      mlsInfo: {
+        memberName: result.memberName,
+        officeName: result.officeName,
+        memberEmail: result.memberEmail,
+      },
+    };
+  }
+
+  await authStorage.updateAgentInfo(userId, {
+    licenseNumber: input.licenseNumber,
+    licenseState: input.licenseState,
+    association: input.association,
+    brokerageName: input.brokerageName,
+    agentVerified: false,
+    agentVerificationStatus: "failed",
+  });
+  await audit({
+    req,
+    event: "agent_verify_failed",
+    outcome: "failure",
+    userId,
+    metadata: { licenseNumber: input.licenseNumber, licenseState: input.licenseState, error: result.error },
+  });
+  return {
+    verified: false,
+    error: result.error || "Could not verify agent license",
+  };
 }
 
 async function seedDatabase() {

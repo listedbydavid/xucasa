@@ -7,8 +7,14 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Search, Home, Briefcase, Compass, ArrowRight, ArrowLeft,
   Loader2, MapPin, DollarSign, BedDouble, Bath, Clock, Users,
-  Building, FileText, Hash,
+  Building, FileText, Hash, CheckCircle2, AlertCircle, ShieldCheck,
 } from "lucide-react";
+
+type AgentVerifyResult = {
+  verified: boolean;
+  mlsInfo?: { memberName?: string; officeName?: string; memberEmail?: string };
+  error?: string;
+};
 
 type Intent = "buyer" | "homeowner" | "agent" | "explorer";
 type Step = "intent" | "buyer" | "homeowner" | "agent";
@@ -114,15 +120,19 @@ export default function Onboarding() {
     }
   };
 
+  const [agentVerifyResult, setAgentVerifyResult] = useState<AgentVerifyResult | null>(null);
+
   const handleAgentSubmit = async () => {
     if (!licenseNumber.trim()) return;
     setLoading(true);
+    setAgentVerifyResult(null);
     try {
-      await apiRequest("POST", "/api/onboarding/agent", {
+      const res = await apiRequest("POST", "/api/onboarding/agent", {
         licenseNumber: licenseNumber.trim(), licenseState, brokerageName, mlsId, association,
       });
+      const data: AgentVerifyResult = await res.json();
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      window.location.href = "/dashboard";
+      setAgentVerifyResult(data);
     } catch {
       toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" });
     } finally {
@@ -487,6 +497,48 @@ export default function Onboarding() {
               />
             </div>
 
+            {agentVerifyResult && (
+              <div
+                className={`rounded-xl p-4 border ${
+                  agentVerifyResult.verified
+                    ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+                    : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800"
+                }`}
+                data-testid={agentVerifyResult.verified ? "agent-verify-success" : "agent-verify-failure"}
+              >
+                {agentVerifyResult.verified ? (
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="font-bold text-green-700 dark:text-green-400">License Verified!</p>
+                      {agentVerifyResult.mlsInfo?.memberName && (
+                        <p className="text-sm text-green-700 dark:text-green-400 mt-1">
+                          Matched: {agentVerifyResult.mlsInfo.memberName}
+                          {agentVerifyResult.mlsInfo.officeName && ` — ${agentVerifyResult.mlsInfo.officeName}`}
+                        </p>
+                      )}
+                      <p className="text-xs text-green-700 dark:text-green-400 mt-2">
+                        You're now a verified agent and can access the Agent Dashboard.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="font-bold text-amber-700 dark:text-amber-400">Could not verify license</p>
+                      <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">
+                        {agentVerifyResult.error || "Your license was not found in the MLS database."}
+                      </p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
+                        Double-check the license number and state, then try again.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex gap-3">
               <button
                 onClick={() => setStep("intent")}
@@ -495,15 +547,26 @@ export default function Onboarding() {
               >
                 <ArrowLeft className="w-4 h-4" /> Back
               </button>
-              <button
-                onClick={handleAgentSubmit}
-                disabled={loading || !licenseNumber.trim()}
-                className="flex-1 flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-xl font-bold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
-                data-testid="button-agent-submit"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-                Submit for Verification
-              </button>
+              {agentVerifyResult?.verified ? (
+                <button
+                  onClick={() => { window.location.href = "/agent"; }}
+                  className="flex-1 flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-xl font-bold text-sm hover:bg-primary/90 transition-colors"
+                  data-testid="button-continue-agent-dashboard"
+                >
+                  <ArrowRight className="w-4 h-4" />
+                  Continue to Agent Dashboard
+                </button>
+              ) : (
+                <button
+                  onClick={handleAgentSubmit}
+                  disabled={loading || !licenseNumber.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-xl font-bold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  data-testid="button-agent-submit"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                  {agentVerifyResult ? "Try Again" : "Submit for Verification"}
+                </button>
+              )}
             </div>
           </div>
         )}

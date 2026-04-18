@@ -2,13 +2,13 @@ import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
-import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar, Send, Eye, ContactRound, MessageSquare } from "lucide-react";
+import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar, Send, Eye, ContactRound, MessageSquare, AlertCircle, Loader2 } from "lucide-react";
 import { ReverseOfferForm } from "@/components/ReverseOfferForm";
 import { IdxSyncPanel } from "@/components/IdxSyncPanel";
 import type { PropertyResponse, CreatePropertyRequest } from "@shared/schema";
 import { Autocomplete } from "@react-google-maps/api";
 import { useGoogleMaps } from "@/hooks/use-google-maps";
-import { useAgentClients, useClientFavorites, useClientSearches, useOpenHouses } from "@/hooks/use-client-dashboard";
+import { useAgentClients, useClientFavorites, useClientSearches, useOpenHouses, useVerifyAgent } from "@/hooks/use-client-dashboard";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -82,6 +82,8 @@ export default function AgentDashboard() {
             </button>
           )}
         </div>
+
+        {!user?.agentVerified && <AgentVerificationBanner user={user} />}
 
         {/* Tab Nav */}
         <div className="flex gap-1 mb-8 border-b border-border overflow-x-auto">
@@ -1559,6 +1561,162 @@ function PropertyFormModal({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Agent Verification Banner ─────────────────────────────────────────────────
+
+function AgentVerificationBanner({ user }: { user: any }) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [licenseNumber, setLicenseNumber] = useState(user?.licenseNumber || "");
+  const [licenseState, setLicenseState] = useState(user?.licenseState || "CA");
+  const [association, setAssociation] = useState(user?.association || "");
+  const [brokerageName, setBrokerageName] = useState(user?.brokerageName || "");
+  const [result, setResult] = useState<any>(null);
+  const { mutate: verifyAgent, isPending } = useVerifyAgent();
+
+  const states = ["CA", "AZ", "NV", "OR", "WA", "TX", "FL", "NY", "CO", "GA", "NC", "VA", "DC"];
+
+  const handleVerify = () => {
+    if (!licenseNumber.trim()) {
+      toast({ title: "License number required", variant: "destructive" });
+      return;
+    }
+    setResult(null);
+    verifyAgent(
+      { licenseNumber: licenseNumber.trim(), licenseState, association, brokerageName },
+      {
+        onSuccess: (data) => {
+          setResult(data);
+          if (data.verified) {
+            toast({ title: "License verified!", description: "You now have full agent access." });
+          }
+        },
+        onError: () => setResult({ verified: false, error: "Verification request failed" }),
+      },
+    );
+  };
+
+  return (
+    <div
+      className="mb-8 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 shadow-sm"
+      data-testid="banner-agent-verification"
+    >
+      <div className="flex items-start gap-4">
+        <div className="w-10 h-10 bg-amber-500/15 rounded-full flex items-center justify-center flex-shrink-0">
+          <AlertCircle className="w-5 h-5 text-amber-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-bold text-amber-900 dark:text-amber-200">Verify your real estate license</h3>
+          <p className="text-sm text-amber-800/80 dark:text-amber-200/80 mt-1">
+            Verification unlocks the confidential MLS panel, listing creation, and buyer-side coordination.
+            {user?.licenseNumber && !editing && (
+              <> We have license <span className="font-semibold">#{user.licenseNumber}</span> ({user.licenseState || "—"}) on file.</>
+            )}
+          </p>
+
+          {editing && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+              <div>
+                <label className="block text-xs font-bold text-amber-900 dark:text-amber-200 mb-1">License Number *</label>
+                <input
+                  value={licenseNumber}
+                  onChange={(e) => setLicenseNumber(e.target.value)}
+                  className="w-full bg-background border-2 border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 text-sm focus:border-amber-500 outline-none"
+                  data-testid="input-banner-license-number"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-amber-900 dark:text-amber-200 mb-1">State *</label>
+                <select
+                  value={licenseState}
+                  onChange={(e) => setLicenseState(e.target.value)}
+                  className="w-full bg-background border-2 border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 text-sm focus:border-amber-500 outline-none"
+                  data-testid="select-banner-license-state"
+                >
+                  {states.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-amber-900 dark:text-amber-200 mb-1">Brokerage</label>
+                <input
+                  value={brokerageName}
+                  onChange={(e) => setBrokerageName(e.target.value)}
+                  className="w-full bg-background border-2 border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 text-sm focus:border-amber-500 outline-none"
+                  data-testid="input-banner-brokerage"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-amber-900 dark:text-amber-200 mb-1">Association</label>
+                <input
+                  value={association}
+                  onChange={(e) => setAssociation(e.target.value)}
+                  className="w-full bg-background border-2 border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 text-sm focus:border-amber-500 outline-none"
+                  data-testid="input-banner-association"
+                />
+              </div>
+            </div>
+          )}
+
+          {result && (
+            <div
+              className={`mt-3 rounded-lg p-3 text-sm ${
+                result.verified
+                  ? "bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800"
+                  : "bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800"
+              }`}
+            >
+              {result.verified ? (
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-bold text-green-700 dark:text-green-400">License Verified!</p>
+                    {result.mlsInfo?.memberName && (
+                      <p className="text-green-700 dark:text-green-400 text-xs mt-1">
+                        Matched: {result.mlsInfo.memberName}
+                        {result.mlsInfo.officeName && ` — ${result.mlsInfo.officeName}`}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-bold text-red-700 dark:text-red-400">Could not verify</p>
+                    <p className="text-red-700 dark:text-red-400 text-xs mt-1">
+                      {result.error || "License not found in MLS database."}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2 mt-4">
+            <button
+              onClick={handleVerify}
+              disabled={isPending}
+              className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
+              data-testid="button-banner-verify-now"
+            >
+              {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+              {isPending ? "Verifying..." : "Verify Now"}
+            </button>
+            {!editing && (
+              <button
+                onClick={() => setEditing(true)}
+                className="px-4 py-2 rounded-lg text-sm font-bold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+                data-testid="button-banner-edit-info"
+              >
+                Edit License Info
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
