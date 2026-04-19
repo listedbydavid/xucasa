@@ -77,6 +77,126 @@ import {
 import { eq, and, desc, asc, sql, gte, gt, count, inArray, isNull } from "drizzle-orm";
 import { authStorage } from "./replit_integrations/auth/storage";
 
+// ---------------------------------------------------------------------------
+// Beacon scoring — pure helpers (exported for unit tests in server/__tests__)
+// ---------------------------------------------------------------------------
+
+export const TIMELINE_SCORES: Record<string, number> = {
+  'asap': 15,
+  'immediately': 15,
+  '1-3 months': 13,
+  '1-2 months': 13,
+  '3-6 months': 9,
+  '6-12 months': 4,
+  '12+ months': 1,
+  'just looking': 0,
+};
+
+const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
+
+/** Hard budget gate: buyer's pre-approval must be >= 95% of listing price. */
+export function minBuyerBudget(price: number): number {
+  return Math.round(price * 0.95);
+}
+
+export function passesBudgetGate(preApprovalAmount: number, price: number): boolean {
+  return preApprovalAmount >= minBuyerBudget(price);
+}
+
+export interface BeaconScoringCriteria {
+  price: number;
+  beds: number;
+  baths: number;
+  sqft: number;
+  city: string;
+  propertyType: string;
+  mustHaves?: string[];
+}
+
+export interface BeaconScoringProfile {
+  preApprovalAmount: number;
+  isPreApproved?: boolean | null;
+  minBeds?: number | null;
+  maxBeds?: number | null;
+  mustHaves?: string[] | null;
+  moveInTimeline?: string | null;
+  createdAt?: Date | string | null;
+}
+
+export interface BeaconScoreResult {
+  matchScore: number;
+  matchTier: 'Strong' | 'Good' | 'Potential';
+  scoreBreakdown: Record<string, number>;
+}
+
+/**
+ * Pure scoring function for a single buyer profile against a listing.
+ * Sum of breakdown components is matchScore (0–100).
+ * Tier: >=70 Strong, >=45 Good, else Potential.
+ */
+export function scoreBuyer(
+  profile: BeaconScoringProfile,
+  criteria: BeaconScoringCriteria,
+  now: number = Date.now(),
+): BeaconScoreResult {
+  const breakdown: Record<string, number> = {};
+
+  // 1. Budget headroom (0–20 pts)
+  const headroom = (profile.preApprovalAmount - criteria.price) / criteria.price;
+  breakdown.budget = Math.min(20, Math.max(0, Math.round(headroom * 100)));
+
+  // 2. Pre-approval status (0–15 pts)
+  breakdown.preApproval = profile.isPreApproved ? 15 : 0;
+
+  // 3. Beds match quality (0–15 pts)
+  if (criteria.beds > 0) {
+    const minB = profile.minBeds ?? 0;
+    const maxB = profile.maxBeds ?? 99;
+    if (criteria.beds >= minB && criteria.beds <= maxB) {
+      const diff = Math.min(
+        Math.abs(criteria.beds - minB),
+        Math.abs(criteria.beds - maxB),
+      );
+      breakdown.beds = diff === 0 ? 15 : diff === 1 ? 8 : 3;
+    } else {
+      breakdown.beds = 0;
+    }
+  } else {
+    breakdown.beds = profile.minBeds == null ? 3 : 0;
+  }
+
+  // 4. Must-haves overlap (0–20 pts).
+  // No-data on either side = neutral 5 pts so empty/null profiles aren't penalized.
+  const listingMustHaves = (criteria.mustHaves ?? []).map(s => s.toLowerCase().trim());
+  const buyerMustHaves = (profile.mustHaves ?? []).map(s => s.toLowerCase().trim());
+  if (listingMustHaves.length > 0 && buyerMustHaves.length > 0) {
+    const overlap = buyerMustHaves.filter(f => listingMustHaves.includes(f)).length;
+    breakdown.mustHaves = Math.round((overlap / buyerMustHaves.length) * 20);
+  } else {
+    breakdown.mustHaves = 5;
+  }
+
+  // 5. Move-in timeline (0–15 pts). En-dash is normalized to ASCII hyphen
+  // here so "3–6 months" scores the same as "3-6 months".
+  // Null/empty/unrecognized timelines get a neutral 5 pts so buyers with
+  // missing data aren't penalized to zero (per Beacon spec).
+  const timelineKey = (profile.moveInTimeline ?? '').toLowerCase().replace(/–/g, '-').trim();
+  breakdown.timeline = TIMELINE_SCORES[timelineKey] ?? 5;
+
+  // 6. Recency (0–15 pts). Full 15 if just created, scales to 0 at 90 days.
+  const createdAt = profile.createdAt ? new Date(profile.createdAt).getTime() : now;
+  const ageMs = Math.max(0, now - createdAt);
+  breakdown.recency = ageMs >= NINETY_DAYS_MS
+    ? 0
+    : Math.round(15 * (1 - ageMs / NINETY_DAYS_MS));
+
+  const matchScore = Object.values(breakdown).reduce((a, b) => a + b, 0);
+  const matchTier: 'Strong' | 'Good' | 'Potential' =
+    matchScore >= 70 ? 'Strong' : matchScore >= 45 ? 'Good' : 'Potential';
+
+  return { matchScore, matchTier, scoreBreakdown: breakdown };
+}
+
 export interface IStorage {
   getUser(id: string): Promise<any>;
 
@@ -833,7 +953,7 @@ export class DatabaseStorage implements IStorage {
     const conditions: any[] = [eq(buyerProfiles.isActive, true)];
 
     // Budget: buyer must be able to afford listing (allow 5% under for negotiation room)
-    conditions.push(sql`${buyerProfiles.preApprovalAmount} >= ${Math.round(criteria.price * 0.95)}`);
+    conditions.push(sql`${buyerProfiles.preApprovalAmount} >= ${minBuyerBudget(criteria.price)}`);
 
     if (criteria.beds > 0) {
       conditions.push(sql`(${buyerProfiles.minBeds} IS NULL OR ${buyerProfiles.minBeds} <= ${criteria.beds})`);
@@ -867,79 +987,10 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(users, eq(buyerProfiles.userId, users.id))
       .where(and(...conditions));
 
-    // --- Scoring (0–100, applied in JS after the DB filter) ---
-    const TIMELINE_SCORES: Record<string, number> = {
-      'asap': 15,
-      'immediately': 15,
-      '1-3 months': 13,
-      '1-2 months': 13,
-      '3-6 months': 9,
-      '6-12 months': 4,
-      '12+ months': 1,
-      'just looking': 0,
-    };
-
     const now = Date.now();
-    const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
-
     const scored = results.map(r => {
-      const profile = r.profile;
-      const breakdown: Record<string, number> = {};
-
-      // 1. Budget headroom (0–20 pts)
-      // Full 20 pts if approval is 20%+ above price, scales linearly down to 0
-      const headroom = (profile.preApprovalAmount - criteria.price) / criteria.price;
-      breakdown.budget = Math.min(20, Math.max(0, Math.round(headroom * 100)));
-
-      // 2. Pre-approval status (0–15 pts)
-      breakdown.preApproval = profile.isPreApproved ? 15 : 0;
-
-      // 3. Beds match quality (0–15 pts)
-      // 15 = exact match, 8 = within 1, 3 = only passes because minBeds is NULL
-      if (criteria.beds > 0) {
-        const minB = profile.minBeds ?? 0;
-        const maxB = profile.maxBeds ?? 99;
-        if (criteria.beds >= minB && criteria.beds <= maxB) {
-          const diff = Math.min(
-            Math.abs(criteria.beds - minB),
-            Math.abs(criteria.beds - maxB)
-          );
-          breakdown.beds = diff === 0 ? 15 : diff === 1 ? 8 : 3;
-        } else {
-          breakdown.beds = 0;
-        }
-      } else {
-        breakdown.beds = profile.minBeds == null ? 3 : 0;
-      }
-
-      // 4. Must-haves overlap (0–20 pts)
-      // Compare listing's mustHaves array against buyer's mustHaves (case-insensitive)
-      const listingMustHaves = (criteria.mustHaves ?? []).map(s => s.toLowerCase().trim());
-      const buyerMustHaves = (profile.mustHaves ?? []).map(s => s.toLowerCase().trim());
-      if (listingMustHaves.length > 0 && buyerMustHaves.length > 0) {
-        const overlap = buyerMustHaves.filter(f => listingMustHaves.includes(f)).length;
-        breakdown.mustHaves = Math.round((overlap / buyerMustHaves.length) * 20);
-      } else {
-        // No data to compare — neutral, give partial credit so empty profiles aren't penalized
-        breakdown.mustHaves = 5;
-      }
-
-      // 5. Move-in timeline (0–15 pts)
-      const timelineKey = (profile.moveInTimeline ?? '').toLowerCase().replace('–', '-').trim();
-      breakdown.timeline = TIMELINE_SCORES[timelineKey] ?? 5;
-
-      // 6. Recency (0–15 pts)
-      // Full 15 pts if profile created within 30 days, scales to 0 at 90 days
-      const createdAt = profile.createdAt ? new Date(profile.createdAt).getTime() : now;
-      const ageMs = now - createdAt;
-      breakdown.recency = ageMs >= NINETY_DAYS_MS ? 0 : Math.round(15 * (1 - ageMs / NINETY_DAYS_MS));
-
-      const matchScore = Object.values(breakdown).reduce((a, b) => a + b, 0);
-
-      // Tier labels
-      const matchTier = matchScore >= 70 ? 'Strong' : matchScore >= 45 ? 'Good' : 'Potential';
-
-      return { ...profile, user: r.user, matchScore, matchTier, scoreBreakdown: breakdown };
+      const s = scoreBuyer(r.profile, criteria, now);
+      return { ...r.profile, user: r.user, ...s };
     });
 
     // Sort by score descending

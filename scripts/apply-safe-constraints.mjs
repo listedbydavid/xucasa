@@ -60,6 +60,33 @@ const CONSTRAINTS = [
     description: 'Normalize move_in_timeline en-dash to hyphen',
     sql: `UPDATE buyer_profiles SET move_in_timeline = REPLACE(move_in_timeline, '–', '-') WHERE move_in_timeline LIKE '%–%'`,
   },
+  // Normalize properties.property_type to the buyer-profile vocabulary so
+  // Beacon's property-type hard filter actually matches buyers.
+  // Buyers select from: Single Family, Condo, Townhouse, Multi-Family, Land, Mobile.
+  // The IDX feed uses: SFH, Residential, Townhome, Residential Income, etc.
+  // Each WHERE clause makes the UPDATE idempotent — re-runs match zero rows.
+  // Values not in the buyer vocab (Commercial, Residential Lease, Farm, etc.)
+  // are left untouched intentionally — they aren't matchable buyer types.
+  {
+    type: 'sql',
+    description: 'Normalize property_type: SFH → Single Family',
+    sql: `UPDATE properties SET property_type = 'Single Family' WHERE property_type = 'SFH'`,
+  },
+  {
+    type: 'sql',
+    description: 'Normalize property_type: Residential → Single Family',
+    sql: `UPDATE properties SET property_type = 'Single Family' WHERE property_type = 'Residential'`,
+  },
+  {
+    type: 'sql',
+    description: 'Normalize property_type: Townhome → Townhouse',
+    sql: `UPDATE properties SET property_type = 'Townhouse' WHERE property_type = 'Townhome'`,
+  },
+  {
+    type: 'sql',
+    description: 'Normalize property_type: Residential Income → Multi-Family',
+    sql: `UPDATE properties SET property_type = 'Multi-Family' WHERE property_type = 'Residential Income'`,
+  },
 ];
 
 async function applyConstraints() {
