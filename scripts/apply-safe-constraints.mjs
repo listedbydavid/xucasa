@@ -60,6 +60,19 @@ const CONSTRAINTS = [
     description: 'Normalize move_in_timeline en-dash to hyphen',
     sql: `UPDATE buyer_profiles SET move_in_timeline = REPLACE(move_in_timeline, '–', '-') WHERE move_in_timeline LIKE '%–%'`,
   },
+  // Backfill: lowercase + en-dash → hyphen for any move_in_timeline values
+  // already saved with mixed case or en-dash from prior onboarding flows.
+  // Idempotent: WHERE clause matches zero rows after the first run.
+  {
+    type: 'sql',
+    description: 'Normalize existing buyer move_in_timeline values to lowercase ASCII',
+    sql: `
+      UPDATE buyer_profiles
+      SET move_in_timeline = LOWER(REPLACE(move_in_timeline, '–', '-'))
+      WHERE move_in_timeline IS NOT NULL
+        AND move_in_timeline != LOWER(REPLACE(move_in_timeline, '–', '-'))
+    `,
+  },
   // Normalize properties.property_type to the buyer-profile vocabulary so
   // Beacon's property-type hard filter actually matches buyers.
   // Buyers select from: Single Family, Condo, Townhouse, Multi-Family, Land, Mobile.

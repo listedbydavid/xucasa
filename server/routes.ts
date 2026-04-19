@@ -3,6 +3,7 @@ import type { Server } from "http";
 import fs from "fs";
 import path from "path";
 import { storage, buyerProfileCompleteness, resolveBuyerAgent } from "./storage";
+import { resolveUserDestination } from "@shared/routing";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { db } from "./db";
 import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews, errorReports, notifications, buyerInterest, sellerConcessions, insertSellerConcessionSchema } from "@shared/schema";
@@ -910,65 +911,83 @@ export async function registerRoutes(
 
   app.post("/api/onboarding/buyer", onboardingRateLimit, isAuthenticated, async (req: any, res) => {
     const userId = req.user.claims.sub;
+    const trimmedTag = z.string().trim().min(1).max(80);
     const buyerSchema = z.object({
-      budget: z.string().optional(),
-      areas: z.array(z.string()).optional(),
-      beds: z.number().optional(),
-      baths: z.number().optional(),
-      timeline: z.string().optional(),
-      hasAgent: z.boolean().optional(),
-    });
+      preferredCities: z.array(trimmedTag).max(20).optional().default([]),
+      homeTypes: z.array(trimmedTag).max(10).optional().default([]),
+      minBeds: z.number().int().min(0).max(20).optional(),
+      maxBeds: z.number().int().min(0).max(20).optional(),
+      preApprovalAmount: z.number().int().min(0).max(100_000_000).optional(),
+      moveInTimeline: z.string().max(80).optional(),
+      mustHaves: z.array(trimmedTag).max(30).optional().default([]),
+    }).refine(
+      d => d.minBeds === undefined || d.maxBeds === undefined || d.minBeds <= d.maxBeds,
+      { message: "minBeds must be ≤ maxBeds", path: ["minBeds"] }
+    );
     const parsed = buyerSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: "Invalid buyer data" });
+    if (!parsed.success) return res.status(400).json({ message: "Invalid buyer data", errors: parsed.error.flatten() });
 
     try {
       const result = await executeWithAudit(
         { req, event: "onboarding_completed", userId, metadata: { intent: "buyer" } },
         async () => {
           const { authStorage } = await import("./replit_integrations/auth/storage");
-          function parseBudgetString(s: string): number {
-            const matches = s.match(/\$?([\d.]+)\s*([KkMm])?/g);
-            if (!matches || matches.length === 0) return 0;
-            const last = matches[matches.length - 1];
-            const m = last.match(/\$?([\d.]+)\s*([KkMm])?/);
-            if (!m) return 0;
-            const num = parseFloat(m[1]);
-            const unit = (m[2] || '').toUpperCase();
-            if (unit === 'M') return Math.round(num * 1000000);
-            if (unit === 'K') return Math.round(num * 1000);
-            return Math.round(num);
-          }
-          const budgetAmount = parsed.data.budget ? parseBudgetString(parsed.data.budget) : 0;
-          const profileData = {
-            preApprovalAmount: budgetAmount,
-            preferredCities: parsed.data.areas || [],
-            minBeds: parsed.data.beds || null,
-            minBaths: parsed.data.baths ? String(parsed.data.baths) : null,
-            moveInTimeline: parsed.data.timeline || null,
-            hasAgent: parsed.data.hasAgent ?? false,
-          };
+          const d = parsed.data;
+
+          // Normalize move-in timeline: en-dash → hyphen, lowercase, trim.
+          // Empty string after normalization should not overwrite existing values.
+          const normalizedTimeline = d.moveInTimeline
+            ? d.moveInTimeline.replace(/–/g, "-").trim().toLowerCase()
+            : undefined;
+
+          // Build profileData with ONLY the fields the client actually provided
+          // so empty defaults from a partial submission don't wipe pre-existing data.
+          const profileData: any = {};
+          if (d.preferredCities && d.preferredCities.length > 0) profileData.preferredCities = d.preferredCities;
+          if (d.homeTypes && d.homeTypes.length > 0) profileData.homeTypes = d.homeTypes;
+          if (d.minBeds !== undefined) profileData.minBeds = d.minBeds;
+          if (d.maxBeds !== undefined) profileData.maxBeds = d.maxBeds;
+          if (d.preApprovalAmount !== undefined) profileData.preApprovalAmount = d.preApprovalAmount;
+          if (normalizedTimeline) profileData.moveInTimeline = normalizedTimeline;
+          if (d.mustHaves && d.mustHaves.length > 0) profileData.mustHaves = d.mustHaves;
 
           const existing = await storage.getUserBuyerProfile(userId);
+          let profile;
           if (existing) {
-            await storage.updateBuyerProfile(existing.id, userId, profileData);
+            profile = await storage.updateBuyerProfile(existing.id, userId, profileData);
           } else {
-            await storage.createBuyerProfile({
+            profile = await storage.createBuyerProfile({
               userId,
               displayName: "My Search",
-              ...profileData,
               isPreApproved: false,
-              homeTypes: [],
-              mustHaves: [],
+              preferredCities: profileData.preferredCities || [],
+              homeTypes: profileData.homeTypes || [],
+              mustHaves: profileData.mustHaves || [],
               dealBreakers: [],
+              minBeds: profileData.minBeds ?? null,
+              maxBeds: profileData.maxBeds ?? null,
+              preApprovalAmount: profileData.preApprovalAmount ?? 0,
+              moveInTimeline: profileData.moveInTimeline ?? null,
             });
           }
 
+          // Score completeness against the just-saved profile so we can decide
+          // whether buyerProfileCompleted should flip to true (≥ 60).
+          const { score } = buyerProfileCompleteness(profile);
+
           const updated = await authStorage.updateOnboarding(userId, {
-            buyerProfileCompleted: true,
             onboardingCompleted: true,
             currentMode: "buyer",
+            ...(score >= 60 ? { buyerProfileCompleted: true } : {}),
           });
-          return { data: updated };
+
+          return {
+            data: {
+              destination: resolveUserDestination(updated),
+              completenessScore: score,
+              profile,
+            },
+          };
         }
       );
       res.json(result);

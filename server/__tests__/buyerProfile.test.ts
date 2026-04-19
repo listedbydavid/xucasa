@@ -125,4 +125,111 @@ test('moveInTimeline en-dash → hyphen normalization (PATCH endpoint contract)'
   assert.equal(normalize('3-6 months'), '3-6 months');
 });
 
+// ─── Onboarding flow contract tests ──────────────────────────────────────
+// These lock in that a buyer who completes the new 5-step onboarding
+// wizard exits with a completeness score of at least 60.
+//
+// The wizard collects: preferredCities (20), homeTypes (15), minBeds (15),
+// moveInTimeline (10), and optionally mustHaves (20). The first four alone
+// = 60pts, hitting our minimum bar.
+
+console.log('\nOnboarding flow tests');
+
+// Mirror of the client-side timeline normalization in client/src/pages/Onboarding.tsx.
+function normalizeOnboardingTimeline(input: string): string {
+  if (!input) return '';
+  if (input === 'Just browsing') return 'just looking';
+  return input.replace(/–/g, '-').trim().toLowerCase();
+}
+
+// Mirror of the server-side merge in POST /api/onboarding/buyer that ONLY
+// writes provided non-empty fields, so partial submissions don't wipe data.
+function mergeOnboarding(existing: ProfileShape, incoming: Partial<ProfileShape>): ProfileShape {
+  const out = { ...existing };
+  for (const [k, v] of Object.entries(incoming)) {
+    if (v === undefined || v === null) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    if (typeof v === 'string' && v.trim() === '') continue;
+    (out as any)[k] = v;
+  }
+  return out;
+}
+
+test('completing all 5 onboarding steps scores ≥ 60 (cities + hometypes + beds + timeline)', () => {
+  const onboarded: ProfileShape = mergeOnboarding(empty, {
+    preferredCities: ['San Diego', 'La Jolla'],
+    homeTypes: ['Single Family', 'Condo'],
+    minBeds: 3,
+    moveInTimeline: normalizeOnboardingTimeline('1–3 months'),
+    mustHaves: ['pool', 'garage'],
+  });
+  const r = buyerProfileCompleteness(onboarded);
+  // 20 (cities) + 15 (homeTypes) + 15 (beds) + 10 (timeline) + 20 (mustHaves) = 80
+  assert.ok(r.score >= 60, `expected ≥ 60, got ${r.score}`);
+  assert.equal(r.score, 80);
+});
+
+test('skipping everything in onboarding scores 0', () => {
+  const onboarded: ProfileShape = mergeOnboarding(empty, {
+    preferredCities: [],
+    homeTypes: [],
+    mustHaves: [],
+    moveInTimeline: '',
+  });
+  assert.equal(buyerProfileCompleteness(onboarded).score, 0);
+});
+
+test('skipping ONLY must-haves still scores ≥ 60', () => {
+  const onboarded: ProfileShape = mergeOnboarding(empty, {
+    preferredCities: ['San Diego'],
+    homeTypes: ['Single Family'],
+    minBeds: 3,
+    moveInTimeline: 'asap',
+    mustHaves: [],  // skipped
+  });
+  const r = buyerProfileCompleteness(onboarded);
+  // 20 (cities) + 15 (hometypes) + 15 (beds) + 10 (timeline) = 60
+  assert.equal(r.score, 60);
+  assert.ok(r.score >= 60);
+});
+
+test('"Just browsing" maps to "just looking" (TIMELINE_SCORES key)', () => {
+  assert.equal(normalizeOnboardingTimeline('Just browsing'), 'just looking');
+  // And it counts as a filled timeline field for completeness scoring.
+  const r = buyerProfileCompleteness({ ...empty, moveInTimeline: 'just looking' });
+  assert.equal(r.score, 10);
+});
+
+test('en-dash timeline normalizes to hyphen+lowercase before saving', () => {
+  assert.equal(normalizeOnboardingTimeline('1–3 months'), '1-3 months');
+  assert.equal(normalizeOnboardingTimeline('3–6 MONTHS'), '3-6 months');
+  assert.equal(normalizeOnboardingTimeline('  6–12 Months  '), '6-12 months');
+  assert.equal(normalizeOnboardingTimeline('ASAP'), 'asap');
+});
+
+test('existing profile data is NOT overwritten by empty onboarding defaults', () => {
+  // A buyer already has cities + beds + timeline saved from a previous session.
+  // They land back on onboarding (re-entry) and submit with all-empty arrays.
+  // The merge must preserve existing values.
+  const existing: ProfileShape = {
+    ...empty,
+    preferredCities: ['San Diego'],
+    minBeds: 4,
+    moveInTimeline: 'asap',
+    mustHaves: ['pool'],
+  };
+  const merged = mergeOnboarding(existing, {
+    preferredCities: [],   // empty array — should NOT wipe
+    homeTypes: [],         // still missing, OK to leave empty
+    mustHaves: [],         // empty array — should NOT wipe
+    moveInTimeline: '',    // empty string — should NOT wipe
+  });
+  assert.deepEqual(merged.preferredCities, ['San Diego']);
+  assert.equal(merged.minBeds, 4);
+  assert.equal(merged.moveInTimeline, 'asap');
+  assert.deepEqual(merged.mustHaves, ['pool']);
+  // And completeness is preserved at the same level as before:
+  assert.equal(buyerProfileCompleteness(merged).score, buyerProfileCompleteness(existing).score);
+});
+
 console.log(process.exitCode ? '\nFAILED' : '\nAll tests passed.');

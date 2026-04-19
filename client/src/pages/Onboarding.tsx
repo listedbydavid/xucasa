@@ -8,6 +8,7 @@ import {
   Search, Home, Briefcase, Compass, ArrowRight, ArrowLeft,
   Loader2, MapPin, DollarSign, BedDouble, Bath, Clock, Users,
   Building, FileText, Hash, CheckCircle2, AlertCircle, ShieldCheck,
+  X, Sparkles,
 } from "lucide-react";
 
 type AgentVerifyResult = {
@@ -26,9 +27,17 @@ const INTENT_CARDS: { id: Intent; title: string; desc: string; icon: typeof Sear
   { id: "explorer", title: "Just exploring", desc: "Browse homes and learn about the market", icon: Compass, color: "text-amber-500 bg-amber-500/10" },
 ];
 
-const BUDGET_OPTIONS = ["Under $500K", "$500K–$750K", "$750K–$1M", "$1M–$1.5M", "$1.5M–$2M", "$2M+"];
-const AREA_OPTIONS = ["Downtown", "La Jolla", "Pacific Beach", "North Park", "Hillcrest", "Coronado", "Chula Vista", "Encinitas", "Carlsbad", "Oceanside"];
+const CITY_SUGGESTIONS = ["San Diego", "La Jolla", "Chula Vista", "Encinitas", "Carlsbad", "Oceanside", "El Cajon", "Santee", "Escondido", "Coronado"];
+const HOME_TYPE_OPTIONS = ["Single Family", "Condo", "Townhouse", "Multi-Family", "Mobile", "Land"];
 const TIMELINE_OPTIONS = ["ASAP", "1–3 months", "3–6 months", "6–12 months", "Just browsing"];
+const MUST_HAVE_SUGGESTIONS = ["pool", "garage", "ocean view", "single story", "large lot", "updated kitchen", "solar", "ADU", "no HOA", "good schools", "mountain view", "new construction"];
+const TOTAL_BUYER_STEPS = 5; // Steps 2..6 in the spec → indexed 1..5 here.
+
+function normalizeTimeline(input: string): string {
+  if (!input) return "";
+  if (input === "Just browsing") return "just looking";
+  return input.replace(/–/g, "-").trim().toLowerCase();
+}
 
 export default function Onboarding() {
   const { user } = useAuth();
@@ -38,12 +47,17 @@ export default function Onboarding() {
   const [intent, setIntent] = useState<Intent | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const [budget, setBudget] = useState("");
-  const [areas, setAreas] = useState<string[]>([]);
-  const [beds, setBeds] = useState<number | undefined>();
-  const [baths, setBaths] = useState<number | undefined>();
+  // Buyer wizard state — Steps 2-6 in the spec
+  const [buyerStep, setBuyerStep] = useState<number>(1);
+  const [preferredCities, setPreferredCities] = useState<string[]>([]);
+  const [cityInput, setCityInput] = useState("");
+  const [homeTypes, setHomeTypes] = useState<string[]>([]);
+  const [minBeds, setMinBeds] = useState<number | undefined>();
+  const [maxBeds, setMaxBeds] = useState<number | undefined>();
+  const [preApprovalAmount, setPreApprovalAmount] = useState<string>("");
   const [timeline, setTimeline] = useState("");
-  const [hasAgent, setHasAgent] = useState(false);
+  const [mustHaves, setMustHaves] = useState<string[]>([]);
+  const [mustHaveInput, setMustHaveInput] = useState("");
 
   const [address, setAddress] = useState("");
   const [homeBeds, setHomeBeds] = useState<number | undefined>();
@@ -83,6 +97,7 @@ export default function Onboarding() {
         window.location.href = "/swipe";
         return;
       }
+      if (selected === "buyer") setBuyerStep(1);
       setStep(selected as Step);
     } catch {
       toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" });
@@ -94,15 +109,73 @@ export default function Onboarding() {
   const handleBuyerSubmit = async () => {
     setLoading(true);
     try {
-      await apiRequest("POST", "/api/onboarding/buyer", { budget, areas, beds, baths, timeline, hasAgent });
+      const payload: any = {
+        preferredCities,
+        homeTypes,
+        moveInTimeline: normalizeTimeline(timeline),
+        mustHaves,
+      };
+      if (minBeds !== undefined) payload.minBeds = minBeds;
+      if (maxBeds !== undefined) payload.maxBeds = maxBeds;
+      const cleanBudget = preApprovalAmount.replace(/[^0-9]/g, "");
+      if (cleanBudget) payload.preApprovalAmount = parseInt(cleanBudget, 10);
+
+      const res = await apiRequest("POST", "/api/onboarding/buyer", payload);
+      const body = await res.json().catch(() => ({}));
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      window.location.href = "/swipe";
+      // Honor server-provided destination so routing logic stays single-sourced.
+      const dest = body?.destination && typeof body.destination === "string" ? body.destination : "/swipe";
+      window.location.href = dest;
     } catch {
       toast({ title: "Something went wrong", description: "Please try again.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
+
+  // Buyer wizard helpers
+  const addCity = (city?: string) => {
+    const v = (city ?? cityInput).trim();
+    if (v && !preferredCities.includes(v)) setPreferredCities([...preferredCities, v]);
+    if (!city) setCityInput("");
+  };
+  const toggleHomeType = (t: string) => {
+    setHomeTypes(homeTypes.includes(t) ? homeTypes.filter(x => x !== t) : [...homeTypes, t]);
+  };
+  const selectBeds = (n: number) => {
+    if (minBeds === undefined) { setMinBeds(n); return; }
+    if (n === minBeds) { setMinBeds(undefined); setMaxBeds(undefined); return; }
+    if (n > minBeds) { setMaxBeds(n === maxBeds ? undefined : n); return; }
+    // n < minBeds: reset to single value
+    setMinBeds(n); setMaxBeds(undefined);
+  };
+  const isBedActive = (n: number) => {
+    if (minBeds === undefined) return false;
+    if (maxBeds === undefined) return n === minBeds;
+    return n >= minBeds && n <= maxBeds;
+  };
+  const formatBudget = (raw: string) => {
+    const digits = raw.replace(/[^0-9]/g, "");
+    return digits ? Number(digits).toLocaleString() : "";
+  };
+  const addMustHave = (m?: string) => {
+    const val = (m ?? mustHaveInput).trim().toLowerCase();
+    if (val && !mustHaves.includes(val)) setMustHaves([...mustHaves, val]);
+    if (!m) setMustHaveInput("");
+  };
+  const toggleMustHave = (m: string) => {
+    setMustHaves(mustHaves.includes(m) ? mustHaves.filter(x => x !== m) : [...mustHaves, m]);
+  };
+
+  // Step navigation
+  const nextStep = () => setBuyerStep(s => Math.min(s + 1, TOTAL_BUYER_STEPS));
+  const prevStep = () => {
+    if (buyerStep === 1) { setStep("intent"); return; }
+    setBuyerStep(s => s - 1);
+  };
+  const canProceedStep1 = preferredCities.length > 0;
+  const canProceedStep2 = homeTypes.length > 0;
+  const canProceedStep4 = !!timeline;
 
   const handleHomeownerSubmit = async () => {
     if (!address.trim()) return;
@@ -141,10 +214,6 @@ export default function Onboarding() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const toggleArea = (area: string) => {
-    setAreas(prev => prev.includes(area) ? prev.filter(a => a !== area) : [...prev, area]);
   };
 
   const inputClass = "w-full bg-background border-2 border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors";
@@ -194,137 +263,280 @@ export default function Onboarding() {
 
         {step === "buyer" && (
           <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-6" data-testid="buyer-wizard">
-            <div>
-              <label className="text-sm font-bold text-foreground mb-2 flex items-center gap-2">
-                <DollarSign className="w-4 h-4 text-green-500" /> Budget
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {BUDGET_OPTIONS.map(opt => (
-                  <button
-                    key={opt}
-                    onClick={() => setBudget(budget === opt ? "" : opt)}
-                    data-testid={`budget-${opt}`}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-colors ${
-                      budget === opt ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/30"
-                    }`}
-                  >
-                    {opt}
-                  </button>
-                ))}
+            {/* Progress bar */}
+            <div data-testid="buyer-progress">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-semibold text-muted-foreground">Step {buyerStep + 1} of {TOTAL_BUYER_STEPS + 1}</span>
+                <span className="text-xs text-muted-foreground">{Math.round(((buyerStep) / TOTAL_BUYER_STEPS) * 100)}%</span>
+              </div>
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-300 rounded-full"
+                  style={{ width: `${(buyerStep / TOTAL_BUYER_STEPS) * 100}%` }}
+                />
               </div>
             </div>
 
-            <div>
-              <label className="text-sm font-bold text-foreground mb-2 flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-blue-500" /> Preferred Areas
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {AREA_OPTIONS.map(area => (
-                  <button
-                    key={area}
-                    onClick={() => toggleArea(area)}
-                    data-testid={`area-${area}`}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-colors ${
-                      areas.includes(area) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/30"
-                    }`}
-                  >
-                    {area}
-                  </button>
-                ))}
+            {/* Step 1 (spec Step 2): Where are you looking? */}
+            {buyerStep === 1 && (
+              <div className="space-y-4" data-testid="buyer-step-cities">
+                <div>
+                  <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+                    <MapPin className="w-5 h-5 text-blue-500" /> Where are you looking to buy?
+                  </h2>
+                </div>
+                <div className="flex flex-wrap gap-1.5 min-h-[2rem]">
+                  {preferredCities.map((c, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary/10 text-primary rounded-full text-sm font-medium" data-testid={`tag-city-${i}`}>
+                      {c}
+                      <button onClick={() => setPreferredCities(preferredCities.filter((_, j) => j !== i))} className="hover:bg-primary/20 rounded-full p-0.5" aria-label={`Remove ${c}`}>
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={cityInput}
+                  onChange={e => setCityInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addCity(); }
+                  }}
+                  placeholder="Type a city, press Enter to add"
+                  className={inputClass}
+                  data-testid="input-city"
+                />
+                <div>
+                  <p className="text-xs text-muted-foreground mb-2">Popular in San Diego County:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {CITY_SUGGESTIONS.filter(c => !preferredCities.includes(c)).map(city => (
+                      <button
+                        key={city}
+                        onClick={() => addCity(city)}
+                        data-testid={`suggest-city-${city.replace(/\s+/g, "-")}`}
+                        className="px-3 py-1.5 rounded-full text-xs font-semibold border-2 border-border text-muted-foreground hover:border-primary/30 hover:text-primary transition-colors"
+                      >
+                        + {city}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setPreferredCities([]); nextStep(); }}
+                  className="text-sm text-muted-foreground hover:text-foreground underline"
+                  data-testid="button-skip-cities"
+                >
+                  I'm flexible on location →
+                </button>
               </div>
-            </div>
+            )}
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-bold text-foreground mb-1 flex items-center gap-2">
-                  <BedDouble className="w-4 h-4 text-indigo-500" /> Beds
-                </label>
-                <div className="flex gap-1">
-                  {[1,2,3,4,5].map(n => (
+            {/* Step 2 (spec Step 3): What type of home? */}
+            {buyerStep === 2 && (
+              <div className="space-y-4" data-testid="buyer-step-hometypes">
+                <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+                  <Building className="w-5 h-5 text-indigo-500" /> What type of home are you looking for?
+                </h2>
+                <div className="grid grid-cols-2 gap-3">
+                  {HOME_TYPE_OPTIONS.map(t => (
+                    <label
+                      key={t}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-colors ${
+                        homeTypes.includes(t) ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"
+                      }`}
+                      data-testid={`hometype-${t.replace(/\s+/g, "-").toLowerCase()}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={homeTypes.includes(t)}
+                        onChange={() => toggleHomeType(t)}
+                        className="w-4 h-4 rounded border-border accent-primary"
+                      />
+                      <span className="text-sm font-semibold text-foreground">{t}</span>
+                    </label>
+                  ))}
+                </div>
+                <button
+                  onClick={() => { setHomeTypes([]); nextStep(); }}
+                  className="text-sm text-muted-foreground hover:text-foreground underline"
+                  data-testid="button-skip-hometypes"
+                >
+                  Open to anything →
+                </button>
+              </div>
+            )}
+
+            {/* Step 3 (spec Step 4): Bedrooms & budget */}
+            {buyerStep === 3 && (
+              <div className="space-y-5" data-testid="buyer-step-beds-budget">
+                <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+                  <BedDouble className="w-5 h-5 text-indigo-500" /> How many bedrooms and what's your budget?
+                </h2>
+                <div>
+                  <label className="text-sm font-bold text-foreground mb-2 block">Bedrooms (tap to select range)</label>
+                  <div className="flex gap-2">
+                    {[1, 2, 3, 4, 5].map(n => (
+                      <button
+                        key={n}
+                        onClick={() => selectBeds(n)}
+                        data-testid={`button-beds-${n}`}
+                        className={`flex-1 py-3 rounded-xl text-sm font-bold border-2 transition-colors ${
+                          isBedActive(n) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/30"
+                        }`}
+                      >
+                        {n}{n === 5 ? "+" : ""}
+                      </button>
+                    ))}
+                  </div>
+                  {minBeds !== undefined && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {maxBeds !== undefined ? `${minBeds} – ${maxBeds === 5 ? "5+" : maxBeds} beds` : `${minBeds}${minBeds === 5 ? "+" : ""} beds`}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-sm font-bold text-foreground mb-2 block">Pre-approval budget</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-foreground font-semibold">$</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={preApprovalAmount}
+                      onChange={e => setPreApprovalAmount(formatBudget(e.target.value))}
+                      placeholder="750,000"
+                      className={`${inputClass} pl-8`}
+                      data-testid="input-preapproval"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setMinBeds(undefined); setMaxBeds(undefined); setPreApprovalAmount(""); nextStep(); }}
+                  className="text-sm text-muted-foreground hover:text-foreground underline"
+                  data-testid="button-skip-beds-budget"
+                >
+                  Not sure yet →
+                </button>
+              </div>
+            )}
+
+            {/* Step 4 (spec Step 5): Timeline */}
+            {buyerStep === 4 && (
+              <div className="space-y-4" data-testid="buyer-step-timeline">
+                <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-amber-500" /> When are you looking to move?
+                </h2>
+                <div className="grid grid-cols-1 gap-2">
+                  {TIMELINE_OPTIONS.map(opt => (
                     <button
-                      key={n}
-                      onClick={() => setBeds(beds === n ? undefined : n)}
-                      data-testid={`beds-${n}`}
-                      className={`flex-1 py-2 rounded-lg text-sm font-bold border-2 transition-colors ${
-                        beds === n ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/30"
+                      key={opt}
+                      onClick={() => setTimeline(opt)}
+                      data-testid={`timeline-${opt}`}
+                      className={`px-4 py-3 rounded-xl text-sm font-bold border-2 transition-colors text-left ${
+                        timeline === opt ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground hover:border-primary/30"
                       }`}
                     >
-                      {n}{n === 5 ? "+" : ""}
+                      {opt}
                     </button>
                   ))}
                 </div>
               </div>
-              <div>
-                <label className="text-sm font-bold text-foreground mb-1 flex items-center gap-2">
-                  <Bath className="w-4 h-4 text-cyan-500" /> Baths
-                </label>
-                <div className="flex gap-1">
-                  {[1,2,3,4].map(n => (
-                    <button
-                      key={n}
-                      onClick={() => setBaths(baths === n ? undefined : n)}
-                      data-testid={`baths-${n}`}
-                      className={`flex-1 py-2 rounded-lg text-sm font-bold border-2 transition-colors ${
-                        baths === n ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/30"
-                      }`}
-                    >
-                      {n}{n === 4 ? "+" : ""}
-                    </button>
-                  ))}
+            )}
+
+            {/* Step 5 (spec Step 6): Must-haves */}
+            {buyerStep === 5 && (
+              <div className="space-y-4" data-testid="buyer-step-musthaves">
+                <div>
+                  <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-amber-500" /> Any must-haves?
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-1">These help us find your perfect match</p>
                 </div>
+                <div className="flex flex-wrap gap-2">
+                  {MUST_HAVE_SUGGESTIONS.map(m => {
+                    const active = mustHaves.includes(m);
+                    return (
+                      <button
+                        key={m}
+                        onClick={() => toggleMustHave(m)}
+                        data-testid={`musthave-${m.replace(/\s+/g, "-")}`}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-colors ${
+                          active ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/30"
+                        }`}
+                      >
+                        {active ? "✓ " : ""}{m}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-2">Anything else? Add your own:</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={mustHaveInput}
+                      onChange={e => setMustHaveInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addMustHave(); } }}
+                      placeholder="e.g. solar panels"
+                      className={inputClass}
+                      data-testid="input-musthave"
+                    />
+                  </div>
+                  {mustHaves.filter(m => !MUST_HAVE_SUGGESTIONS.includes(m)).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {mustHaves.filter(m => !MUST_HAVE_SUGGESTIONS.includes(m)).map((m, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary/10 text-primary rounded-full text-sm font-medium" data-testid={`tag-musthave-custom-${i}`}>
+                          {m}
+                          <button onClick={() => setMustHaves(mustHaves.filter(x => x !== m))} className="hover:bg-primary/20 rounded-full p-0.5" aria-label={`Remove ${m}`}>
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => { setMustHaves([]); handleBuyerSubmit(); }}
+                  className="text-sm text-muted-foreground hover:text-foreground underline"
+                  data-testid="button-skip-musthaves"
+                >
+                  Skip for now →
+                </button>
               </div>
-            </div>
+            )}
 
-            <div>
-              <label className="text-sm font-bold text-foreground mb-2 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-amber-500" /> Timeline
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {TIMELINE_OPTIONS.map(opt => (
-                  <button
-                    key={opt}
-                    onClick={() => setTimeline(timeline === opt ? "" : opt)}
-                    data-testid={`timeline-${opt}`}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-colors ${
-                      timeline === opt ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/30"
-                    }`}
-                  >
-                    {opt}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={hasAgent}
-                onChange={e => setHasAgent(e.target.checked)}
-                className="w-4 h-4 rounded border-border accent-primary"
-                data-testid="input-has-agent"
-              />
-              <span className="text-sm text-foreground flex items-center gap-2">
-                <Users className="w-4 h-4 text-muted-foreground" /> I already have a real estate agent
-              </span>
-            </label>
-
-            <div className="flex gap-3">
+            {/* Nav buttons */}
+            <div className="flex gap-3 pt-2 border-t border-border">
               <button
-                onClick={() => setStep("intent")}
+                onClick={prevStep}
                 className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-muted-foreground hover:bg-muted transition-colors"
-                data-testid="button-back-intent"
+                data-testid="button-back-buyer-step"
               >
                 <ArrowLeft className="w-4 h-4" /> Back
               </button>
-              <button
-                onClick={handleBuyerSubmit}
-                disabled={loading}
-                className="flex-1 flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-xl font-bold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
-                data-testid="button-buyer-submit"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-                Start Browsing
-              </button>
+              {buyerStep < TOTAL_BUYER_STEPS ? (
+                <button
+                  onClick={nextStep}
+                  disabled={
+                    (buyerStep === 1 && !canProceedStep1) ||
+                    (buyerStep === 2 && !canProceedStep2) ||
+                    (buyerStep === 4 && !canProceedStep4)
+                  }
+                  className="flex-1 flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-xl font-bold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  data-testid="button-next-buyer-step"
+                >
+                  Continue <ArrowRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  onClick={handleBuyerSubmit}
+                  disabled={loading}
+                  className="flex-1 flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-xl font-bold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  data-testid="button-buyer-submit"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                  Start Browsing
+                </button>
+              )}
             </div>
           </div>
         )}

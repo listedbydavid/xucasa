@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +22,7 @@ const DISMISS_KEY = "buyer_profile_nudge_dismissed";
 export function BuyerProfileNudge() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
+  const [location] = useLocation();
   const [expanded, setExpanded] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -69,6 +71,7 @@ export function BuyerProfileNudge() {
     }
   }, [expanded, data]);
 
+  if (location.startsWith("/onboarding")) return null;
   if (!isAuthenticated || !isBuyer) return null;
   if (isLoading || !data) return null;
   if (data.noProfile) return null;
