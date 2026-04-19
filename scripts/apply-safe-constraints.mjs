@@ -53,6 +53,13 @@ const CONSTRAINTS = [
       ON buyer_interest (property_id, buyer_user_id);
     `,
   },
+  // Normalize move_in_timeline en-dash (–) to ASCII hyphen (-)
+  // The WHERE clause makes this idempotent — re-runs match zero rows.
+  {
+    type: 'sql',
+    description: 'Normalize move_in_timeline en-dash to hyphen',
+    sql: `UPDATE buyer_profiles SET move_in_timeline = REPLACE(move_in_timeline, '–', '-') WHERE move_in_timeline LIKE '%–%'`,
+  },
 ];
 
 async function applyConstraints() {

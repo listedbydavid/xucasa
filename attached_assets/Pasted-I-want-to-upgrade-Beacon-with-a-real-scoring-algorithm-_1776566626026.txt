@@ -1,0 +1,210 @@
+I want to upgrade Beacon with a real scoring algorithm. Here is the complete, exact spec. Please implement all of it.
+
+Part 1 — Fix the timeline normalization bug
+In server/storage.ts, find matchBuyersForListing(). Before any comparisons, canonicalize moveInTimeline values by running this migration first:
+Add this to scripts/apply-safe-constraints.mjs CONSTRAINTS array:
+javascript{
+  type: 'sql',
+  description: 'Normalize move_in_timeline en-dash to hyphen',
+  existsCheck: `SELECT 1 FROM buyer_profiles WHERE move_in_timeline LIKE '%–%' LIMIT 1`,
+  sql: `UPDATE buyer_profiles SET move_in_timeline = REPLACE(move_in_timeline, '–', '-') WHERE move_in_timeline LIKE '%–%'`,
+},
+
+Part 2 — Upgrade matchBuyersForListing in server/storage.ts
+Replace the existing matchBuyersForListing method entirely with this:
+typescriptasync matchBuyersForListing(criteria: {
+  price: number;
+  beds: number;
+  baths: number;
+  sqft: number;
+  city: string;
+  propertyType: string;
+  mustHaves?: string[];
+}): Promise<(BuyerProfile & { user: any; matchScore: number; matchTier: string; scoreBreakdown: Record<string, number> })[]> {
+
+  // --- Hard filters (binary gate — must pass all) ---
+  const conditions: any[] = [eq(buyerProfiles.isActive, true)];
+
+  // Budget: buyer must be able to afford listing (allow 5% under for negotiation room)
+  conditions.push(sql`${buyerProfiles.preApprovalAmount} >= ${Math.round(criteria.price * 0.95)}`);
+
+  if (criteria.beds > 0) {
+    conditions.push(sql`(${buyerProfiles.minBeds} IS NULL OR ${buyerProfiles.minBeds} <= ${criteria.beds})`);
+    conditions.push(sql`(${buyerProfiles.maxBeds} IS NULL OR ${buyerProfiles.maxBeds} >= ${criteria.beds})`);
+  }
+  if (criteria.baths > 0) {
+    conditions.push(sql`(${buyerProfiles.minBaths} IS NULL OR ${buyerProfiles.minBaths} <= ${criteria.baths})`);
+  }
+  if (criteria.sqft > 0) {
+    conditions.push(sql`(${buyerProfiles.minSqft} IS NULL OR ${buyerProfiles.minSqft} <= ${criteria.sqft})`);
+    conditions.push(sql`(${buyerProfiles.maxSqft} IS NULL OR ${buyerProfiles.maxSqft} >= ${criteria.sqft})`);
+  }
+  if (criteria.city) {
+    conditions.push(sql`(
+      ${buyerProfiles.preferredCities} IS NULL OR
+      array_length(${buyerProfiles.preferredCities}, 1) IS NULL OR
+      LOWER(${criteria.city}) = ANY(SELECT LOWER(unnest(${buyerProfiles.preferredCities})))
+    )`);
+  }
+  if (criteria.propertyType) {
+    conditions.push(sql`(
+      ${buyerProfiles.homeTypes} IS NULL OR
+      array_length(${buyerProfiles.homeTypes}, 1) IS NULL OR
+      LOWER(${criteria.propertyType}) = ANY(SELECT LOWER(unnest(${buyerProfiles.homeTypes})))
+    )`);
+  }
+
+  const results = await db
+    .select({ profile: buyerProfiles, user: users })
+    .from(buyerProfiles)
+    .leftJoin(users, eq(buyerProfiles.userId, users.id))
+    .where(and(...conditions));
+
+  // --- Scoring (0–100, applied in JS after the DB filter) ---
+  const TIMELINE_SCORES: Record<string, number> = {
+    'asap': 15,
+    'immediately': 15,
+    '1-3 months': 13,
+    '1-2 months': 13,
+    '3-6 months': 9,
+    '6-12 months': 4,
+    '12+ months': 1,
+    'just looking': 0,
+  };
+
+  const now = Date.now();
+  const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
+
+  const scored = results.map(r => {
+    const profile = r.profile;
+    const breakdown: Record<string, number> = {};
+
+    // 1. Budget headroom (0–20 pts)
+    // Full 20 pts if approval is 20%+ above price, scales linearly down to 0
+    const headroom = (profile.preApprovalAmount - criteria.price) / criteria.price;
+    breakdown.budget = Math.min(20, Math.round(headroom * 100));
+
+    // 2. Pre-approval status (0–15 pts)
+    breakdown.preApproval = profile.isPreApproved ? 15 : 0;
+
+    // 3. Beds match quality (0–15 pts)
+    // 15 = exact match, 8 = within 1, 3 = only passes because minBeds is NULL
+    if (criteria.beds > 0) {
+      const minB = profile.minBeds ?? 0;
+      const maxB = profile.maxBeds ?? 99;
+      if (criteria.beds >= minB && criteria.beds <= maxB) {
+        const diff = Math.min(
+          Math.abs(criteria.beds - minB),
+          Math.abs(criteria.beds - maxB)
+        );
+        breakdown.beds = diff === 0 ? 15 : diff === 1 ? 8 : 3;
+      } else {
+        breakdown.beds = 0;
+      }
+    } else {
+      breakdown.beds = profile.minBeds == null ? 3 : 0;
+    }
+
+    // 4. Must-haves overlap (0–20 pts)
+    // Compare listing's mustHaves array against buyer's mustHaves (case-insensitive)
+    const listingMustHaves = (criteria.mustHaves ?? []).map(s => s.toLowerCase().trim());
+    const buyerMustHaves = (profile.mustHaves ?? []).map(s => s.toLowerCase().trim());
+    if (listingMustHaves.length > 0 && buyerMustHaves.length > 0) {
+      const overlap = buyerMustHaves.filter(f => listingMustHaves.includes(f)).length;
+      breakdown.mustHaves = Math.round((overlap / buyerMustHaves.length) * 20);
+    } else {
+      // No data to compare — neutral, give partial credit so empty profiles aren't penalized
+      breakdown.mustHaves = 5;
+    }
+
+    // 5. Move-in timeline (0–15 pts)
+    const timelineKey = (profile.moveInTimeline ?? '').toLowerCase().replace('–', '-').trim();
+    breakdown.timeline = TIMELINE_SCORES[timelineKey] ?? 5;
+
+    // 6. Recency (0–15 pts)
+    // Full 15 pts if profile created within 30 days, scales to 0 at 90 days
+    const ageMs = now - new Date(profile.createdAt).getTime();
+    breakdown.recency = ageMs >= NINETY_DAYS_MS ? 0 : Math.round(15 * (1 - ageMs / NINETY_DAYS_MS));
+
+    const matchScore = Object.values(breakdown).reduce((a, b) => a + b, 0);
+
+    // Tier labels
+    const matchTier = matchScore >= 70 ? 'Strong' : matchScore >= 45 ? 'Good' : 'Potential';
+
+    return { ...profile, user: r.user, matchScore, matchTier, scoreBreakdown: breakdown };
+  });
+
+  // Sort by score descending
+  return scored.sort((a, b) => b.matchScore - a.matchScore);
+}
+
+Part 3 — Update the API route in server/routes.ts
+In the /api/beacon/match-buyers handler, update two things:
+A. Add mustHaves as an optional query param to the Zod schema:
+typescriptconst schema = z.object({
+  price: z.coerce.number().positive(),
+  beds: z.coerce.number().min(0),
+  baths: z.coerce.number().min(0),
+  sqft: z.coerce.number().min(0),
+  city: z.string().min(1),
+  propertyType: z.string().optional().default(""),
+  mustHaves: z.string().optional().default(""),
+});
+Then parse it into an array before passing to storage:
+typescriptconst mustHaves = parsed.data.mustHaves
+  ? parsed.data.mustHaves.split(',').map(s => s.trim()).filter(Boolean)
+  : [];
+const matches = await storage.matchBuyersForListing({ ...parsed.data, mustHaves });
+B. Add matchScore, matchTier, and scoreBreakdown to the safeMatches projection:
+typescriptconst safeMatches = matches.map(profile => ({
+  id: profile.id,
+  displayName: profile.displayName,
+  preApprovalAmount: profile.preApprovalAmount,
+  isPreApproved: profile.isPreApproved,
+  minBeds: profile.minBeds,
+  maxBeds: profile.maxBeds,
+  minBaths: profile.minBaths,
+  minSqft: profile.minSqft,
+  maxSqft: profile.maxSqft,
+  preferredCities: profile.preferredCities,
+  homeTypes: profile.homeTypes,
+  mustHaves: profile.mustHaves,
+  niceToHaves: profile.niceToHaves,
+  moveInTimeline: profile.moveInTimeline,
+  hasAgent: profile.hasAgent,
+  bio: profile.bio,
+  matchScore: profile.matchScore,
+  matchTier: profile.matchTier,
+  scoreBreakdown: profile.scoreBreakdown,
+}));
+
+Part 4 — Update BeaconReport.tsx
+A. Add a mustHaves field to the search form. After the propertyType field, add:
+tsx<div>
+  <label className="text-sm font-medium">Listing features (comma-separated)</label>
+  <input
+    className="w-full border rounded-md px-3 py-2 text-sm mt-1"
+    placeholder="e.g. pool, garage, ocean view, single story"
+    value={form.mustHaves ?? ''}
+    onChange={e => setForm(f => ({ ...f, mustHaves: e.target.value }))}
+  />
+  <p className="text-xs text-muted-foreground mt-1">
+    Enter features this listing has to surface buyers who specifically want them
+  </p>
+</div>
+B. Add mustHaves to the query params passed to /api/beacon/match-buyers.
+C. Update each buyer result card to show:
+
+A match score badge in the top-right corner of the card: {matchScore}/100
+A tier pill next to the name: "Strong" (green), "Good" (amber), "Potential" (gray)
+A score breakdown tooltip or expandable row showing the 6 scoring components (budget, preApproval, beds, mustHaves, timeline, recency) and their points
+
+D. Update the PDF report to include the match score and tier on each buyer card.
+
+Part 5 — Verification
+After all changes, run:
+bashnode scripts/apply-safe-constraints.mjs
+And hit the endpoint directly:
+bashcurl -s "http://localhost:5000/api/beacon/match-buyers?price=900000&beds=3&baths=2&sqft=1500&city=San%20Diego" \
+  -H "Cookie: [use a valid agent session cookie if available, otherwise skip auth and note the 403]"
+Show me the full output of both.

@@ -143,7 +143,7 @@ export interface IStorage {
   getAgentBuyerProfiles(agentId: string): Promise<BuyerProfile[]>;
 
   // Beacon
-  matchBuyersForListing(criteria: { price: number; beds: number; baths: number; sqft: number; city: string; propertyType: string }): Promise<(BuyerProfile & { user: any })[]>;
+  matchBuyersForListing(criteria: { price: number; beds: number; baths: number; sqft: number; city: string; propertyType: string; mustHaves?: string[] }): Promise<(BuyerProfile & { user: any; matchScore: number; matchTier: string; scoreBreakdown: Record<string, number> })[]>;
 
   // Buyer Matches
   createBuyerMatch(match: InsertBuyerMatch): Promise<BuyerMatch>;
@@ -826,37 +826,124 @@ export class DatabaseStorage implements IStorage {
     sqft: number;
     city: string;
     propertyType: string;
-  }): Promise<(BuyerProfile & { user: any })[]> {
+    mustHaves?: string[];
+  }): Promise<(BuyerProfile & { user: any; matchScore: number; matchTier: string; scoreBreakdown: Record<string, number> })[]> {
+
+    // --- Hard filters (binary gate — must pass all) ---
     const conditions: any[] = [eq(buyerProfiles.isActive, true)];
 
-    conditions.push(sql`${buyerProfiles.preApprovalAmount} >= ${criteria.price}`);
+    // Budget: buyer must be able to afford listing (allow 5% under for negotiation room)
+    conditions.push(sql`${buyerProfiles.preApprovalAmount} >= ${Math.round(criteria.price * 0.95)}`);
 
-    if (criteria.beds) {
+    if (criteria.beds > 0) {
       conditions.push(sql`(${buyerProfiles.minBeds} IS NULL OR ${buyerProfiles.minBeds} <= ${criteria.beds})`);
       conditions.push(sql`(${buyerProfiles.maxBeds} IS NULL OR ${buyerProfiles.maxBeds} >= ${criteria.beds})`);
     }
-    if (criteria.baths) {
+    if (criteria.baths > 0) {
       conditions.push(sql`(${buyerProfiles.minBaths} IS NULL OR ${buyerProfiles.minBaths} <= ${criteria.baths})`);
     }
-    if (criteria.sqft) {
+    if (criteria.sqft > 0) {
       conditions.push(sql`(${buyerProfiles.minSqft} IS NULL OR ${buyerProfiles.minSqft} <= ${criteria.sqft})`);
       conditions.push(sql`(${buyerProfiles.maxSqft} IS NULL OR ${buyerProfiles.maxSqft} >= ${criteria.sqft})`);
     }
     if (criteria.city) {
-      conditions.push(sql`(${buyerProfiles.preferredCities} IS NULL OR array_length(${buyerProfiles.preferredCities}, 1) IS NULL OR LOWER(${criteria.city}) = ANY(SELECT LOWER(unnest(${buyerProfiles.preferredCities}))))`);
+      conditions.push(sql`(
+        ${buyerProfiles.preferredCities} IS NULL OR
+        array_length(${buyerProfiles.preferredCities}, 1) IS NULL OR
+        LOWER(${criteria.city}) = ANY(SELECT LOWER(unnest(${buyerProfiles.preferredCities})))
+      )`);
     }
     if (criteria.propertyType) {
-      conditions.push(sql`(${buyerProfiles.homeTypes} IS NULL OR array_length(${buyerProfiles.homeTypes}, 1) IS NULL OR ${criteria.propertyType} = ANY(${buyerProfiles.homeTypes}))`);
+      conditions.push(sql`(
+        ${buyerProfiles.homeTypes} IS NULL OR
+        array_length(${buyerProfiles.homeTypes}, 1) IS NULL OR
+        LOWER(${criteria.propertyType}) = ANY(SELECT LOWER(unnest(${buyerProfiles.homeTypes})))
+      )`);
     }
 
     const results = await db
       .select({ profile: buyerProfiles, user: users })
       .from(buyerProfiles)
       .leftJoin(users, eq(buyerProfiles.userId, users.id))
-      .where(and(...conditions))
-      .orderBy(desc(buyerProfiles.preApprovalAmount));
+      .where(and(...conditions));
 
-    return results.map(r => ({ ...r.profile, user: r.user }));
+    // --- Scoring (0–100, applied in JS after the DB filter) ---
+    const TIMELINE_SCORES: Record<string, number> = {
+      'asap': 15,
+      'immediately': 15,
+      '1-3 months': 13,
+      '1-2 months': 13,
+      '3-6 months': 9,
+      '6-12 months': 4,
+      '12+ months': 1,
+      'just looking': 0,
+    };
+
+    const now = Date.now();
+    const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
+
+    const scored = results.map(r => {
+      const profile = r.profile;
+      const breakdown: Record<string, number> = {};
+
+      // 1. Budget headroom (0–20 pts)
+      // Full 20 pts if approval is 20%+ above price, scales linearly down to 0
+      const headroom = (profile.preApprovalAmount - criteria.price) / criteria.price;
+      breakdown.budget = Math.min(20, Math.max(0, Math.round(headroom * 100)));
+
+      // 2. Pre-approval status (0–15 pts)
+      breakdown.preApproval = profile.isPreApproved ? 15 : 0;
+
+      // 3. Beds match quality (0–15 pts)
+      // 15 = exact match, 8 = within 1, 3 = only passes because minBeds is NULL
+      if (criteria.beds > 0) {
+        const minB = profile.minBeds ?? 0;
+        const maxB = profile.maxBeds ?? 99;
+        if (criteria.beds >= minB && criteria.beds <= maxB) {
+          const diff = Math.min(
+            Math.abs(criteria.beds - minB),
+            Math.abs(criteria.beds - maxB)
+          );
+          breakdown.beds = diff === 0 ? 15 : diff === 1 ? 8 : 3;
+        } else {
+          breakdown.beds = 0;
+        }
+      } else {
+        breakdown.beds = profile.minBeds == null ? 3 : 0;
+      }
+
+      // 4. Must-haves overlap (0–20 pts)
+      // Compare listing's mustHaves array against buyer's mustHaves (case-insensitive)
+      const listingMustHaves = (criteria.mustHaves ?? []).map(s => s.toLowerCase().trim());
+      const buyerMustHaves = (profile.mustHaves ?? []).map(s => s.toLowerCase().trim());
+      if (listingMustHaves.length > 0 && buyerMustHaves.length > 0) {
+        const overlap = buyerMustHaves.filter(f => listingMustHaves.includes(f)).length;
+        breakdown.mustHaves = Math.round((overlap / buyerMustHaves.length) * 20);
+      } else {
+        // No data to compare — neutral, give partial credit so empty profiles aren't penalized
+        breakdown.mustHaves = 5;
+      }
+
+      // 5. Move-in timeline (0–15 pts)
+      const timelineKey = (profile.moveInTimeline ?? '').toLowerCase().replace('–', '-').trim();
+      breakdown.timeline = TIMELINE_SCORES[timelineKey] ?? 5;
+
+      // 6. Recency (0–15 pts)
+      // Full 15 pts if profile created within 30 days, scales to 0 at 90 days
+      const createdAt = profile.createdAt ? new Date(profile.createdAt).getTime() : now;
+      const ageMs = now - createdAt;
+      breakdown.recency = ageMs >= NINETY_DAYS_MS ? 0 : Math.round(15 * (1 - ageMs / NINETY_DAYS_MS));
+
+      const matchScore = Object.values(breakdown).reduce((a, b) => a + b, 0);
+
+      // Tier labels
+      const matchTier = matchScore >= 70 ? 'Strong' : matchScore >= 45 ? 'Good' : 'Potential';
+
+      return { ...profile, user: r.user, matchScore, matchTier, scoreBreakdown: breakdown };
+    });
+
+    // Sort by score descending
+    return scored.sort((a, b) => b.matchScore - a.matchScore);
   }
 
   async createBuyerMatch(match: InsertBuyerMatch): Promise<BuyerMatch> {

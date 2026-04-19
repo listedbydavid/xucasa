@@ -2873,11 +2873,15 @@ export async function registerRoutes(
         sqft: z.coerce.number().min(0),
         city: z.string().min(1),
         propertyType: z.string().optional().default(""),
+        mustHaves: z.string().optional().default(""),
       });
       const parsed = schema.safeParse(req.query);
       if (!parsed.success) return res.status(400).json({ message: "Invalid parameters", errors: parsed.error.flatten() });
 
-      const matches = await storage.matchBuyersForListing(parsed.data);
+      const mustHaves = parsed.data.mustHaves
+        ? parsed.data.mustHaves.split(',').map(s => s.trim()).filter(Boolean)
+        : [];
+      const matches = await storage.matchBuyersForListing({ ...parsed.data, mustHaves });
 
       const safeMatches = matches.map(profile => ({
         id: profile.id,
@@ -2896,6 +2900,9 @@ export async function registerRoutes(
         moveInTimeline: profile.moveInTimeline,
         hasAgent: profile.hasAgent,
         bio: profile.bio,
+        matchScore: profile.matchScore,
+        matchTier: profile.matchTier,
+        scoreBreakdown: profile.scoreBreakdown,
       }));
 
       res.json({ matches: safeMatches, total: safeMatches.length });

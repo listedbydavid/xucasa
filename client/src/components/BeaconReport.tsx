@@ -36,6 +36,7 @@ interface BeaconFormData {
   baths: string;
   sqft: string;
   propertyType: string;
+  mustHaves: string;
 }
 
 interface MatchedBuyer {
@@ -55,6 +56,9 @@ interface MatchedBuyer {
   moveInTimeline: string | null;
   hasAgent: boolean | null;
   bio: string | null;
+  matchScore: number;
+  matchTier: "Strong" | "Good" | "Potential";
+  scoreBreakdown: Record<string, number>;
 }
 
 const PROPERTY_TYPES = [
@@ -83,6 +87,7 @@ export function BeaconTab() {
     baths: "",
     sqft: "",
     propertyType: "SFH",
+    mustHaves: "",
   });
   const [searchTriggered, setSearchTriggered] = useState(false);
   const [searchParams, setSearchParams] = useState<Record<string, string>>({});
@@ -91,7 +96,7 @@ export function BeaconTab() {
   const queryEnabled = searchTriggered && !!searchParams.price && !!searchParams.city;
 
   const beaconQueryString = queryEnabled
-    ? `?price=${searchParams.price}&beds=${searchParams.beds}&baths=${searchParams.baths}&sqft=${searchParams.sqft}&city=${encodeURIComponent(searchParams.city || "")}&propertyType=${encodeURIComponent(searchParams.propertyType || "")}`
+    ? `?price=${searchParams.price}&beds=${searchParams.beds}&baths=${searchParams.baths}&sqft=${searchParams.sqft}&city=${encodeURIComponent(searchParams.city || "")}&propertyType=${encodeURIComponent(searchParams.propertyType || "")}&mustHaves=${encodeURIComponent(searchParams.mustHaves || "")}`
     : "";
 
   const { data, isLoading, error } = useQuery<{ matches: MatchedBuyer[]; total: number }>({
@@ -122,6 +127,7 @@ export function BeaconTab() {
       sqft: form.sqft || "0",
       city: form.city,
       propertyType: form.propertyType,
+      mustHaves: form.mustHaves || "",
     });
     setSearchTriggered(true);
   };
@@ -351,17 +357,37 @@ export function BeaconTab() {
           doc.setFontSize(6);
           doc.setTextColor(255, 255, 255);
           doc.text("UNREPRESENTED", badgeX + 12, y + 10.5, { align: "center" });
+          badgeX += 27;
         }
 
-        // Budget
+        // Tier badge (Strong / Good / Potential)
+        const tierColor: [number, number, number] =
+          buyer.matchTier === "Strong"
+            ? [34, 139, 34]
+            : buyer.matchTier === "Good"
+            ? [217, 119, 6]
+            : [107, 114, 128];
+        const tierLabel = buyer.matchTier.toUpperCase();
+        doc.setFontSize(6);
+        const tierW = doc.getTextWidth(tierLabel) + 6;
+        doc.setFillColor(...tierColor);
+        doc.roundedRect(badgeX, y + 6, tierW, 6, 1, 1, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.text(tierLabel, badgeX + tierW / 2, y + 10.5, { align: "center" });
+
+        // Budget + match score
         doc.setFontSize(13);
         doc.setTextColor(...primaryColor);
         doc.setFont("helvetica", "bold");
-        doc.text(`$${buyer.preApprovalAmount.toLocaleString()}`, pageW - margin - 6, y + 12, { align: "right" });
+        doc.text(`$${buyer.preApprovalAmount.toLocaleString()}`, pageW - margin - 6, y + 11, { align: "right" });
         doc.setFontSize(7);
         doc.setTextColor(...mutedText);
         doc.setFont("helvetica", "normal");
-        doc.text("Budget", pageW - margin - 6, y + 17, { align: "right" });
+        doc.text("Budget", pageW - margin - 6, y + 16, { align: "right" });
+        doc.setFontSize(9);
+        doc.setTextColor(...darkText);
+        doc.setFont("helvetica", "bold");
+        doc.text(`Match: ${buyer.matchScore}/100`, pageW - margin - 6, y + 21, { align: "right" });
 
         // Details row
         let detailY = y + 25;
@@ -589,6 +615,21 @@ export function BeaconTab() {
             </div>
           </div>
 
+          <div>
+            <label className={labelClass}>Listing Features (comma-separated)</label>
+            <input
+              type="text"
+              className={inputClass}
+              placeholder="e.g. pool, garage, ocean view, single story"
+              value={form.mustHaves}
+              onChange={e => updateField("mustHaves", e.target.value)}
+              data-testid="input-beacon-must-haves"
+            />
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Enter features this listing has to surface buyers who specifically want them.
+            </p>
+          </div>
+
           <button
             type="submit"
             disabled={isLoading}
@@ -657,7 +698,14 @@ export function BeaconTab() {
               </div>
 
               <div className="space-y-3">
-                {matches.map((buyer, idx) => (
+                {matches.map((buyer, idx) => {
+                  const tierClasses =
+                    buyer.matchTier === "Strong"
+                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                      : buyer.matchTier === "Good"
+                      ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+                      : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300";
+                  return (
                   <div
                     key={buyer.id}
                     className="bg-card rounded-2xl border border-border p-5 sm:p-6 hover:border-primary/30 transition-colors"
@@ -671,6 +719,12 @@ export function BeaconTab() {
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <h3 className="font-bold text-foreground">{buyer.displayName || `Buyer ${idx + 1}`}</h3>
+                            <span
+                              className={`px-2 py-0.5 text-xs font-bold rounded-full ${tierClasses}`}
+                              data-testid={`tier-beacon-buyer-${buyer.id}`}
+                            >
+                              {buyer.matchTier}
+                            </span>
                             {buyer.isPreApproved && (
                               <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold rounded-full">
                                 <ShieldCheck className="w-3 h-3" />
@@ -688,6 +742,18 @@ export function BeaconTab() {
                             Budget: <span className="font-bold text-primary">{formatCurrency(buyer.preApprovalAmount)}</span>
                           </p>
                         </div>
+                      </div>
+                      <div
+                        className="flex flex-col items-end shrink-0"
+                        data-testid={`score-beacon-buyer-${buyer.id}`}
+                      >
+                        <div className="text-2xl font-bold font-display text-foreground leading-none">
+                          {buyer.matchScore}
+                          <span className="text-sm text-muted-foreground font-normal">/100</span>
+                        </div>
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">
+                          Match Score
+                        </span>
                       </div>
                     </div>
 
@@ -745,8 +811,35 @@ export function BeaconTab() {
                         ))}
                       </div>
                     ) : null}
+
+                    <details className="mt-4 group" data-testid={`breakdown-beacon-buyer-${buyer.id}`}>
+                      <summary className="text-xs font-semibold text-muted-foreground cursor-pointer hover:text-foreground transition-colors list-none flex items-center gap-1.5">
+                        <Star className="w-3 h-3" />
+                        <span className="group-open:hidden">Show score breakdown</span>
+                        <span className="hidden group-open:inline">Hide score breakdown</span>
+                      </summary>
+                      <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                        {[
+                          { key: "budget", label: "Budget headroom", max: 20 },
+                          { key: "preApproval", label: "Pre-approved", max: 15 },
+                          { key: "beds", label: "Beds match", max: 15 },
+                          { key: "mustHaves", label: "Must-haves overlap", max: 20 },
+                          { key: "timeline", label: "Move-in timeline", max: 15 },
+                          { key: "recency", label: "Profile recency", max: 15 },
+                        ].map(({ key, label, max }) => (
+                          <div key={key} className="flex items-center justify-between bg-muted/40 rounded-lg px-2.5 py-1.5">
+                            <span className="text-muted-foreground">{label}</span>
+                            <span className="font-bold text-foreground">
+                              {buyer.scoreBreakdown?.[key] ?? 0}
+                              <span className="text-muted-foreground font-normal">/{max}</span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}
