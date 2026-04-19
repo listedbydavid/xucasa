@@ -87,3 +87,25 @@ Preferred communication style: Simple, everyday language.
 - **OpenStreetMap Overpass API**: For nearby places information.
 - **Google OAuth 2.0**: For user authentication.
 - **RealtyFeed / MLS Sync**: Integrates with RealtyFeed (RESO OData) for MLS listing synchronization, with IDX Broker REST API as a fallback.
+## Testing
+
+Integration tests live in `server/__tests__/*.test.ts` and run via Node's
+built-in test runner with `tsx`. Run them with:
+
+```
+bash scripts/run-tests.sh
+```
+
+Tests require `DATABASE_URL` (they seed and clean up their own fixtures using
+fixed test IDs).
+
+- `server/__tests__/beacon.test.ts` — pure-function unit tests against the
+  exported scoring helpers in `server/storage.ts` (`scoreBuyer`,
+  `passesBudgetGate`, `minBuyerBudget`). Covers tier thresholds, budget gate
+  boundaries, en-dash/hyphen equivalence, and null/empty edge cases. No DB
+  required.
+- `server/__tests__/beacon.integration.test.ts` — DB-backed integration test
+  that seeds 1 Strong / 1 Good / 1 Potential buyer against a known listing
+  and asserts the full `matchScore`, `matchTier`, `scoreBreakdown`, and
+  descending sort order returned by `storage.matchBuyersForListing`.
+  Requires `DATABASE_URL`.
