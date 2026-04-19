@@ -442,19 +442,16 @@ export class DatabaseStorage implements IStorage {
   private buildPropertyFilters(filters?: any) {
     let conditions: any[] = [];
 
-    // Exclude rentals from buyer-facing queries by default. Callers must set
-    // filters.includeRentals = true to opt back in (e.g. for an internal admin
-    // view). An explicit filters.status does NOT bypass the rental gate, since
-    // a misclassified rental can still have status='active'.
-    const includeRentals = filters && (filters.includeRentals === true || filters.includeRentals === 'true');
-    if (!includeRentals) {
-      conditions.push(sql`(${properties.status} IS NULL OR LOWER(${properties.status}) <> 'rental')`);
-      conditions.push(sql`(${properties.propertyType} IS NULL OR LOWER(${properties.propertyType}) NOT IN ('rental', 'residential lease'))`);
-      // Also hide listings the IDX feed has dropped (status='removed'), unless
-      // the caller asked for a specific status (e.g. status=removed for admin).
-      if (!filters?.status) {
-        conditions.push(sql`(${properties.status} IS NULL OR LOWER(${properties.status}) <> 'removed')`);
-      }
+    // Rentals are NOT supported on the platform — exclude them unconditionally
+    // from every property query. (Rental support is a future add-on.) An
+    // explicit filters.status does NOT bypass the rental gate, since a
+    // misclassified rental can still have status='active'.
+    conditions.push(sql`(${properties.status} IS NULL OR LOWER(${properties.status}) <> 'rental')`);
+    conditions.push(sql`(${properties.propertyType} IS NULL OR LOWER(${properties.propertyType}) NOT IN ('rental', 'residential lease'))`);
+    // Also hide listings the IDX feed has dropped (status='removed'), unless
+    // the caller asked for a specific status (e.g. status=removed for admin).
+    if (!filters?.status) {
+      conditions.push(sql`(${properties.status} IS NULL OR LOWER(${properties.status}) <> 'removed')`);
     }
 
     if (filters) {
