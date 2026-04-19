@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
+import { BuyerProfileNudge } from "@/components/BuyerProfileNudge";
 import { ConcessionDetailsModal } from "@/components/ConcessionDetailsModal";
 import {
   Heart, X, RotateCcw, MapPin, BedDouble, Bath,
@@ -199,6 +200,11 @@ export default function Swipe() {
           }}
         />
       )}
+
+      {/* Profile completeness nudge — buyers only, top of page */}
+      <div className="px-4 pt-4 max-w-2xl mx-auto w-full">
+        <BuyerProfileNudge />
+      </div>
 
       {/* ── Swipe deck section — full viewport height ── */}
       <div className="h-[calc(100vh-64px)] flex flex-col items-center overflow-hidden select-none">

@@ -120,6 +120,76 @@ export const TIMELINE_SCORES: Record<string, number> = {
 
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
 
+/**
+ * Buyer profile completeness scoring.
+ *
+ * Returns a 0–100 score based on which fields are filled, plus a
+ * human-readable list of what's missing. Used by the profile-nudge
+ * banner and the GET /api/buyer-profile/completeness endpoint.
+ *
+ * Weights (sum = 100):
+ *   minBeds OR maxBeds       → 15  ("Bedroom preferences")
+ *   minBaths                 → 10  ("Bathroom minimum")
+ *   preferredCities (>=1)    → 20  ("Preferred cities")
+ *   homeTypes (>=1)          → 15  ("Home type preferences")
+ *   mustHaves (>=1)          → 20  ("Must-have features")
+ *   moveInTimeline           → 10  ("Move-in timeline")
+ *   minSqft OR maxSqft       → 10  ("Size preferences")
+ */
+export function buyerProfileCompleteness(
+  profile: Pick<
+    BuyerProfile,
+    | 'minBeds' | 'maxBeds' | 'minBaths' | 'minSqft' | 'maxSqft'
+    | 'preferredCities' | 'homeTypes' | 'mustHaves' | 'moveInTimeline'
+  >
+): { score: number; missingFields: string[] } {
+  const checks: Array<{ filled: boolean; points: number; label: string }> = [
+    {
+      filled: profile.minBeds != null || profile.maxBeds != null,
+      points: 15,
+      label: 'Bedroom preferences',
+    },
+    {
+      filled: profile.minBaths != null,
+      points: 10,
+      label: 'Bathroom minimum',
+    },
+    {
+      filled: Array.isArray(profile.preferredCities) && profile.preferredCities.length > 0,
+      points: 20,
+      label: 'Preferred cities',
+    },
+    {
+      filled: Array.isArray(profile.homeTypes) && profile.homeTypes.length > 0,
+      points: 15,
+      label: 'Home type preferences',
+    },
+    {
+      filled: Array.isArray(profile.mustHaves) && profile.mustHaves.length > 0,
+      points: 20,
+      label: 'Must-have features',
+    },
+    {
+      filled: typeof profile.moveInTimeline === 'string' && profile.moveInTimeline.trim().length > 0,
+      points: 10,
+      label: 'Move-in timeline',
+    },
+    {
+      filled: profile.minSqft != null || profile.maxSqft != null,
+      points: 10,
+      label: 'Size preferences',
+    },
+  ];
+
+  let score = 0;
+  const missingFields: string[] = [];
+  for (const c of checks) {
+    if (c.filled) score += c.points;
+    else missingFields.push(c.label);
+  }
+  return { score, missingFields };
+}
+
 /** Hard budget gate: buyer's pre-approval must be >= 95% of listing price. */
 export function minBuyerBudget(price: number): number {
   return Math.round(price * 0.95);

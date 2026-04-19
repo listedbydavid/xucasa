@@ -1,0 +1,100 @@
+I need you to build a buyer profile completeness nudge. The goal is to prompt buyers to fill in mustHaves, homeTypes, and preferredCities — the fields that are currently empty on almost every profile and that directly power Beacon matching and future recommendations.
+
+Context
+The buyer_profiles table has these fields that are almost universally empty:
+
+must_haves — text array, e.g. ["pool", "garage", "single story"]
+nice_to_haves — text array
+deal_breakers — text array
+home_types — text array, e.g. ["Single Family", "Condo"]
+preferred_cities — text array, e.g. ["San Diego", "La Jolla"]
+move_in_timeline — text, e.g. "1-3 months"
+min_beds, max_beds, min_baths, min_sqft, max_sqft — integers
+
+We need buyers to fill these in because they power Beacon (agents use them to prove demand before listing) and will power future recommendations.
+
+Part 1 — Profile completeness score (server-side)
+In server/storage.ts, add a pure function buyerProfileCompleteness(profile: BuyerProfile): { score: number; missingFields: string[] } that returns:
+
+score: 0–100 based on which fields are filled
+missingFields: human-readable list of what's missing
+
+Use these weights:
+FieldPointsLabel if missingminBeds or maxBeds15"Bedroom preferences"minBaths10"Bathroom minimum"preferredCities (non-empty array)20"Preferred cities"homeTypes (non-empty array)15"Home type preferences"mustHaves (non-empty array)20"Must-have features"moveInTimeline10"Move-in timeline"minSqft or maxSqft10"Size preferences"
+Export this function so it can be used in both the API route and unit tests.
+
+Part 2 — API endpoint
+In server/routes.ts, add:
+GET /api/buyer-profile/completeness — requires auth
+
+Finds the caller's active buyer profile
+Returns { score, missingFields, profile } using buyerProfileCompleteness()
+If no profile exists yet: returns { score: 0, missingFields: [], profile: null, noProfile: true }
+
+PATCH /api/buyer-profile — requires auth
+
+Allows buyers to update their profile fields
+Accepts: minBeds, maxBeds, minBaths, minSqft, maxSqft, preferredCities, homeTypes, mustHaves, niceToHaves, dealBreakers, moveInTimeline
+Validates with Zod — all fields optional
+Normalize moveInTimeline: replace en-dash (–) with hyphen (-) and lowercase before saving
+Audit log with executeWithAudit
+Returns updated profile + new completeness score
+
+
+Part 3 — Completeness nudge banner component
+Create client/src/components/BuyerProfileNudge.tsx:
+
+Fetches /api/buyer-profile/completeness on mount
+If score is 100 or noProfile is true: renders nothing
+If score < 100: renders a dismissible amber banner that says:
+
+"Your buyer profile is {score}% complete. Finish it to get better matches and let agents know what you're looking for."
+[Complete my profile →]
+
+
+The "Complete my profile" button opens an inline expandable form (not a separate page) with fields for all 7 categories above
+Each category is a labeled section:
+
+Preferred cities — tag input (type a city, press Enter to add, click × to remove)
+Home types — checkbox group: Single Family, Condo, Townhouse, Multi-Family, Mobile, Land
+Bedrooms — min/max number inputs side by side
+Bathrooms — min number input
+Size — min/max sqft side by side
+Must-haves — tag input with suggestions: pool, garage, ocean view, single story, large lot, updated kitchen, solar, ADU, no HOA, good schools
+Move-in timeline — select dropdown: ASAP, 1-3 months, 3-6 months, 6-12 months, 12+ months, Just looking
+
+
+On save: PATCH /api/buyer-profile, show success toast, re-fetch completeness, collapse the form
+Show a progress bar (amber → green as score increases) inside the banner
+Persist dismissal in localStorage so the banner doesn't re-appear after the user dismisses it during the same session (it should reappear on next visit if still incomplete)
+
+
+Part 4 — Wire the nudge into the buyer experience
+Add <BuyerProfileNudge /> in these three places:
+
+client/src/pages/Swipe.tsx — at the top of the page, above the swipe stack, only shown to authenticated buyers
+client/src/pages/Dashboard.tsx — in the buyer's dashboard tab, above saved properties
+client/src/pages/Dashboard.tsx — in the profile/settings section if one exists
+
+Only render it when user.primaryIntent === 'buyer' or user.currentMode === 'buyer'.
+
+Part 5 — Unit tests
+Add tests for buyerProfileCompleteness() in server/__tests__/beacon.test.ts (or a new file server/__tests__/buyerProfile.test.ts):
+
+Empty profile scores 0
+Profile with only preferredCities filled scores 20
+Fully filled profile scores 100
+missingFields contains exactly the right labels for a partially filled profile
+moveInTimeline with en-dash normalizes correctly on PATCH
+
+
+Part 6 — Verification
+After all changes:
+
+npx tsc --noEmit — show only new errors, not pre-existing ones
+npx tsx server/__tests__/buyerProfile.test.ts — all tests pass
+npx drizzle-kit push --force </dev/null — show output
+Describe what a buyer with an empty profile would see when they visit /swipe
+Describe what a buyer with a 60% complete profile would see on their dashboard
+
+

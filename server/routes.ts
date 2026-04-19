@@ -2,7 +2,7 @@ import type { Express } from "express";
 import type { Server } from "http";
 import fs from "fs";
 import path from "path";
-import { storage } from "./storage";
+import { storage, buyerProfileCompleteness } from "./storage";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { db } from "./db";
 import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews, errorReports, notifications, buyerInterest, sellerConcessions, insertSellerConcessionSchema } from "@shared/schema";
@@ -2937,6 +2937,74 @@ export async function registerRoutes(
     try {
       const profiles = await storage.getBuyerProfiles(req.query);
       res.json(profiles.map(redactBuyerProfile));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/buyer-profile/completeness — returns the caller's profile
+  // completeness score + list of missing fields. Used by BuyerProfileNudge.
+  app.get("/api/buyer-profile/completeness", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profile = await storage.getUserBuyerProfile(userId);
+      if (!profile) {
+        return res.json({ score: 0, missingFields: [], profile: null, noProfile: true });
+      }
+      const { score, missingFields } = buyerProfileCompleteness(profile);
+      res.json({ score, missingFields, profile });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // PATCH /api/buyer-profile — partial-update the caller's active buyer profile.
+  // Returns the updated profile + new completeness score. Audited.
+  app.patch("/api/buyer-profile", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const updateSchema = z.object({
+        minBeds: z.number().int().min(0).max(20).nullable().optional(),
+        maxBeds: z.number().int().min(0).max(20).nullable().optional(),
+        minBaths: z.coerce.number().min(0).max(20).nullable().optional(),
+        minSqft: z.number().int().min(0).max(100000).nullable().optional(),
+        maxSqft: z.number().int().min(0).max(100000).nullable().optional(),
+        preferredCities: z.array(z.string().min(1)).max(50).nullable().optional(),
+        homeTypes: z.array(z.string().min(1)).max(20).nullable().optional(),
+        mustHaves: z.array(z.string().min(1)).max(50).nullable().optional(),
+        niceToHaves: z.array(z.string().min(1)).max(50).nullable().optional(),
+        dealBreakers: z.array(z.string().min(1)).max(50).nullable().optional(),
+        moveInTimeline: z.string().max(50).nullable().optional(),
+      });
+      const parsed = updateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid profile update", errors: parsed.error.flatten() });
+      }
+
+      const profile = await storage.getUserBuyerProfile(userId);
+      if (!profile) {
+        return res.status(404).json({ message: "No buyer profile found. Create one first." });
+      }
+
+      // Normalize moveInTimeline: en-dash → hyphen, lowercase
+      const updates: any = { ...parsed.data };
+      if (typeof updates.moveInTimeline === 'string') {
+        updates.moveInTimeline = updates.moveInTimeline.replace(/–/g, '-').toLowerCase().trim();
+      }
+      // Coerce minBaths to string for decimal column
+      if (updates.minBaths != null && typeof updates.minBaths === 'number') {
+        updates.minBaths = String(updates.minBaths);
+      }
+
+      const result = await executeWithAudit(
+        { req, event: "buyer_profile_updated", userId, metadata: { fields: Object.keys(updates) } },
+        async () => {
+          const updated = await storage.updateBuyerProfile(profile.id, userId, updates);
+          return { data: updated, auditOverrides: { resourceType: "buyer_profile", resourceId: String(profile.id) } };
+        }
+      );
+      const completeness = buyerProfileCompleteness(result as any);
+      res.json({ profile: result, ...completeness });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

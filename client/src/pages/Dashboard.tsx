@@ -33,6 +33,7 @@ import { Autocomplete } from "@react-google-maps/api";
 import { useGoogleMaps } from "@/hooks/use-google-maps";
 import { OpenHouseRoutePlanner } from "@/components/OpenHouseRoutePlanner";
 import { BuyerProfileModal } from "@/components/BuyerProfileModal";
+import { BuyerProfileNudge } from "@/components/BuyerProfileNudge";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { BuyerProfile } from "@shared/schema";
@@ -234,6 +235,8 @@ function ProfileSection({ user }: { user: any }) {
           </div>
         </div>
       </div>
+
+      <BuyerProfileNudge />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard label="Saved Homes" value={<FavoriteCount />} icon={Heart} color="text-rose-500" />
