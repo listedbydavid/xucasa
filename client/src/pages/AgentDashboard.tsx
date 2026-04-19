@@ -1207,6 +1207,7 @@ function PropertyFormModal({
       ? new Date((property as any).openHouseDate).toISOString().split("T")[0]
       : "",
     openHouseTime: (property as any)?.openHouseTime || "",
+    propertyType: (property as any)?.propertyType || "SFH",
   });
 
   // Street View preview state
@@ -1293,6 +1294,7 @@ function PropertyFormModal({
       status: "active",
       openHouseDate: formData.openHouseDate || undefined,
       openHouseTime: formData.openHouseTime || undefined,
+      propertyType: formData.propertyType,
     });
   };
 
@@ -1508,6 +1510,28 @@ function PropertyFormModal({
               <label className="block text-sm font-bold text-muted-foreground mb-2">Sq Ft</label>
               <input required type="number" min="0" value={formData.sqft} onChange={e => setFormData({ ...formData, sqft: e.target.value })} className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none" />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-muted-foreground mb-2">Property Type <span className="text-destructive">*</span></label>
+            <select
+              required
+              value={formData.propertyType}
+              onChange={e => setFormData({ ...formData, propertyType: e.target.value })}
+              className="w-full bg-background border-2 border-border rounded-xl px-4 py-3 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
+              data-testid="select-property-type"
+            >
+              <option value="SFH">Single Family Home</option>
+              <option value="Condo">Condo</option>
+              <option value="Townhome">Townhome</option>
+              <option value="Multi-Family">Multi-Family</option>
+              <option value="2-4 Unit">2-4 Unit</option>
+              <option value="Mobile">Mobile / Manufactured</option>
+              <option value="Land">Land</option>
+              <option value="Commercial">Commercial</option>
+              <option value="Farm/Ranch">Farm / Ranch</option>
+            </select>
+            <p className="text-xs text-muted-foreground mt-1">Used to match this listing to buyers in Beacon.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

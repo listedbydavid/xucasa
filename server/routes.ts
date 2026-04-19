@@ -164,7 +164,12 @@ export async function registerRoutes(
     try {
       const user = req.user.claims;
       const input = api.properties.create.input.parse(req.body);
-      const prop = await storage.createProperty({ ...input, agentId: user.sub });
+      const { normalisePropertyType } = await import("./idxSync");
+      const propertyType = normalisePropertyType(input.propertyType) || input.propertyType;
+      if (!propertyType) {
+        return res.status(400).json({ message: "Property type is required", field: "propertyType" });
+      }
+      const prop = await storage.createProperty({ ...input, propertyType, agentId: user.sub });
       res.status(201).json(prop);
 
       // Geocode in background after response is sent

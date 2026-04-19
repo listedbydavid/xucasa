@@ -77,6 +77,32 @@ import {
 import { eq, and, desc, asc, sql, gte, gt, count, inArray, isNull } from "drizzle-orm";
 import { authStorage } from "./replit_integrations/auth/storage";
 
+// ── Property type alias map for buyer matching ────────────────────────────────
+// Listings store canonical labels (SFH, Condo, Townhome, …). Buyer profiles, however,
+// are free-form text where users routinely type "Single Family", "Townhouse",
+// "Condominium", etc. We translate the listing's canonical type into every
+// label a buyer is likely to have entered so the hard filter still matches.
+const PROPERTY_TYPE_BUYER_ALIASES: Record<string, string[]> = {
+  "sfh": ["sfh", "single family", "single-family", "single family home", "single family residential", "single-family residential", "residential", "detached", "house"],
+  "condo": ["condo", "condominium", "condos"],
+  "townhome": ["townhome", "townhouse", "town home", "town house", "townhomes"],
+  "multi-family": ["multi-family", "multi family", "multifamily", "apartment", "5+ units", "5+ unit"],
+  "2-4 unit": ["2-4 unit", "2-4 units", "duplex", "triplex", "fourplex", "quadruplex", "residential income", "multi-family", "multi family"],
+  "land": ["land", "lot", "vacant land", "vacant lot"],
+  "mobile": ["mobile", "manufactured", "mobile home", "manufactured home"],
+  "commercial": ["commercial", "commercial sale"],
+  "farm/ranch": ["farm/ranch", "farm", "ranch", "farm and ranch"],
+};
+
+export function propertyTypeMatchAliases(canonical: string): string[] {
+  const key = (canonical || "").toLowerCase().trim();
+  if (!key) return [];
+  const aliases = PROPERTY_TYPE_BUYER_ALIASES[key];
+  if (aliases && aliases.length) return aliases;
+  // Unknown canonical value: at least match itself (case-insensitive).
+  return [key];
+}
+
 // ---------------------------------------------------------------------------
 // Beacon scoring — pure helpers (exported for unit tests in server/__tests__)
 // ---------------------------------------------------------------------------
@@ -974,10 +1000,16 @@ export class DatabaseStorage implements IStorage {
       )`);
     }
     if (criteria.propertyType) {
+      // Allow buyer-side aliases (e.g. listing "SFH" should match a buyer who picked
+      // "Single Family" or "Single Family Residential"; "Townhome" should match "Townhouse").
+      const aliases = propertyTypeMatchAliases(criteria.propertyType);
       conditions.push(sql`(
         ${buyerProfiles.homeTypes} IS NULL OR
         array_length(${buyerProfiles.homeTypes}, 1) IS NULL OR
-        LOWER(${criteria.propertyType}) = ANY(SELECT LOWER(unnest(${buyerProfiles.homeTypes})))
+        EXISTS (
+          SELECT 1 FROM unnest(${buyerProfiles.homeTypes}) AS ht
+          WHERE LOWER(ht) = ANY(${aliases})
+        )
       )`);
     }
 

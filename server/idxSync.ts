@@ -466,7 +466,7 @@ function normaliseIdxBroker(raw: any) {
     source: "idx" as const,
     isOffMarket: false,
     listDate: raw.listDate ? new Date(raw.listDate) : null,
-    propertyType: raw.propertyType || raw.propertySubType || null,
+    propertyType: normalisePropertyType(raw.propertyType, raw.propertySubType),
   };
 }
 
@@ -584,18 +584,20 @@ function normaliseReso(raw: any) {
   };
 }
 
-function normalisePropertyType(type?: string, subType?: string): string | null {
+export function normalisePropertyType(type?: string | null, subType?: string | null): string | null {
   const t = (subType || type || "").toLowerCase().trim();
   if (!t) return null;
-  if (t.includes("single") || t.includes("detached") || t === "residential") return "SFH";
+  if (t.includes("single") || t.includes("detached")) return "SFH";
   if (t.includes("condo")) return "Condo";
   if (t.includes("townho") || t.includes("town ho")) return "Townhome";
-  if (t.includes("land") || t.includes("lot")) return "Land";
-  if (t.includes("multi") || t.includes("duplex") || t.includes("triplex") || t.includes("fourplex") || t.includes("quadruplex")) return "2-4 Unit";
-  if (t.includes("apart") || t.includes("5+")) return "Multi-Family";
+  if (t.includes("land") || t.includes("lot") || t.includes("vacant")) return "Land";
+  if (t.includes("income") || t.includes("duplex") || t.includes("triplex") || t.includes("fourplex") || t.includes("quadruplex")) return "2-4 Unit";
+  if (t.includes("multi") || t.includes("apart") || t.includes("5+")) return "Multi-Family";
   if (t.includes("mobile") || t.includes("manufactured")) return "Mobile";
   if (t.includes("commercial")) return "Commercial";
   if (t.includes("farm") || t.includes("ranch")) return "Farm/Ranch";
+  // Generic "Residential" or "Residential Lease" with no further qualifier → assume single-family home
+  if (t.includes("residential")) return "SFH";
   return type || subType || null;
 }
 
