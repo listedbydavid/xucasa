@@ -2,7 +2,7 @@ import type { Express } from "express";
 import type { Server } from "http";
 import fs from "fs";
 import path from "path";
-import { storage, buyerProfileCompleteness } from "./storage";
+import { storage, buyerProfileCompleteness, resolveBuyerAgent } from "./storage";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { db } from "./db";
 import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews, errorReports, notifications, buyerInterest, sellerConcessions, insertSellerConcessionSchema } from "@shared/schema";
@@ -1978,23 +1978,7 @@ export async function registerRoutes(
           const prop = await storage.getProperty(propertyId);
           if (!prop) throw new Error("Property not found");
 
-          // Resolve the buyer's agent. If buyer already has an assigned agent,
-          // resolveAndAssignAgent returns it. Otherwise, assign the platform
-          // default agent — David Hussain (david@xucasa.com) deterministically.
-          const buyerNow = await storage.getUser(buyerUserId);
-          let assignedAgent: any = null;
-          if (buyerNow?.assignedAgentUserId) {
-            assignedAgent = await storage.getUser(buyerNow.assignedAgentUserId);
-          }
-          if (!assignedAgent) {
-            const david = await storage.getUser("55534280");
-            if (david) {
-              await storage.assignAgent(buyerUserId, david.id);
-              assignedAgent = david;
-            } else {
-              assignedAgent = await storage.resolveAndAssignAgent(buyerUserId);
-            }
-          }
+          const { agent: assignedAgent, assignmentType } = await resolveBuyerAgent(buyerUserId, storage);
           await storage.upsertBuyerInterest(propertyId, buyerUserId, "swipe", assignedAgent?.id || null, prop?.agentId || null);
 
           const existing = await storage.getExistingSwipeNotification(buyerUserId, propertyId);
@@ -2020,7 +2004,7 @@ export async function registerRoutes(
 
           return {
             data: { message: "Interest registered", notifications: [n], buyerRepresented: true, sellerRepresented, _status: 201 },
-            auditOverrides: { metadata: { notificationId: n.id } },
+            auditOverrides: { metadata: { notificationId: n.id, assignmentType, agentId: assignedAgent.id } },
           };
         }
       );
@@ -3861,24 +3845,7 @@ export async function registerRoutes(
         { req, event: "buyer_interest_upserted", userId, propertyId, metadata: { source: source || "swipe" } },
         async () => {
           const prop = await storage.getProperty(propertyId);
-          // Resolve buyer's agent. Use existing assignment if present, else
-          // assign David Hussain (platform default). Only fall back to
-          // resolveAndAssignAgent if David's account is missing.
-          const buyerNow = await storage.getUser(userId);
-          let assignedAgent: any = null;
-          if (buyerNow?.assignedAgentUserId) {
-            assignedAgent = await storage.getUser(buyerNow.assignedAgentUserId);
-          }
-          if (!assignedAgent) {
-            const DAVID_USER_ID = "55534280";
-            const david = await storage.getUser(DAVID_USER_ID);
-            if (david) {
-              await storage.assignAgent(userId, david.id);
-              assignedAgent = david;
-            } else {
-              assignedAgent = await storage.resolveAndAssignAgent(userId);
-            }
-          }
+          const { agent: assignedAgent, assignmentType } = await resolveBuyerAgent(userId, storage);
           const bi = await storage.upsertBuyerInterest(
             propertyId, userId, source || "swipe",
             assignedAgent?.id || null,

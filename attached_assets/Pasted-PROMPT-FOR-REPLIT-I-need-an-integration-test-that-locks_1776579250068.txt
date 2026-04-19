@@ -1,0 +1,55 @@
+PROMPT FOR REPLIT:
+
+I need an integration test that locks in the swipe → agent assignment flow, specifically the David Hussain fallback logic. This is critical because the fallback is the safety net for every unrepresented buyer on the platform.
+
+Context
+There are two endpoints that assign agents to buyers:
+
+POST /api/swipe-interest
+POST /api/buyer-interest
+
+Both were updated to deterministically assign David Hussain (user id 55534280, email david@xucasa.com) when a buyer has no assigned agent. The logic tries David first, then falls back to resolveAndAssignAgent only if David doesn't exist in the DB.
+
+What I want
+Create server/__tests__/agentAssignment.test.ts and cover these cases:
+David fallback logic:
+
+Unrepresented buyer with no assignedAgentUserId → gets assigned David (55534280)
+Buyer who already has an assigned agent → assignment is NOT overwritten
+Buyer who has previously swiped the same property → upsert does not create a duplicate, existing assignment preserved
+If David's user id does not exist in the DB (hypothetical safety check) → falls back to resolveAndAssignAgent without crashing
+
+Concession-aware swipe:
+
+Swiping right on a property with an active concession → buyer_interest row is created AND the concession details are accessible via GET /api/properties/:id/concessions
+Swiping right on a property with no concession → normal flow, no concession modal triggered
+
+Auth gating:
+
+Unauthenticated POST to /api/buyer-interest → returns 401
+Unauthenticated POST to /api/swipe-interest → returns 401
+
+Agent assignment audit trail:
+
+When David fallback fires → an audit event is logged with eventType: 'agent_assigned' and metadata containing { assignmentType: 'platform_default', agentId: '55534280' }
+
+
+Implementation notes
+
+Use the same test pattern already established in server/__tests__/beacon.test.ts and server/__tests__/buyerProfile.test.ts
+Mock the database calls rather than hitting the live DB — keep tests fast and deterministic
+If the existing test files use a real DB connection, follow that same pattern for consistency
+Export any pure logic from the route handlers into testable helper functions if needed (same refactor pattern used for scoreBuyer and buyerProfileCompleteness)
+The audit log assertion should verify the event shape, not just that it was called
+
+
+Verification
+After writing the tests:
+
+npx tsx server/__tests__/agentAssignment.test.ts — all tests pass, show full output
+npx tsc --noEmit — show only new errors, not pre-existing
+Show me the final list of all test files and their pass/fail counts:
+bashfor f in server/__tests__/*.test.ts; do echo "--- $f ---"; npx tsx "$f" 2>&1 | tail -5; done
+
+
+Paste the full output of all three back to me.

@@ -199,6 +199,46 @@ export function passesBudgetGate(preApprovalAmount: number, price: number): bool
   return preApprovalAmount >= minBuyerBudget(price);
 }
 
+// ── David Hussain platform-default agent ────────────────────────────────────
+// Deterministic fallback for unrepresented buyers. When a buyer has no
+// assigned agent, both /api/swipe-interest and /api/buyer-interest assign
+// David. If David's row is missing (hypothetical safety check), fall back to
+// resolveAndAssignAgent so the flow never crashes.
+export const DAVID_USER_ID = "55534280";
+
+export type AssignmentType = "existing" | "platform_default" | "fallback";
+
+export interface AgentResolutionResult {
+  agent: any | null;
+  assignmentType: AssignmentType | null;
+}
+
+// Minimal storage surface used by resolveBuyerAgent — kept narrow so unit
+// tests can pass a plain object mock without needing the whole IStorage.
+export interface AgentResolutionStorage {
+  getUser(id: string): Promise<any>;
+  assignAgent(buyerUserId: string, agentUserId: string): Promise<void>;
+  resolveAndAssignAgent(buyerUserId: string): Promise<any>;
+}
+
+export async function resolveBuyerAgent(
+  buyerUserId: string,
+  storageImpl: AgentResolutionStorage,
+): Promise<AgentResolutionResult> {
+  const buyerNow = await storageImpl.getUser(buyerUserId);
+  if (buyerNow?.assignedAgentUserId) {
+    const existing = await storageImpl.getUser(buyerNow.assignedAgentUserId);
+    if (existing) return { agent: existing, assignmentType: "existing" };
+  }
+  const david = await storageImpl.getUser(DAVID_USER_ID);
+  if (david) {
+    await storageImpl.assignAgent(buyerUserId, david.id);
+    return { agent: david, assignmentType: "platform_default" };
+  }
+  const fallback = await storageImpl.resolveAndAssignAgent(buyerUserId);
+  return { agent: fallback || null, assignmentType: fallback ? "fallback" : null };
+}
+
 export interface BeaconScoringCriteria {
   price: number;
   beds: number;
