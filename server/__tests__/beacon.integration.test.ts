@@ -4,13 +4,22 @@ import { sql } from "drizzle-orm";
 
 import { db, pool } from "../db";
 import { storage } from "../storage";
-import { users, buyerProfiles, properties } from "@shared/schema";
+import { users, buyerProfiles, properties, type InsertBuyerProfile } from "@shared/schema";
 
 const TEST_AGENT_ID = "beacon-test-agent-001";
 const TEST_BUYER_USER_IDS = [
   "beacon-test-buyer-strong",
   "beacon-test-buyer-good",
   "beacon-test-buyer-potential",
+  "beacon-test-buyer-inactive",
+  "beacon-test-buyer-underbudget",
+  "beacon-test-buyer-minbeds-too-high",
+  "beacon-test-buyer-maxbeds-too-low",
+  "beacon-test-buyer-minbaths-too-high",
+  "beacon-test-buyer-minsqft-too-high",
+  "beacon-test-buyer-maxsqft-too-low",
+  "beacon-test-buyer-wrong-city",
+  "beacon-test-buyer-wrong-type",
 ];
 
 const LISTING = {
@@ -27,6 +36,9 @@ let strongProfileId: number;
 let goodProfileId: number;
 let potentialProfileId: number;
 let testPropertyId: number;
+
+// Buyers that should be filtered OUT by exactly one hard gate.
+const excludedProfileIds: Record<string, number> = {};
 
 async function cleanup() {
   await db.execute(sql`
@@ -148,6 +160,90 @@ before(async () => {
     })
     .returning();
   potentialProfileId = potential.id;
+
+  // ---------------------------------------------------------------------
+  // Buyers that SHOULD be excluded by the hard filters in
+  // matchBuyersForListing. Each buyer is otherwise fully qualified and
+  // fails exactly one gate so the exclusion can't be attributed to any
+  // other condition.
+  // ---------------------------------------------------------------------
+  const baseQualified: Omit<InsertBuyerProfile, "userId" | "displayName"> = {
+    preApprovalAmount: 600_000,           // well above 95% of 500k
+    isPreApproved: true,
+    minBeds: 3,
+    maxBeds: 3,
+    minBaths: "2",
+    minSqft: 1_500,
+    maxSqft: 2_500,
+    preferredCities: [LISTING.city],
+    homeTypes: [LISTING.propertyType],
+    mustHaves: ["garage", "pool"],
+    moveInTimeline: "asap",
+    isActive: true,
+  };
+
+  type ExcludedSeed = {
+    key: string;
+    userId: string;
+    overrides: Partial<InsertBuyerProfile> & { displayName: string };
+  };
+
+  const excludedSeeds: ExcludedSeed[] = [
+    {
+      key: "inactive",
+      userId: "beacon-test-buyer-inactive",
+      overrides: { displayName: "Inactive Buyer", isActive: false },
+    },
+    {
+      key: "underbudget",
+      // 94% of 500k = 470k, below the 95% (475k) gate
+      userId: "beacon-test-buyer-underbudget",
+      overrides: { displayName: "Under-budget Buyer", preApprovalAmount: 470_000 },
+    },
+    {
+      key: "minbeds-too-high",
+      userId: "beacon-test-buyer-minbeds-too-high",
+      overrides: { displayName: "MinBeds Too High", minBeds: 4, maxBeds: 5 },
+    },
+    {
+      key: "maxbeds-too-low",
+      userId: "beacon-test-buyer-maxbeds-too-low",
+      overrides: { displayName: "MaxBeds Too Low", minBeds: 1, maxBeds: 2 },
+    },
+    {
+      key: "minbaths-too-high",
+      userId: "beacon-test-buyer-minbaths-too-high",
+      overrides: { displayName: "MinBaths Too High", minBaths: "3" },
+    },
+    {
+      key: "minsqft-too-high",
+      userId: "beacon-test-buyer-minsqft-too-high",
+      overrides: { displayName: "MinSqft Too High", minSqft: 2_000, maxSqft: 4_000 },
+    },
+    {
+      key: "maxsqft-too-low",
+      userId: "beacon-test-buyer-maxsqft-too-low",
+      overrides: { displayName: "MaxSqft Too Low", minSqft: 800, maxSqft: 1_500 },
+    },
+    {
+      key: "wrong-city",
+      userId: "beacon-test-buyer-wrong-city",
+      overrides: { displayName: "Wrong City Buyer", preferredCities: ["Dallas"] },
+    },
+    {
+      key: "wrong-type",
+      userId: "beacon-test-buyer-wrong-type",
+      overrides: { displayName: "Wrong Type Buyer", homeTypes: ["Condo"] },
+    },
+  ];
+
+  for (const seed of excludedSeeds) {
+    const [row] = await db
+      .insert(buyerProfiles)
+      .values({ ...baseQualified, userId: seed.userId, ...seed.overrides })
+      .returning();
+    excludedProfileIds[seed.key] = row.id;
+  }
 });
 
 after(async () => {
@@ -233,5 +329,83 @@ test("tier thresholds are enforced at the documented cutoffs (>=70 Strong, >=45 
     if (m.matchScore >= 70) assert.equal(m.matchTier, "Strong");
     else if (m.matchScore >= 45) assert.equal(m.matchTier, "Good");
     else assert.equal(m.matchTier, "Potential");
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Hard filter exclusions — each seeded buyer is otherwise fully qualified
+// for the listing but fails exactly one gate. None of them should appear
+// in the results from matchBuyersForListing.
+// ---------------------------------------------------------------------------
+test("hard filters exclude buyers that fail any single gate", async () => {
+  const matches = await storage.matchBuyersForListing(LISTING);
+  const matchedIds = new Set(matches.map((m) => m.id));
+
+  // Sanity: the qualified fixtures still match (guards against accidentally
+  // breaking the existing scoring tests with our new seed data).
+  assert.ok(matchedIds.has(strongProfileId), "Strong fixture should still match");
+  assert.ok(matchedIds.has(goodProfileId), "Good fixture should still match");
+  assert.ok(matchedIds.has(potentialProfileId), "Potential fixture should still match");
+
+  const cases: Array<[string, string]> = [
+    ["inactive", "isActive=false buyers must be filtered out"],
+    ["underbudget", "buyers under 95% of list price must be filtered out"],
+    ["minbeds-too-high", "buyers whose minBeds > listing beds must be filtered out"],
+    ["maxbeds-too-low", "buyers whose maxBeds < listing beds must be filtered out"],
+    ["minbaths-too-high", "buyers whose minBaths > listing baths must be filtered out"],
+    ["minsqft-too-high", "buyers whose minSqft > listing sqft must be filtered out"],
+    ["maxsqft-too-low", "buyers whose maxSqft < listing sqft must be filtered out"],
+    ["wrong-city", "buyers whose preferredCities don't include the listing city must be filtered out"],
+    ["wrong-type", "buyers whose homeTypes don't include the listing propertyType must be filtered out"],
+  ];
+
+  for (const [key, message] of cases) {
+    const id = excludedProfileIds[key];
+    assert.ok(id, `missing seeded buyer for case "${key}"`);
+    assert.ok(!matchedIds.has(id), message);
+  }
+});
+
+test("budget gate rejects 94% of price but accepts exactly 95%", async () => {
+  // Boundary check at the listing level: matchBuyersForListing uses
+  // minBuyerBudget(price) = Math.round(price * 0.95). For 500_000 that's 475_000.
+  const just_below_id = excludedProfileIds["underbudget"]; // 470_000 → reject
+  let matches = await storage.matchBuyersForListing(LISTING);
+  let matchedIds = new Set(matches.map((m) => m.id));
+  assert.ok(!matchedIds.has(just_below_id), "470k must NOT pass for a 500k listing");
+
+  // Bump that same buyer's pre-approval to exactly the threshold and
+  // confirm it now passes the budget gate. We mutate then restore so the
+  // change is invisible to other tests.
+  await db.update(buyerProfiles)
+    .set({ preApprovalAmount: 475_000 })
+    .where(sql`id = ${just_below_id}`);
+  try {
+    matches = await storage.matchBuyersForListing(LISTING);
+    matchedIds = new Set(matches.map((m) => m.id));
+    assert.ok(matchedIds.has(just_below_id), "475k (exactly 95%) MUST pass for a 500k listing");
+  } finally {
+    await db.update(buyerProfiles)
+      .set({ preApprovalAmount: 470_000 })
+      .where(sql`id = ${just_below_id}`);
+  }
+});
+
+test("city filter is case-insensitive", async () => {
+  // The wrong-city buyer prefers "Dallas" so should not match an Austin
+  // listing. Flip them to "AUSTIN" (uppercase) and confirm the LOWER()
+  // comparison still lets them through.
+  const id = excludedProfileIds["wrong-city"];
+  await db.update(buyerProfiles)
+    .set({ preferredCities: ["AUSTIN"] })
+    .where(sql`id = ${id}`);
+  try {
+    const matches = await storage.matchBuyersForListing(LISTING);
+    const matchedIds = new Set(matches.map((m) => m.id));
+    assert.ok(matchedIds.has(id), "city filter should be case-insensitive");
+  } finally {
+    await db.update(buyerProfiles)
+      .set({ preferredCities: ["Dallas"] })
+      .where(sql`id = ${id}`);
   }
 });

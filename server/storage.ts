@@ -1003,12 +1003,13 @@ export class DatabaseStorage implements IStorage {
       // Allow buyer-side aliases (e.g. listing "SFH" should match a buyer who picked
       // "Single Family" or "Single Family Residential"; "Townhome" should match "Townhouse").
       const aliases = propertyTypeMatchAliases(criteria.propertyType);
+      const aliasList = sql.join(aliases.map(a => sql`${a}`), sql`, `);
       conditions.push(sql`(
         ${buyerProfiles.homeTypes} IS NULL OR
         array_length(${buyerProfiles.homeTypes}, 1) IS NULL OR
         EXISTS (
           SELECT 1 FROM unnest(${buyerProfiles.homeTypes}) AS ht
-          WHERE LOWER(ht) = ANY(${aliases})
+          WHERE LOWER(ht) IN (${aliasList})
         )
       )`);
     }
