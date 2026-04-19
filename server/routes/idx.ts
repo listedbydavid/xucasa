@@ -41,7 +41,7 @@ router.get("/api/idx/status", isAuthenticated, async (_req, res) => {
   }
 });
 
-router.post("/api/idx/sync", isAuthenticated, async (_req, res) => {
+router.post("/api/idx/sync", isAuthenticated, async (req: any, res) => {
   if (!idxConfigured()) {
     return res.status(400).json({
       message: "IDX not configured. Add IDX_BROKER_API_KEY (from your IDX Broker account dashboard) as an environment variable.",

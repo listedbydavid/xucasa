@@ -372,7 +372,7 @@ router.get("/api/admin/error-reports", isAuthenticated, isAdmin, async (_req, re
 });
 
 let archiveLock = false;
-router.post("/api/admin/error-reports/archive", isAuthenticated, isAdmin, async (_req, res) => {
+router.post("/api/admin/error-reports/archive", isAuthenticated, isAdmin, async (req: any, res) => {
   if (archiveLock) return res.status(409).json({ error: "Archive operation already in progress" });
   archiveLock = true;
   try {
@@ -403,11 +403,11 @@ router.post("/api/admin/error-reports/archive", isAuthenticated, isAdmin, async 
     fs.mkdirSync(path.dirname(ERROR_ARCHIVE_PATH), { recursive: true });
     fs.writeFileSync(ERROR_ARCHIVE_PATH, JSON.stringify(existing, null, 2));
 
-    await audit({ req, event: "admin_error_archive", outcome: "success", userId: (_req as any).user?.claims?.sub, metadata: { count: resolved.length } });
+    await audit({ req, event: "admin_error_archive", outcome: "success", userId: (req as any).user?.claims?.sub, metadata: { count: resolved.length } });
     archiveLock = false;
     res.json({ archived: resolved.length, totalBatches: existing.length, path: "data/error-archive.json" });
   } catch (err: any) {
-    await audit({ req: _req, event: "admin_error_archive", outcome: "failure", userId: (_req as any).user?.claims?.sub, errorMessage: err.message });
+    await audit({ req, event: "admin_error_archive", outcome: "failure", userId: (req as any).user?.claims?.sub, errorMessage: err.message });
     archiveLock = false;
     console.error("[Archive Errors] Failed:", err);
     res.status(500).json({ error: "Internal server error" });
