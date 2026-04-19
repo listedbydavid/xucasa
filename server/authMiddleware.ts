@@ -1,6 +1,22 @@
 import rateLimit from "express-rate-limit";
 import type { Request, Response } from "express";
 import { z } from "zod";
+import { authStorage } from "./replit_integrations/auth/storage";
+import { audit } from "./auditLog";
+
+export const isAdmin = async (req: any, res: any, next: any) => {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  if (!adminEmail || !req.user?.claims?.sub) {
+    audit({ req, event: "authorization_denied", outcome: "failure", metadata: { reason: "admin_required", route: req.originalUrl } });
+    return res.status(403).json({ message: "Admin access required" });
+  }
+  const user = await authStorage.getUser(req.user.claims.sub);
+  if (!user?.email || user.email.toLowerCase() !== adminEmail.toLowerCase()) {
+    audit({ req, event: "authorization_denied", outcome: "failure", userId: req.user.claims.sub, metadata: { reason: "not_admin", route: req.originalUrl } });
+    return res.status(403).json({ message: "Admin access required" });
+  }
+  next();
+};
 
 export const BLOCKED_EMAIL_PATTERNS = [
   /@test\.com$/i,
