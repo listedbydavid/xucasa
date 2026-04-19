@@ -441,6 +441,22 @@ export class DatabaseStorage implements IStorage {
 
   private buildPropertyFilters(filters?: any) {
     let conditions: any[] = [];
+
+    // Exclude rentals from buyer-facing queries by default. Callers must set
+    // filters.includeRentals = true to opt back in (e.g. for an internal admin
+    // view). An explicit filters.status does NOT bypass the rental gate, since
+    // a misclassified rental can still have status='active'.
+    const includeRentals = filters && (filters.includeRentals === true || filters.includeRentals === 'true');
+    if (!includeRentals) {
+      conditions.push(sql`(${properties.status} IS NULL OR LOWER(${properties.status}) <> 'rental')`);
+      conditions.push(sql`(${properties.propertyType} IS NULL OR LOWER(${properties.propertyType}) NOT IN ('rental', 'residential lease'))`);
+      // Also hide listings the IDX feed has dropped (status='removed'), unless
+      // the caller asked for a specific status (e.g. status=removed for admin).
+      if (!filters?.status) {
+        conditions.push(sql`(${properties.status} IS NULL OR LOWER(${properties.status}) <> 'removed')`);
+      }
+    }
+
     if (filters) {
       if (filters.city) {
         conditions.push(sql`LOWER(${properties.addressCity}) = LOWER(${filters.city})`);
@@ -784,7 +800,9 @@ export class DatabaseStorage implements IStorage {
         OR CONCAT(${properties.addressStreetNumber}, ' ', ${properties.addressStreetName}) ILIKE ${q}
         OR CONCAT(${properties.addressStreetNumber}, ' ', ${properties.addressStreetName}, ', ', ${properties.addressCity}) ILIKE ${q}
         OR ${fullAddr} ILIKE ${q}
-      )`)
+      )
+      AND (${properties.status} IS NULL OR LOWER(${properties.status}) NOT IN ('rental', 'removed'))
+      AND (${properties.propertyType} IS NULL OR LOWER(${properties.propertyType}) NOT IN ('rental', 'residential lease'))`)
       .orderBy(desc(properties.price))
       .limit(limit);
     return results;
@@ -815,7 +833,11 @@ export class DatabaseStorage implements IStorage {
     };
 
     const allProps = await db.select().from(properties)
-      .where(eq(properties.isOffMarket, false));
+      .where(and(
+        eq(properties.isOffMarket, false),
+        sql`(${properties.status} IS NULL OR LOWER(${properties.status}) NOT IN ('rental', 'removed'))`,
+        sql`(${properties.propertyType} IS NULL OR LOWER(${properties.propertyType}) NOT IN ('rental', 'residential lease'))`,
+      ));
 
     const compsWithData = allProps
       .filter(p => p.sqft && p.sqft > 0 && p.price > 0)

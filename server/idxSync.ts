@@ -420,7 +420,19 @@ async function fetchAllResoListings(): Promise<any[]> {
 
 // ── Normalise raw listing → our property shape ────────────────────────────────
 
-function normaliseIdxBroker(raw: any) {
+/**
+ * Output of the per-row normalisation step. `isLease` is a transient flag we
+ * use to filter out rentals before upsert; it is stripped from the row before
+ * it reaches the DB layer (the `properties` table has no such column).
+ */
+type NormalisedListing = {
+  idxId: string;
+  price: number;
+  isLease: boolean;
+  [key: string]: any;
+};
+
+function normaliseIdxBroker(raw: any): NormalisedListing {
   const streetParts = (raw.address || "").split(" ");
   const streetNumber = /^\d+$/.test(streetParts[0]) ? streetParts[0] : "";
   const streetName = streetNumber ? streetParts.slice(1).join(" ") : raw.address || "";
@@ -467,6 +479,7 @@ function normaliseIdxBroker(raw: any) {
     isOffMarket: false,
     listDate: raw.listDate ? new Date(raw.listDate) : null,
     propertyType: normalisePropertyType(raw.propertyType, raw.propertySubType),
+    isLease: isLeasePropertyType(raw.propertyType, raw.propertySubType),
   };
 }
 
@@ -483,7 +496,7 @@ function sanitizeTourUrl(url: string | null | undefined): string | null {
   }
 }
 
-function normaliseReso(raw: any) {
+function normaliseReso(raw: any): NormalisedListing {
   let imageUrl: string | null = null;
   let photos: string[] | null = null;
 
@@ -564,6 +577,7 @@ function normaliseReso(raw: any) {
     listingAgentPhone: raw.ListAgentDirectPhone || raw.ListAgentOfficePhone || null,
     listingBrokerage: raw.ListOfficeName || null,
     propertyType: normalisePropertyType(raw.PropertyType, raw.PropertySubType),
+    isLease: isLeasePropertyType(raw.PropertyType, raw.PropertySubType),
     confidentialRemarks: raw.PrivateRemarks || null,
     showingInstructions: raw.ShowingInstructions || null,
     showingContactName: raw.ShowingContactName || null,
@@ -584,7 +598,17 @@ function normaliseReso(raw: any) {
   };
 }
 
+/**
+ * Detects rental/lease listings (e.g. "Residential Lease", "Rental", "Lease").
+ * These should not appear in for-sale buyer flows.
+ */
+export function isLeasePropertyType(type?: string | null, subType?: string | null): boolean {
+  const combined = `${type || ""} ${subType || ""}`.toLowerCase();
+  return /\b(lease|rental|for rent)\b/.test(combined);
+}
+
 export function normalisePropertyType(type?: string | null, subType?: string | null): string | null {
+  if (isLeasePropertyType(type, subType)) return "Rental";
   const t = (subType || type || "").toLowerCase().trim();
   if (!t) return null;
   if (t.includes("single") || t.includes("detached")) return "SFH";
@@ -596,7 +620,7 @@ export function normalisePropertyType(type?: string | null, subType?: string | n
   if (t.includes("mobile") || t.includes("manufactured")) return "Mobile";
   if (t.includes("commercial")) return "Commercial";
   if (t.includes("farm") || t.includes("ranch")) return "Farm/Ranch";
-  // Generic "Residential" or "Residential Lease" with no further qualifier → assume single-family home
+  // Generic "Residential" with no further qualifier → assume single-family home
   if (t.includes("residential")) return "SFH";
   return type || subType || null;
 }
@@ -701,11 +725,21 @@ export async function runIdxSync(): Promise<{ added: number; updated: number; re
 
     console.log(`[IDX Sync] Fetched ${rawListings.length} listings from API`);
 
-    const normalised = rawListings
+    const allNormalised: NormalisedListing[] = rawListings
       .map(r => useReso ? normaliseReso(r) : normaliseIdxBroker(r))
-      .filter(r => r.idxId && r.price > 0);
+      .filter((r): r is NormalisedListing => Boolean(r.idxId) && r.price > 0);
 
-    console.log(`[IDX Sync] ${normalised.length} valid listings after normalisation (filtered ${rawListings.length - normalised.length} with no price)`);
+    // Skip rentals — both explicitly tagged ("Residential Lease") and price-based
+    // (anything below $20k in San Diego is a monthly rental, not a sale price,
+    // even when miscategorised in the feed as Commercial / SFH / etc).
+    const RENTAL_PRICE_THRESHOLD = 20_000;
+    const leaseCount = allNormalised.filter(r => r.isLease).length;
+    const lowPriceCount = allNormalised.filter(r => !r.isLease && r.price < RENTAL_PRICE_THRESHOLD).length;
+    const normalised = allNormalised
+      .filter(r => !r.isLease && r.price >= RENTAL_PRICE_THRESHOLD)
+      .map(({ isLease: _isLease, ...rest }) => rest);
+
+    console.log(`[IDX Sync] ${normalised.length} valid for-sale listings after normalisation (filtered ${rawListings.length - allNormalised.length} with no price, ${leaseCount} tagged rentals, ${lowPriceCount} sub-$${RENTAL_PRICE_THRESHOLD} likely rentals)`);
 
     const { added, updated } = await batchUpsertListings(normalised);
 
@@ -754,6 +788,31 @@ export async function runIdxSync(): Promise<{ added: number; updated: number; re
 
 export function isSyncInProgress() {
   return syncInProgress;
+}
+
+// ── Backfill: reclassify legacy rental rows ──────────────────────────────────
+
+/**
+ * One-shot backfill: rentals were previously ingested as for-sale listings
+ * (often with propertyType "SFH" / "Single Family" / "Multi-Family") with the
+ * monthly rent in the price column. We don't have the original RESO PropertyType
+ * stored, so use a price heuristic: any IDX listing under $20,000 is almost
+ * certainly a monthly rental in the San Diego market. Mark them as rental so
+ * buyer-side queries can exclude them.
+ */
+export async function backfillRentalReclassification(): Promise<{ updated: number }> {
+  const result = await db
+    .update(properties)
+    .set({ status: "rental", propertyType: "Rental" })
+    .where(sql`${properties.source} = 'idx'
+      AND ${properties.price} > 0
+      AND ${properties.price} < 20000
+      AND ${properties.status} <> 'rental'`)
+    .returning({ id: properties.id });
+  if (result.length > 0) {
+    console.log(`[IDX Sync] Reclassified ${result.length} legacy rental rows (price < $20k) as rentals`);
+  }
+  return { updated: result.length };
 }
 
 // ── Scheduled auto-sync (every 4 hours) ──────────────────────────────────────

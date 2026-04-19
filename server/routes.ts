@@ -14,7 +14,7 @@ import { isAuthenticated } from "./replit_integrations/auth";
 import { getPublicRecords } from "./publicRecords";
 import { getNearbySchools } from "./schoolService";
 import { getZoningData } from "./zoningData";
-import { runIdxSync, isSyncInProgress, idxConfigured, getLastSyncLog, getSyncLogs, startIdxAutoSync, verifyAgentLicense, getRealtyFeedToken, realtyFeedODataFetch, REALTYFEED_API_BASE } from "./idxSync";
+import { runIdxSync, isSyncInProgress, idxConfigured, getLastSyncLog, getSyncLogs, startIdxAutoSync, backfillRentalReclassification, verifyAgentLicense, getRealtyFeedToken, realtyFeedODataFetch, REALTYFEED_API_BASE } from "./idxSync";
 import { sendNotificationEmail, sendTestEmail, isEmailConfigured } from "./emailService";
 import { onboardingRateLimit } from "./authMiddleware";
 import { listSuspiciousAccounts, disableAccount, deleteAccountSafely, bulkDisable, bulkDelete } from "./cleanupService";
@@ -3293,6 +3293,9 @@ export async function registerRoutes(
   } else {
     seedDatabase().catch(console.error);
   }
+
+  // One-shot backfill: reclassify legacy rental rows so they're hidden from buyers.
+  backfillRentalReclassification().catch(err => console.error("[Startup] Rental backfill failed:", err.message));
 
   // Start scheduled IDX auto-sync (no-op if not configured)
   startIdxAutoSync();
