@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Heart, BookmarkPlus, Home, X, CheckCircle2, Loader2,
-  RefreshCw, ShieldCheck,
+  RefreshCw, ShieldCheck, Sparkles,
 } from "lucide-react";
 
 interface AuthPromptModalProps {
-  feature: "favorite" | "save-search" | "my-home";
+  feature: "favorite" | "save-search" | "my-home" | "swipe-save" | "concession";
   onClose: () => void;
 }
 
@@ -24,6 +24,16 @@ const FEATURE_COPY = {
     icon: Home,
     headline: "Track your home",
     subtext: "Unlock zoning intelligence, flood data, and neighborhood insights.",
+  },
+  "swipe-save": {
+    icon: Heart,
+    headline: "Save this home",
+    subtext: "Create a free account to save homes, see seller terms, and connect with an agent.",
+  },
+  "concession": {
+    icon: Sparkles,
+    headline: "Seller is offering terms",
+    subtext: "Create an account to see what this seller is offering and connect with an agent.",
   },
 };
 

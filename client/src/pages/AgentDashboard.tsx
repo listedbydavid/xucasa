@@ -2,7 +2,8 @@ import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
-import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar, Send, Eye, ContactRound, MessageSquare, AlertCircle, Loader2, BadgeCheck } from "lucide-react";
+import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar, Send, Eye, ContactRound, MessageSquare, AlertCircle, Loader2, BadgeCheck, Tag } from "lucide-react";
+import { ConcessionForm } from "@/components/ConcessionForm";
 import { ReverseOfferForm } from "@/components/ReverseOfferForm";
 import { IdxSyncPanel } from "@/components/IdxSyncPanel";
 import type { PropertyResponse, CreatePropertyRequest } from "@shared/schema";
@@ -35,6 +36,7 @@ export default function AgentDashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProperty, setEditingProperty] = useState<PropertyResponse | null>(null);
   const [activeTab, setActiveTab] = useState<AgentTab>("listings");
+  const [concessionPropertyId, setConcessionPropertyId] = useState<number | null>(null);
 
   const myProperties = properties.filter(p => p.agentId === user?.id) || properties;
 
@@ -178,6 +180,15 @@ export default function AgentDashboard() {
                         )}
                       </td>
                       <td className="p-4 text-right">
+                        <button
+                          onClick={() => setConcessionPropertyId(property.id)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 mr-2 bg-amber-500 text-white rounded-full text-xs font-bold hover:bg-amber-600 transition-colors"
+                          data-testid={`button-add-terms-${property.id}`}
+                          aria-label={`Add seller terms for ${property.title}`}
+                        >
+                          <Tag className="w-3.5 h-3.5" />
+                          Add Seller Terms
+                        </button>
                         <button onClick={() => openEdit(property)} className="p-2 text-muted-foreground hover:text-primary transition-colors" data-testid={`button-edit-${property.id}`} aria-label={`Edit listing ${property.title}`}>
                           <Edit3 className="w-5 h-5" aria-hidden="true" />
                         </button>

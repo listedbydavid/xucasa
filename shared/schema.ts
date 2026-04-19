@@ -1,5 +1,5 @@
 import { pgTable, text, serial, integer, boolean, timestamp, jsonb, decimal, varchar, uniqueIndex } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { users, sessions } from "./models/auth";
@@ -674,6 +674,49 @@ export const auditEvents = pgTable("audit_events", {
 export const insertAuditEventSchema = createInsertSchema(auditEvents).omit({ id: true, createdAt: true });
 export type AuditEvent = typeof auditEvents.$inferSelect;
 export type InsertAuditEvent = z.infer<typeof insertAuditEventSchema>;
+
+// ── Seller Concessions (Make Me Move) ──────────────────────────────────────
+export const sellerConcessions = pgTable("seller_concessions", {
+  id: serial("id").primaryKey(),
+  propertyId: integer("property_id").references(() => properties.id).notNull(),
+  postedByUserId: varchar("posted_by_user_id").references(() => users.id).notNull(),
+  postedByRole: text("posted_by_role").notNull(), // "agent" or "seller"
+
+  closingCostPercent: decimal("closing_cost_percent"),
+  closingCostFixed: integer("closing_cost_fixed"),
+  rateBuydown: text("rate_buydown"),
+  assumableLoan: boolean("assumable_loan").default(false),
+  assumableLoanRate: decimal("assumable_loan_rate"),
+  assumableLoanBalance: integer("assumable_loan_balance"),
+  assumableLoanType: text("assumable_loan_type"),
+  sellerCreditFixed: integer("seller_credit_fixed"),
+  flexibleMoveOut: boolean("flexible_move_out").default(false),
+  moveOutDays: integer("move_out_days"),
+  additionalTerms: text("additional_terms"),
+
+  headline: text("headline"),
+  isActive: boolean("is_active").default(true).notNull(),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  // Enforce at most one ACTIVE concession per property at the DB level.
+  // Concurrent supersede attempts will collide on this index, ensuring atomicity.
+  oneActivePerProperty: uniqueIndex("seller_concessions_one_active_per_property")
+    .on(table.propertyId)
+    .where(sql`${table.isActive} = true`),
+}));
+
+export const insertSellerConcessionSchema = createInsertSchema(sellerConcessions).omit({
+  id: true,
+  propertyId: true,
+  postedByUserId: true,
+  postedByRole: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type SellerConcession = typeof sellerConcessions.$inferSelect;
+export type InsertSellerConcession = z.infer<typeof insertSellerConcessionSchema>;
 
 // Request Types
 export type CreatePropertyRequest = InsertProperty;

@@ -14,8 +14,9 @@ import {
   Info, Loader2, AlertTriangle, CheckCircle, Layers,
   Search, Sparkles, Eye, Star, TrendingDown, RefreshCw,
   Banknote, Key, Hammer, Umbrella, Send, HelpCircle,
-  BedDouble, Bath, Maximize2, ChevronLeft, ChevronRight,
+  BedDouble, Bath, Maximize2, ChevronLeft, ChevronRight, Tag,
 } from "lucide-react";
+import { ConcessionForm } from "@/components/ConcessionForm";
 
 interface ValuationData {
   estimatedLow: number;
@@ -732,6 +733,25 @@ export default function HomeReport() {
                   {selectedHomeId ? "Update Home" : "Save to My Homes"}
                 </button>
               </div>
+            )}
+
+            {isAuthenticated && selectedHomeId && (
+              <ReportCard>
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                    <Tag className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-display font-bold text-lg">Want to post what you're willing to offer?</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Closing cost help, an assumable loan, flexible move-out, or other terms can attract more buyers.
+                      To post seller terms on a xucasa listing, ask your verified listing agent (or contact us at{" "}
+                      <a href="mailto:hello@xucasa.com" className="text-primary underline">hello@xucasa.com</a>) — we
+                      verify ownership before terms go live.
+                    </p>
+                  </div>
+                </div>
+              </ReportCard>
             )}
 
             {/* PROPERTY VALUATION */}

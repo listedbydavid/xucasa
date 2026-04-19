@@ -125,3 +125,50 @@ export function useDeleteProperty() {
     }
   });
 }
+
+// ── Seller Concessions ────────────────────────────────────────────────
+export interface SellerConcessionData {
+  id: number;
+  propertyId: number;
+  postedByUserId: string;
+  postedByRole: string;
+  closingCostPercent: string | null;
+  closingCostFixed: number | null;
+  rateBuydown: string | null;
+  assumableLoan: boolean | null;
+  assumableLoanRate: string | null;
+  assumableLoanBalance: number | null;
+  assumableLoanType: string | null;
+  sellerCreditFixed: number | null;
+  flexibleMoveOut: boolean | null;
+  moveOutDays: number | null;
+  additionalTerms: string | null;
+  headline: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function useActiveConcessions() {
+  return useQuery<{ concessions: SellerConcessionData[] }>({
+    queryKey: ["/api/concessions/active"],
+    queryFn: async () => {
+      const res = await fetch("/api/concessions/active", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch concessions");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+}
+
+export function usePropertyConcession(propertyId: number | null | undefined) {
+  return useQuery<{ concession: SellerConcessionData | null }>({
+    queryKey: ["/api/properties", propertyId, "concessions"],
+    enabled: !!propertyId,
+    queryFn: async () => {
+      const res = await fetch(`/api/properties/${propertyId}/concessions`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch concession");
+      return res.json();
+    },
+  });
+}

@@ -5,7 +5,7 @@ import path from "path";
 import { storage } from "./storage";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { db } from "./db";
-import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews, errorReports, notifications, buyerInterest } from "@shared/schema";
+import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews, errorReports, notifications, buyerInterest, sellerConcessions, insertSellerConcessionSchema } from "@shared/schema";
 import { eq, desc, sql, or, and, ilike, inArray, count } from "drizzle-orm";
 import { api } from "@shared/routes";
 import { z } from "zod";
@@ -1978,7 +1978,23 @@ export async function registerRoutes(
           const prop = await storage.getProperty(propertyId);
           if (!prop) throw new Error("Property not found");
 
-          const assignedAgent = await storage.resolveAndAssignAgent(buyerUserId);
+          // Resolve the buyer's agent. If buyer already has an assigned agent,
+          // resolveAndAssignAgent returns it. Otherwise, assign the platform
+          // default agent — David Hussain (david@xucasa.com) deterministically.
+          const buyerNow = await storage.getUser(buyerUserId);
+          let assignedAgent: any = null;
+          if (buyerNow?.assignedAgentUserId) {
+            assignedAgent = await storage.getUser(buyerNow.assignedAgentUserId);
+          }
+          if (!assignedAgent) {
+            const david = await storage.getUser("55534280");
+            if (david) {
+              await storage.assignAgent(buyerUserId, david.id);
+              assignedAgent = david;
+            } else {
+              assignedAgent = await storage.resolveAndAssignAgent(buyerUserId);
+            }
+          }
           await storage.upsertBuyerInterest(propertyId, buyerUserId, "swipe", assignedAgent?.id || null, prop?.agentId || null);
 
           const existing = await storage.getExistingSwipeNotification(buyerUserId, propertyId);
@@ -3774,7 +3790,24 @@ export async function registerRoutes(
         { req, event: "buyer_interest_upserted", userId, propertyId, metadata: { source: source || "swipe" } },
         async () => {
           const prop = await storage.getProperty(propertyId);
-          const assignedAgent = await storage.resolveAndAssignAgent(userId);
+          // Resolve buyer's agent. Use existing assignment if present, else
+          // assign David Hussain (platform default). Only fall back to
+          // resolveAndAssignAgent if David's account is missing.
+          const buyerNow = await storage.getUser(userId);
+          let assignedAgent: any = null;
+          if (buyerNow?.assignedAgentUserId) {
+            assignedAgent = await storage.getUser(buyerNow.assignedAgentUserId);
+          }
+          if (!assignedAgent) {
+            const DAVID_USER_ID = "55534280";
+            const david = await storage.getUser(DAVID_USER_ID);
+            if (david) {
+              await storage.assignAgent(userId, david.id);
+              assignedAgent = david;
+            } else {
+              assignedAgent = await storage.resolveAndAssignAgent(userId);
+            }
+          }
           const bi = await storage.upsertBuyerInterest(
             propertyId, userId, source || "swipe",
             assignedAgent?.id || null,
@@ -3803,6 +3836,157 @@ export async function registerRoutes(
       res.status(201).json(result);
     } catch (err) {
       res.status(500).json({ message: "Internal Server Error", requestId: req.requestId });
+    }
+  });
+
+  // ── Seller Concessions API ────────────────────────────────────────────────
+
+  // Auth: find the property record matching one of the caller's saved homes
+  app.get("/api/my-homes/:id/match-property", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const homeId = parseInt(req.params.id);
+      if (!Number.isFinite(homeId)) return res.status(400).json({ message: "Invalid id" });
+      const homes = await db.select().from(userHomes)
+        .where(and(eq(userHomes.id, homeId), eq(userHomes.userId, userId)))
+        .limit(1);
+      const home = homes[0];
+      if (!home) return res.status(404).json({ message: "Home not found" });
+      if (!home.addressStreetNumber || !home.addressStreetName || !home.addressZip) {
+        return res.json({ propertyId: null });
+      }
+      const matches = await db.select({ id: properties.id }).from(properties)
+        .where(and(
+          sql`lower(coalesce(${properties.addressStreetNumber}, '')) = lower(${home.addressStreetNumber})`,
+          sql`lower(coalesce(${properties.addressStreetName}, '')) = lower(${home.addressStreetName})`,
+          sql`coalesce(${properties.addressZip}, '') = ${home.addressZip}`,
+        ))
+        .limit(1);
+      res.json({ propertyId: matches[0]?.id || null });
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  // Public: bulk list of all active concessions (used for badge rendering)
+  app.get("/api/concessions/active", async (_req, res) => {
+    try {
+      const rows = await db.select().from(sellerConcessions)
+        .where(eq(sellerConcessions.isActive, true));
+      res.json({ concessions: rows });
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  // Public: get the active concession for a property
+  app.get("/api/properties/:id/concessions", async (req, res) => {
+    try {
+      const propertyId = parseInt(req.params.id);
+      if (!Number.isFinite(propertyId)) return res.status(400).json({ message: "Invalid id" });
+      const rows = await db.select().from(sellerConcessions)
+        .where(and(eq(sellerConcessions.propertyId, propertyId), eq(sellerConcessions.isActive, true)))
+        .orderBy(desc(sellerConcessions.createdAt))
+        .limit(1);
+      res.json({ concession: rows[0] || null });
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  // Auth required: create a concession.
+  // SECURITY: Restricted to verified agents and admins ONLY. Homeowner self-attest
+  // via userHomes is not used here because userHomes is user-asserted (no ownership
+  // verification) — allowing it would be IDOR. A homeowner-direct path requires
+  // out-of-band ownership verification (deed, listing-agent invite, etc.) and is
+  // tracked as a follow-up.
+  app.post("/api/properties/:id/concessions", isAuthenticated, async (req: any, res) => {
+    const userId = req.user.claims.sub;
+    const propertyId = parseInt(req.params.id);
+    if (!Number.isFinite(propertyId)) return res.status(400).json({ message: "Invalid id" });
+
+    try {
+      const property = await storage.getProperty(propertyId);
+      if (!property) return res.status(404).json({ message: "Property not found" });
+
+      const caller = await storage.getUser(userId);
+      if (!caller) return res.status(401).json({ message: "Unauthorized" });
+
+      const isVerifiedAgent = caller.role === "agent" && caller.agentVerified === true;
+      const isAdmin = caller.role === "admin";
+      const isListingAgent = property.agentId === userId;
+
+      if (!isAdmin && !(isVerifiedAgent && isListingAgent)) {
+        return res.status(403).json({
+          message: "Only the verified listing agent (or an admin) can post seller terms for this property",
+        });
+      }
+
+      const parsed = insertSellerConcessionSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid concession data", errors: parsed.error.flatten() });
+      }
+
+      const result = await executeWithAudit(
+        { req, event: "seller_concession_created", userId, propertyId },
+        async () => {
+          // Atomic supersede: deactivate previous + insert new in a single transaction
+          const created = await db.transaction(async (tx) => {
+            await tx.update(sellerConcessions)
+              .set({ isActive: false, updatedAt: new Date() })
+              .where(and(eq(sellerConcessions.propertyId, propertyId), eq(sellerConcessions.isActive, true)));
+
+            const [row] = await tx.insert(sellerConcessions).values({
+              ...parsed.data,
+              propertyId,
+              postedByUserId: userId,
+              postedByRole: isAdmin ? "admin" : "agent",
+              isActive: true,
+            }).returning();
+            return row;
+          });
+
+          return { data: created, auditOverrides: { resourceType: "seller_concession", resourceId: String(created.id) } };
+        }
+      );
+      res.status(201).json(result);
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+
+  // Auth required: soft-delete the active concession (only original poster or admin)
+  app.delete("/api/properties/:id/concessions", isAuthenticated, async (req: any, res) => {
+    const userId = req.user.claims.sub;
+    const propertyId = parseInt(req.params.id);
+    if (!Number.isFinite(propertyId)) return res.status(400).json({ message: "Invalid id" });
+
+    try {
+      const caller = await storage.getUser(userId);
+      const isAdmin = caller?.role === "admin";
+
+      const rows = await db.select().from(sellerConcessions)
+        .where(and(eq(sellerConcessions.propertyId, propertyId), eq(sellerConcessions.isActive, true)))
+        .limit(1);
+      const existing = rows[0];
+      if (!existing) return res.status(404).json({ message: "No active concession" });
+
+      if (existing.postedByUserId !== userId && !isAdmin) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      await executeWithAudit(
+        { req, event: "seller_concession_deleted", userId, propertyId, metadata: { concessionId: existing.id } },
+        async () => {
+          await db.update(sellerConcessions)
+            .set({ isActive: false, updatedAt: new Date() })
+            .where(eq(sellerConcessions.id, existing.id));
+          return { data: { id: existing.id } };
+        }
+      );
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ message: "Internal Server Error" });
     }
   });
 

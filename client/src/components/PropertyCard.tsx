@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
-import { BedDouble, Bath, Maximize, Heart, Sparkles, ChevronLeft, ChevronRight, Clock, Shield, View } from "lucide-react";
+import { BedDouble, Bath, Maximize, Heart, Sparkles, ChevronLeft, ChevronRight, Clock, Shield, View, Tag } from "lucide-react";
 import type { PropertyResponse } from "@shared/schema";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
 import { useAuth } from "@/hooks/use-auth";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
+import { useActiveConcessions } from "@/hooks/use-properties";
 
 interface PropertyCardProps {
   property: PropertyResponse;
@@ -18,6 +19,8 @@ export function PropertyCard({ property }: PropertyCardProps) {
   const { mutate: toggleSave, isPending } = useToggleSavedProperty();
   const { isAuthenticated, user } = useAuth();
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
+  const { data: concessionsData } = useActiveConcessions();
+  const hasConcession = (concessionsData?.concessions || []).some(c => c.propertyId === property.id);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [transitioning, setTransitioning] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
@@ -227,6 +230,15 @@ export function PropertyCard({ property }: PropertyCardProps) {
           </div>
 
           <div className="absolute top-4 left-4 flex flex-col gap-2 pointer-events-none">
+            {hasConcession && (
+              <span
+                className="bg-amber-500 text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-lg"
+                data-testid={`badge-concession-${property.id}`}
+              >
+                <Tag className="w-3 h-3" />
+                Seller Offering Terms
+              </span>
+            )}
             {isNew && (
               <span
                 className="bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg"

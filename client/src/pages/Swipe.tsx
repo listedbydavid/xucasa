@@ -1,13 +1,14 @@
-import { useState, useRef, useCallback, useEffect } from "react";
-import { useProperties } from "@/hooks/use-properties";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useProperties, useActiveConcessions, type SellerConcessionData } from "@/hooks/use-properties";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
+import { ConcessionDetailsModal } from "@/components/ConcessionDetailsModal";
 import {
   Heart, X, RotateCcw, MapPin, BedDouble, Bath,
-  Maximize, ChevronRight, ChevronLeft, Sparkles, Flame,
+  Maximize, ChevronRight, ChevronLeft, Sparkles, Flame, Tag,
 } from "lucide-react";
 import { Link } from "wouter";
 import { PropertyCard } from "@/components/PropertyCard";
@@ -23,8 +24,15 @@ export default function Swipe() {
   const { mutate: toggleSave } = useToggleSavedProperty();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
+  const { data: concessionsData } = useActiveConcessions();
+  const concessionsByProperty = useMemo(() => {
+    const map = new Map<number, SellerConcessionData>();
+    (concessionsData?.concessions || []).forEach(c => map.set(c.propertyId, c));
+    return map;
+  }, [concessionsData]);
 
-  const [showAuthPrompt, setShowAuthPrompt] = useState(false);
+  const [authPromptKind, setAuthPromptKind] = useState<"swipe-save" | "concession" | null>(null);
+  const [pendingConcession, setPendingConcession] = useState<{ concession: SellerConcessionData; propertyId: number } | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -58,16 +66,43 @@ export default function Swipe() {
 
   const swipeHistory = useRef<Array<{ dir: "left" | "right"; propertyId: number }>>([]);
 
+  const finalizeRightSwipe = useCallback((propertyId: number) => {
+    if (!isSaved) toggleSave({ propertyId, isSaved: false });
+    apiRequest("POST", "/api/swipe-interest", { propertyId })
+      .then(() => {
+        toast({ title: "Saved!", description: "Your agent has been notified of your interest." });
+      })
+      .catch(() => {
+        toast({ title: "Couldn't register interest", description: "Please try again.", variant: "destructive" });
+      });
+    flashAction("liked");
+    swipeHistory.current.push({ dir: "right", propertyId });
+    setFlyOut("right");
+    setTimeout(() => {
+      setCurrentIndex(i => i + 1);
+      setFlyOut(null);
+      setDragX(0);
+      setDragY(0);
+    }, 320);
+  }, [isSaved, toggleSave, toast]);
+
   const commitSwipe = useCallback((dir: "left" | "right") => {
     if (!current) return;
     if (dir === "right") {
+      const concession = concessionsByProperty.get(current.id);
       if (!isAuthenticated) {
         setDragX(0); setDragY(0);
-        setShowAuthPrompt(true);
+        setAuthPromptKind(concession ? "concession" : "swipe-save");
+        return;
+      }
+      if (concession) {
+        // Show concession details before recording the swipe
+        setDragX(0); setDragY(0);
+        setPendingConcession({ concession, propertyId: current.id });
         return;
       }
       if (!isSaved) toggleSave({ propertyId: current.id, isSaved: false });
-      apiRequest("POST", "/api/swipe-interest", { propertyId: current.id })
+      apiRequest("POST", "/api/buyer-interest", { propertyId: current.id, source: "swipe" })
         .then(() => {
           toast({ title: "Saved!", description: "Your agent has been notified of your interest." });
         })
@@ -149,8 +184,20 @@ export default function Swipe() {
 
   return (
     <div className="bg-muted/30 overflow-y-auto">
-      {showAuthPrompt && (
-        <AuthPromptModal feature="favorite" onClose={() => setShowAuthPrompt(false)} />
+      {authPromptKind && (
+        <AuthPromptModal feature={authPromptKind} onClose={() => setAuthPromptKind(null)} />
+      )}
+      {pendingConcession && (
+        <ConcessionDetailsModal
+          concession={pendingConcession.concession}
+          propertyId={pendingConcession.propertyId}
+          onClose={() => setPendingConcession(null)}
+          onContinue={() => {
+            const pid = pendingConcession.propertyId;
+            setPendingConcession(null);
+            finalizeRightSwipe(pid);
+          }}
+        />
       )}
 
       {/* ── Swipe deck section — full viewport height ── */}
@@ -335,13 +382,21 @@ export default function Swipe() {
                       Details <ChevronRight className="w-3 h-3" />
                     </Link>
 
-                    {prop.isOffMarket && (
-                      <div className="absolute top-4 left-4 pointer-events-none">
+                    <div className="absolute top-4 left-4 flex flex-col gap-2 pointer-events-none">
+                      {concessionsByProperty.has(prop.id) && (
+                        <span
+                          className="bg-amber-500 text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-lg"
+                          data-testid={`badge-concession-swipe-${prop.id}`}
+                        >
+                          <Tag className="w-3 h-3" /> Seller Offering Terms
+                        </span>
+                      )}
+                      {prop.isOffMarket && (
                         <span className="bg-foreground text-background text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1">
                           <Sparkles className="w-3 h-3 text-yellow-400" /> Buy it Now
                         </span>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </>
                 )}
 
