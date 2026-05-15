@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import SpotlightTour from "@/components/tours/SpotlightTour";
 import { PropertyCard } from "@/components/PropertyCard";
 import { SdmlsDisclaimer } from "@/components/SdmlsDisclaimer";
 import {
@@ -79,6 +80,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SpotlightTour pageKey="dashboard" isAuthenticated={isAuthenticated} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Page Header */}
         <div className="flex items-center gap-4 mb-8">
@@ -95,7 +97,7 @@ export default function Dashboard() {
 
         <div className="flex flex-col md:flex-row gap-4 md:gap-8">
           {/* Sidebar Nav */}
-          <aside className="hidden md:flex flex-col w-56 flex-shrink-0 gap-1">
+          <aside className="hidden md:flex flex-col w-56 flex-shrink-0 gap-1" data-tour="dashboard-tabs">
             {navItems.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
@@ -239,7 +241,7 @@ function ProfileSection({ user }: { user: any }) {
       <BuyerProfileNudge />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard label="Saved Homes" value={<FavoriteCount />} icon={Heart} color="text-rose-500" />
+        <div data-tour="saved-homes" className="contents"><StatCard label="Saved Homes" value={<FavoriteCount />} icon={Heart} color="text-rose-500" /></div>
         <StatCard label="Saved Searches" value={<SavedSearchCount />} icon={BookmarkCheck} color="text-blue-500" />
         <StatCard label="My Homes" value={<MyHomeCount />} icon={Home} color="text-green-500" />
       </div>

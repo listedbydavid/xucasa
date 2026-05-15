@@ -12,6 +12,7 @@ import queryString from "query-string";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import { SdmlsDisclaimer } from "@/components/SdmlsDisclaimer";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+import SpotlightTour from "@/components/tours/SpotlightTour";
 import type { Property } from "@shared/schema";
 
 function formatPrice(price: number): string {
@@ -184,7 +185,8 @@ export default function Search() {
         <AuthPromptModal feature="save-search" onClose={() => setShowAuthPrompt(false)} />
       )}
     <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
-      <div className="bg-card border-b border-border px-3 py-2.5 z-10 shadow-sm">
+      <SpotlightTour pageKey="search" isAuthenticated={isAuthenticated} />
+      <div className="bg-card border-b border-border px-3 py-2.5 z-10 shadow-sm" data-tour="search-filters">
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex-1 min-w-[200px] max-w-md">
             <AddressAutocomplete
@@ -381,9 +383,9 @@ export default function Search() {
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden" data-tour="search-results">
         {showMap && (
-          <div className={`flex flex-col ${showList ? 'hidden lg:flex lg:w-1/2 xl:w-[55%]' : 'w-full'} h-full border-r border-border`}>
+          <div data-tour="search-map" className={`flex flex-col ${showList ? 'hidden lg:flex lg:w-1/2 xl:w-[55%]' : 'w-full'} h-full border-r border-border`}>
             <div className="flex-1 relative">
               <MapView
                 properties={properties || []}

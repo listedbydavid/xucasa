@@ -753,3 +753,78 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
 export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens).omit({ id: true, createdAt: true });
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
+
+export const tourProgress = pgTable("tour_progress", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  pageKey: text("page_key").notNull(),
+  completed: boolean("completed").default(false).notNull(),
+  skipped: boolean("skipped").default(false).notNull(),
+  currentStep: integer("current_step").default(0).notNull(),
+  globalSkip: boolean("global_skip").default(false).notNull(),
+  lastSeenAt: timestamp("last_seen_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userPageIdx: uniqueIndex("tour_progress_user_page_idx").on(table.userId, table.pageKey),
+}));
+
+export const tourStepOverrides = pgTable("tour_step_overrides", {
+  id: serial("id").primaryKey(),
+  pageKey: text("page_key").notNull(),
+  stepIndex: integer("step_index").notNull(),
+  title: text("title"),
+  body: text("body"),
+  targetSelector: text("target_selector"),
+  placement: text("placement").default("bottom"),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  pageStepIdx: uniqueIndex("tour_step_overrides_page_step_idx").on(table.pageKey, table.stepIndex),
+}));
+
+export const pageTipsDismissed = pgTable("page_tips_dismissed", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tipKey: text("tip_key").notNull(),
+  dismissedAt: timestamp("dismissed_at").defaultNow().notNull(),
+}, (table) => ({
+  userTipIdx: uniqueIndex("page_tips_dismissed_user_tip_idx").on(table.userId, table.tipKey),
+}));
+
+export const featureChangelog = pgTable("feature_changelog", {
+  id: serial("id").primaryKey(),
+  version: text("version").notNull().unique(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  category: text("category").default("feature"),
+  isPublished: boolean("is_published").default(true).notNull(),
+  publishedAt: timestamp("published_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const changelogViews = pgTable("changelog_views", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  lastViewedAt: timestamp("last_viewed_at").defaultNow().notNull(),
+  lastViewedVersion: text("last_viewed_version"),
+}, (table) => ({
+  userIdx: uniqueIndex("changelog_views_user_idx").on(table.userId),
+}));
+
+export const insertTourProgressSchema = createInsertSchema(tourProgress).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertTourStepOverrideSchema = createInsertSchema(tourStepOverrides).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPageTipDismissedSchema = createInsertSchema(pageTipsDismissed).omit({ id: true, dismissedAt: true });
+export const insertFeatureChangelogSchema = createInsertSchema(featureChangelog).omit({ id: true, createdAt: true });
+export const insertChangelogViewSchema = createInsertSchema(changelogViews).omit({ id: true, lastViewedAt: true });
+
+export type TourProgress = typeof tourProgress.$inferSelect;
+export type InsertTourProgress = z.infer<typeof insertTourProgressSchema>;
+export type TourStepOverride = typeof tourStepOverrides.$inferSelect;
+export type InsertTourStepOverride = z.infer<typeof insertTourStepOverrideSchema>;
+export type PageTipDismissed = typeof pageTipsDismissed.$inferSelect;
+export type FeatureChangelogEntry = typeof featureChangelog.$inferSelect;
+export type InsertFeatureChangelogEntry = z.infer<typeof insertFeatureChangelogSchema>;
+export type ChangelogView = typeof changelogViews.$inferSelect;

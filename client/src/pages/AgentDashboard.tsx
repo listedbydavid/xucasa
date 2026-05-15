@@ -14,6 +14,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { BeaconTab } from "@/components/BeaconReport";
+import SpotlightTour from "@/components/tours/SpotlightTour";
 import { OpenHouseRoutePlanner } from "@/components/OpenHouseRoutePlanner";
 import { AgentContactsSection } from "@/components/AgentContacts";
 
@@ -89,6 +90,7 @@ export default function AgentDashboard() {
               onClick={openNew}
               className="flex items-center gap-2 bg-foreground text-background px-6 py-3 rounded-xl font-bold hover:bg-primary hover:text-white transition-all shadow-lg active:scale-95"
               data-testid="button-add-listing"
+              data-tour="add-concession-btn"
             >
               <Plus className="w-5 h-5" />
               Add Listing
@@ -99,7 +101,7 @@ export default function AgentDashboard() {
         {!user?.agentVerified && <AgentVerificationBanner user={user} />}
 
         {/* Tab Nav */}
-        <div className="flex gap-1 mb-8 border-b border-border overflow-x-auto">
+        <div className="flex gap-1 mb-8 border-b border-border overflow-x-auto" data-tour="agent-tabs">
           {([
             { id: "listings",   label: "My Listings",  icon: Home },
             { id: "clients",    label: "Clients",       icon: Users },
@@ -118,6 +120,12 @@ export default function AgentDashboard() {
                   : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
               data-testid={`tab-${id}`}
+              data-tour={
+                id === "beacon" ? "beacon-tab"
+                  : id === "buyerinterest" ? "buyer-interest-tab"
+                  : id === "contacts" ? "contacts-tab"
+                  : undefined
+              }
             >
               <Icon className="w-4 h-4" />
               {label}
@@ -239,6 +247,7 @@ export default function AgentDashboard() {
           isPending={isCreating || isUpdating}
         />
       )}
+      <SpotlightTour pageKey="agent" isAuthenticated={isAuthenticated} />
     </div>
   );
 }

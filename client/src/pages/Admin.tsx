@@ -5,6 +5,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import ConversationThreadComponent from "@/pages/ConversationThread";
+import AdminToursEditor from "@/components/AdminToursEditor";
 import {
   Shield, Users, Home, TrendingUp, Mail, Phone, MapPin,
   Clock, BedDouble, Bath, Maximize2, DollarSign, Eye,
@@ -825,7 +826,7 @@ function ErrorReportCard({ report, onUpdateStatus, onResolve, onDelete, onAddNot
 export default function Admin() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals" | "buyers" | "users" | "representation" | "errors" | "conversations" | "audit">("overview");
+  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals" | "buyers" | "users" | "representation" | "errors" | "conversations" | "audit" | "tours">("overview");
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
   const [convoSearch, setConvoSearch] = useState("");
   const [convoStatusFilter, setConvoStatusFilter] = useState("all");
@@ -1113,7 +1114,7 @@ export default function Admin() {
         </div>
 
         <div className="flex gap-1 mb-6 bg-muted/30 rounded-xl p-1 overflow-x-auto" data-testid="section-admin-tabs">
-          {(["overview", "users", "pitches", "leads", "buyers", "conversations", "referrals", "representation", "errors", "audit"] as const).map(tab => (
+          {(["overview", "users", "pitches", "leads", "buyers", "conversations", "referrals", "representation", "errors", "audit", "tours"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => { setActiveTab(tab); if (tab === "conversations") setSelectedConversationId(null); }}
@@ -1131,6 +1132,7 @@ export default function Admin() {
                 : tab === "referrals" ? `Referrals (${(referrals?.length || 0) + (sellerReferrals?.length || 0)})`
                 : tab === "errors" ? `Errors (${errorReports?.filter((e: any) => !e.resolved).length || 0})`
                 : tab === "audit" ? "Audit Log"
+                : tab === "tours" ? "Tours"
                 : `Representation (${swipeNotifications?.length || 0})`}
             </button>
           ))}
@@ -2128,6 +2130,10 @@ export default function Admin() {
               </div>
             )}
           </div>
+        )}
+
+        {activeTab === "tours" && (
+          <AdminToursEditor />
         )}
       </div>
     </div>

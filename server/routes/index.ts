@@ -21,6 +21,8 @@ import idxRouter from "./idx";
 import profileRouter from "./profile";
 import errorsRouter from "./errors";
 import adminRouter from "./admin";
+import toursRouter from "./tours";
+import { seedChangelog } from "../lib/changelogSeed";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -52,6 +54,7 @@ export async function registerRoutes(
   // Registration order matters when routes overlap (more-specific paths must
   // be on routers registered before catch-all routers).
   app.use(adminRouter);          // /api/admin/* — registered first to win over property/etc fallbacks
+  app.use(toursRouter);          // /api/tours/*, /api/tips/*, /api/changelog/*
   app.use(concessionsRouter);    // /api/concessions/*, /api/properties/:id/concessions
   app.use(reviewsRouter);        // /api/properties/:id/reviews
   app.use(beaconRouter);         // /api/beacon/*
@@ -75,6 +78,9 @@ export async function registerRoutes(
   } else {
     seedDatabase().catch(console.error);
   }
+
+  // Idempotent changelog seed — safe to run on every boot.
+  seedChangelog().catch((err) => console.warn("[Startup] seedChangelog failed:", err?.message || err));
 
   return httpServer;
 }

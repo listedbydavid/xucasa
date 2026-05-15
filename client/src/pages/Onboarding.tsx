@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import SpotlightTour from "@/components/tours/SpotlightTour";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { resolveUserDestination } from "@shared/routing";
 import { useToast } from "@/hooks/use-toast";
@@ -40,7 +41,7 @@ function normalizeTimeline(input: string): string {
 }
 
 export default function Onboarding() {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [step, setStep] = useState<Step>("intent");
@@ -236,8 +237,9 @@ export default function Onboarding() {
           </p>
         </div>
 
+        <SpotlightTour pageKey="onboarding" isAuthenticated={isAuthenticated} />
         {step === "intent" && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-testid="intent-grid">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-testid="intent-grid" data-tour="onboarding-intent">
             {INTENT_CARDS.map(card => (
               <button
                 key={card.id}
@@ -262,7 +264,7 @@ export default function Onboarding() {
         )}
 
         {step === "buyer" && (
-          <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-6" data-testid="buyer-wizard">
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-6" data-testid="buyer-wizard" data-tour="onboarding-form">
             {/* Progress bar */}
             <div data-testid="buyer-progress">
               <div className="flex justify-between items-center mb-2">
@@ -542,7 +544,7 @@ export default function Onboarding() {
         )}
 
         {step === "homeowner" && (
-          <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-5" data-testid="homeowner-wizard">
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-5" data-testid="homeowner-wizard" data-tour="onboarding-form">
             <div>
               <label className="text-sm font-bold text-foreground mb-1 flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-green-500" /> Home Address *
@@ -646,7 +648,7 @@ export default function Onboarding() {
         )}
 
         {step === "agent" && (
-          <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-5" data-testid="agent-wizard">
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-5" data-testid="agent-wizard" data-tour="onboarding-form">
             <div>
               <label className="text-sm font-bold text-foreground mb-1 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-purple-500" /> License Number *

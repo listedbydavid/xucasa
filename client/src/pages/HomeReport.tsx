@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
+import SpotlightTour from "@/components/tours/SpotlightTour";
 import { useToast } from "@/hooks/use-toast";
 import { useGoogleMaps } from "@/hooks/use-google-maps";
 import { Autocomplete } from "@react-google-maps/api";
@@ -756,6 +757,8 @@ export default function HomeReport() {
 
             {/* PROPERTY VALUATION */}
             <ReportCard>
+              <SpotlightTour pageKey="home-report" isAuthenticated={isAuthenticated} />
+              <div data-tour="home-report-value" className="contents" />
               {valuationQuery.isLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-6 h-6 animate-spin text-primary" />
@@ -1122,9 +1125,9 @@ export default function HomeReport() {
                     { icon: Home, label: "Purchase a new home", value: purchasingPower.newHome },
                     { icon: Building2, label: "Buy an investment property", value: purchasingPower.investment },
                     { icon: Key, label: "Rent your home & buy another", value: purchasingPower.rentAndBuy },
-                    { icon: Banknote, label: "Sell & pocket the cash", value: purchasingPower.sellAndPocket },
+                    { icon: Banknote, label: "Sell & pocket the cash", value: purchasingPower.sellAndPocket, dataTour: "sell-cta" },
                   ].map((item, i) => (
-                    <div key={i} className="bg-muted rounded-xl p-4 flex items-center justify-between" data-testid={`card-power-${i}`}>
+                    <div key={i} className="bg-muted rounded-xl p-4 flex items-center justify-between" data-testid={`card-power-${i}`} data-tour={item.dataTour}>
                       <div className="flex items-center gap-3">
                         <item.icon className="w-6 h-6 text-muted-foreground" />
                         <p className="text-sm text-foreground font-medium">{item.label}</p>

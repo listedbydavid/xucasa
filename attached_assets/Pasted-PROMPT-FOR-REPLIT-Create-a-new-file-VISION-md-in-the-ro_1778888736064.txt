@@ -1,0 +1,183 @@
+PROMPT FOR REPLIT:
+
+Create a new file VISION.md in the root of the project with the following exact contents. This file should be the first thing any new developer, AI assistant, or team member reads before touching the codebase.
+markdown# Xucasa — Vision, Mission & North Star
+
+> "A transparent, agent-first real estate platform that replaces Zillow and Redfin
+> without selling users' data or undercutting the agents who serve them."
+
+---
+
+## Who We Are
+
+Xucasa is a real estate platform built by an agent, for agents — while also being
+genuinely better for buyers and homeowners. We are not a lead generation tool.
+We do not sell user data to the highest bidder. We do not disintermediate agents
+or undercut the relationships they have built with their clients.
+
+We are the alternative.
+
+---
+
+## Who We Serve
+
+### Buyers
+- Transparent, swipe-first home discovery
+- Seller terms and concessions visible upfront — no surprises at the table
+- No data sold, no lead routing to strangers
+- A guided path to representation without pressure
+
+### Homeowners
+- Know everything about your home — value, equity, flood risk, zoning, permits
+- Tools to sell on your terms, not the portal's terms
+- Direct access to verified local vendors for repairs, maintenance, and improvements
+- Historical inspection data for full transparency
+
+### Agents
+- A platform that keeps your clients yours
+- Beacon: prove buyer demand before a listing goes live
+- Confidential MLS fields, showing instructions, and private remarks — agent eyes only
+- CRM, buyer interest tracking, and client collaboration tools built in
+- No dependency on Zillow, Redfin, or Trulia — your listings, your relationships
+
+### Lenders
+- A trusted partner channel to pre-approved, actively searching buyers
+- Transparent integration — no hidden referral fees or data selling
+
+### Vendors
+- A verified local directory for home services
+- Buyers and homeowners connect with trusted pros for bids and repairs
+- Pest, plumbing, HVAC, landscaping, gutters, renovation, garage doors, and more
+
+---
+
+## The Three Questions
+
+Every feature, every product decision, every API integration must pass this test:
+
+1. **Does this increase transparency for buyers?**
+2. **Does this give homeowners more power over their own data and decisions?**
+3. **Does this make agents more effective without creating a new dependency?**
+
+If the answer to all three is yes — build it.
+If it compromises any of them — don't.
+
+---
+
+## 2026 Goals
+
+- **100 agents** actively using xucasa in San Diego
+- **100 lenders** registered and engaged on the platform
+- **100 buyers** actively searching and swiping
+- **100 homeowners** tracking their home and using the seller tools
+- **SEO** — rank on page 1 of Google alongside Zillow, Redfin, Realtor.com, and
+  Homes.com for San Diego real estate searches
+- **First partnerships** established and first revenue streams active
+- **Vendor directory** launched with verified local home service providers
+
+---
+
+## 2027 Goals
+
+- **Native iOS app** — full feature parity with the web app
+- **Seed funding round** — to accelerate growth beyond San Diego
+- **Ownership** — founder retains ≥51% equity and all voting rights.
+  The mission and vision of this company are non-negotiable. We will not
+  lose the plot to investor pressure.
+- **99% uptime** across web app and native app
+- **User support feedback loop** — error reporting, support tickets, response SLAs
+
+---
+
+## Market Expansion Roadmap
+
+| Phase | Markets | MLS |
+|---|---|---|
+| 1 — Launch | San Diego, CA | SDMLS (active) |
+| 2 — Southern CA | Orange County, Los Angeles | CRMLS |
+| 3 — West Coast | San Francisco, Phoenix, Las Vegas | BAREIS, ARMLS, GLVAR |
+| 4 — National | West → East | RESO-compliant abstraction layer |
+| 5 — Global | International | Local property data partners |
+
+---
+
+## Priority API Integrations (post-revenue)
+
+| API | Purpose | Status |
+|---|---|---|
+| AirDNA | Short-term rental / Airbnb income analysis per property | Planned |
+| GreatSchools | School ratings with full data | Partially wired |
+| PropertyID Max | Natural hazard disclosures | Planned |
+| Scoutred | Zoning, permits, land use data | Planned |
+| Spectora | Historical home inspection reports for buyer transparency | Planned |
+| Qwikfix | Contractor bids for inspection items and home repairs | Planned |
+| Better.com | Primary mortgage and lending partner | Long-term |
+
+---
+
+## SEO Strategy
+
+xucasa.com already ranks #1 on Google for "xucasa". The goal is to expand this
+to rank on page 1 alongside Zillow, Redfin, Realtor.com, and Homes.com for:
+
+- San Diego real estate
+- San Diego homes for sale
+- Buy a home San Diego
+- MLS alternative for agents
+- Agent tools real estate
+- [city] homes for sale (as we expand to new markets)
+
+Technical SEO, city/neighborhood landing pages, and structured data markup
+(schema.org/RealEstateListing) are required to compete in this space.
+
+---
+
+## Founder's Long-Term Role
+
+David Hussain's role as the company matures:
+- Partnerships and business development
+- User growth and community building
+- Product vision and direction
+- Ensuring the platform stays true to its mission
+
+Not: writing code, managing infrastructure, or day-to-day operations.
+
+This platform exists to let David retire from active real estate practice
+by building something that outlasts any single transaction.
+
+---
+
+## What We Are Not
+
+- We are **not** a lead generation tool
+- We are **not** selling user data
+- We are **not** routing buyers to the highest-bidding agent
+- We are **not** building another portal that agents become dependent on
+  and then get squeezed by
+- We are **not** giving up majority control to investors who don't share the mission
+
+---
+
+## For Developers and AI Assistants
+
+If you are reading this before making changes to xucasa:
+
+1. Read this document fully before writing a line of code
+2. Run the test suite before and after your changes (`npx tsx server/__tests__/*.test.ts`)
+3. Check TypeScript: `npx tsc --noEmit` — target is 0 errors
+4. Every mutation needs audit logging via `executeWithAudit`
+5. No direct buyer ↔ listing agent messaging — all communication is agent-mediated
+6. No storing or exposing user data beyond what is necessary for the feature
+7. When in doubt, ask: does this serve the buyer, the homeowner, and the agent
+   without compromising any of them?
+
+The north star is a platform where every party in a real estate transaction
+feels represented, informed, and respected.
+
+---
+
+*Last updated: May 2026*
+*Founder: David Hussain — david@xucasa.com*
+After creating the file, confirm it exists and show me the first 20 lines:
+bashls -la VISION.md && head -20 VISION.md
+Sonnet 4.6

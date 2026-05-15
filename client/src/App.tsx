@@ -59,6 +59,7 @@ import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsOfService from "@/pages/TermsOfService";
 import { CookieConsent } from "@/components/CookieConsent";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import RestartButton from "@/components/tours/RestartButton";
 import { ProtectedRoute, AuthOnlyRoute } from "@/components/OnboardingGuard";
 
 function Router() {
@@ -153,6 +154,7 @@ function App() {
           <Footer />
           <CookieConsent />
           <InstallPrompt />
+          <RestartButton />
         </div>
         <Toaster />
       </TooltipProvider>

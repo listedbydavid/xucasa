@@ -14,6 +14,7 @@ import {
 import { Link } from "wouter";
 import { PropertyCard } from "@/components/PropertyCard";
 import { SdmlsDisclaimer } from "@/components/SdmlsDisclaimer";
+import SpotlightTour from "@/components/tours/SpotlightTour";
 
 const SWIPE_THRESHOLD = 90;
 const FALLBACK = "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&h=1200&fit=crop";
@@ -201,8 +202,9 @@ export default function Swipe() {
         />
       )}
 
+      <SpotlightTour pageKey="swipe" isAuthenticated={isAuthenticated} />
       {/* Profile completeness nudge — buyers only, top of page */}
-      <div className="px-4 pt-4 max-w-2xl mx-auto w-full">
+      <div className="px-4 pt-4 max-w-2xl mx-auto w-full" data-tour="profile-nudge">
         <BuyerProfileNudge />
       </div>
 
@@ -267,6 +269,8 @@ export default function Swipe() {
             </div>
           )}
 
+          {/* swipe deck — tour target */}
+          <div data-tour="swipe-card" className="contents" />
           {!done && [2, 1, 0].map(offset => {
             const prop = activeProps[currentIndex + offset];
             if (!prop) return null;
@@ -463,6 +467,7 @@ export default function Swipe() {
               className="w-16 h-16 lg:w-20 lg:h-20 bg-white border-2 border-red-200 rounded-full flex items-center justify-center text-red-400 hover:bg-red-50 hover:border-red-400 transition-all shadow-lg active:scale-95"
               aria-label="Pass on this property"
               data-testid="button-swipe-pass"
+              data-tour="swipe-actions"
             >
               <X className="w-8 h-8 lg:w-10 lg:h-10" strokeWidth={2.5} aria-hidden="true" />
             </button>

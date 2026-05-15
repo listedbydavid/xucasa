@@ -14,6 +14,7 @@ import { AuthPromptModal } from "@/components/AuthPromptModal";
 import { SdmlsDisclaimer } from "@/components/SdmlsDisclaimer";
 import { PropertyReviewSection } from "@/components/PropertyReviewSection";
 import { AgentMLSPanel } from "@/components/AgentMLSPanel";
+import SpotlightTour from "@/components/tours/SpotlightTour";
 
 class SectionErrorBoundary extends Component<{ children: ReactNode; name?: string }, { hasError: boolean }> {
   constructor(props: { children: ReactNode; name?: string }) {
@@ -1831,7 +1832,7 @@ export default function PropertyDetail() {
                   </span>
                 )}
               </div>
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-display font-bold text-foreground mb-3">
+              <h1 data-tour="property-detail-header" className="text-3xl sm:text-4xl md:text-5xl font-display font-bold text-foreground mb-3">
                 ${property.price.toLocaleString()}
               </h1>
               <div className="flex items-center text-muted-foreground font-medium text-sm sm:text-lg gap-2">
@@ -2022,6 +2023,8 @@ export default function PropertyDetail() {
           )}
 
           <SectionErrorBoundary name="AgentMLSPanel">
+            <SpotlightTour pageKey="property" isAuthenticated={isAuthenticated} />
+            <div data-tour="agent-mls-panel" className="contents" />
             <AgentMLSPanel propertyId={property.id} isAgent={!!(user?.role === 'agent' && user?.agentVerified)} />
           </SectionErrorBoundary>
 
