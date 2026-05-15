@@ -180,7 +180,7 @@ router.post("/api/conversations", isAuthenticated, async (req: any, res) => {
       { req, event: "conversation_created", userId, propertyId, metadata: { type: convType } },
       async () => {
         const actualBuyerIdForInterest = (convType === "agent_coordination" && buyerUserId) ? buyerUserId : resolvedBuyerId;
-        await storage.upsertBuyerInterest(propertyId, actualBuyerIdForInterest, msgType || "inquiry", isAgent ? userId : resolvedAgentId, prop.agentId || null);
+        await storage.upsertBuyerInterest(propertyId, actualBuyerIdForInterest, msgType || "inquiry", isAgent ? userId : resolvedAgentId, prop.agentId ?? undefined);
 
         const relatedBuyer = (convType === "agent_coordination" && buyerUserId) ? buyerUserId : undefined;
         const convo = await storage.getOrCreateConversation(propertyId, resolvedBuyerId, resolvedAgentId, isAgent ? "agent" : "buyer", convType, relatedBuyer);
@@ -349,7 +349,7 @@ router.post("/api/showing-requests", isAuthenticated, async (req: any, res) => {
         if (!assignedAgent) throw new Error("No agent assigned");
         const agentId = assignedAgent.id;
 
-        await storage.upsertBuyerInterest(propertyId, userId, "showing_request", agentId, prop.agentId || null);
+        await storage.upsertBuyerInterest(propertyId, userId, "showing_request", agentId, prop.agentId ?? undefined);
         const convo = await storage.getOrCreateConversation(propertyId, userId, agentId, "buyer", "buyer");
 
         const request = await storage.createShowingRequest({

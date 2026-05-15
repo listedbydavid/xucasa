@@ -37,7 +37,7 @@ router.get("/api/admin/seller-pitches", isAuthenticated, isAdmin, async (_req, r
 
 router.get("/api/admin/seller-pitches/:id", isAuthenticated, isAdmin, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(String(req.params.id));
     if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
     const pitch = await storage.getSellerPitch(id);
     if (!pitch) return res.status(404).json({ message: "Pitch not found" });
@@ -49,7 +49,7 @@ router.get("/api/admin/seller-pitches/:id", isAuthenticated, isAdmin, async (req
 
 router.patch("/api/admin/seller-pitches/:id", isAuthenticated, isAdmin, async (req: any, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(String(req.params.id));
     if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
     const { status, adminNotes } = req.body;
     if (!status) return res.status(400).json({ message: "Status is required" });
@@ -116,7 +116,7 @@ router.get("/api/admin/conversations", isAuthenticated, isAdmin, async (req: any
 
 router.get("/api/admin/conversations/:id", isAuthenticated, isAdmin, async (req: any, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(String(req.params.id));
     if (isNaN(id)) return res.status(400).json({ message: "Invalid conversation ID" });
     const result = await storage.getConversationWithMessages(id);
     if (!result) return res.status(404).json({ message: "Conversation not found" });
@@ -216,9 +216,9 @@ router.get("/api/admin/users", isAuthenticated, isAdmin, async (req, res) => {
 
 router.get("/api/admin/users/:id", isAuthenticated, isAdmin, async (req, res) => {
   try {
-    const user = await authStorage.getUser(req.params.id);
+    const user = await authStorage.getUser(String(req.params.id));
     if (!user) return res.status(404).json({ message: "User not found" });
-    const activity = await authStorage.getUserActivity(req.params.id);
+    const activity = await authStorage.getUserActivity(String(req.params.id));
     res.json({ ...user, activity });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
@@ -236,7 +236,7 @@ router.patch("/api/admin/users/:id", isAuthenticated, isAdmin, async (req, res) 
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
     }
-    const existing = await authStorage.getUser(req.params.id);
+    const existing = await authStorage.getUser(String(req.params.id));
     if (!existing) {
       return res.status(404).json({ message: "User not found" });
     }
@@ -244,8 +244,8 @@ router.patch("/api/admin/users/:id", isAuthenticated, isAdmin, async (req, res) 
     if (parsed.data.role !== undefined) updates.role = parsed.data.role;
     if (parsed.data.status !== undefined) updates.status = parsed.data.status;
     if (parsed.data.adminNotes !== undefined) updates.adminNotes = parsed.data.adminNotes;
-    const updated = await authStorage.adminUpdateUser(req.params.id, updates);
-    await audit({ req, event: "admin_user_updated", outcome: "success", userId: (req as any).user?.claims?.sub, metadata: { targetUserId: req.params.id, updates: Object.keys(updates) } });
+    const updated = await authStorage.adminUpdateUser(String(req.params.id), updates);
+    await audit({ req, event: "admin_user_updated", outcome: "success", userId: (req as any).user?.claims?.sub, metadata: { targetUserId: String(req.params.id), updates: Object.keys(updates) } });
     res.json(updated);
   } catch (err: any) {
     await audit({ req, event: "admin_user_updated", outcome: "failure", userId: (req as any).user?.claims?.sub, errorMessage: err.message });
@@ -255,7 +255,7 @@ router.patch("/api/admin/users/:id", isAuthenticated, isAdmin, async (req, res) 
 
 router.delete("/api/admin/users/:id", isAuthenticated, isAdmin, async (req, res) => {
   try {
-    const targetId = req.params.id;
+    const targetId = String(req.params.id);
     const adminSub = (req as any).user?.claims?.sub;
     if (targetId === adminSub) {
       return res.status(400).json({ message: "Cannot delete your own account" });
@@ -438,7 +438,7 @@ router.get("/api/admin/error-reports/archive/download", isAuthenticated, isAdmin
 
 router.get("/api/admin/error-reports/:id", isAuthenticated, isAdmin, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(String(req.params.id));
     if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
     const report = await storage.getErrorReport(id);
     if (!report) return res.status(404).json({ error: "Not found" });
@@ -450,7 +450,7 @@ router.get("/api/admin/error-reports/:id", isAuthenticated, isAdmin, async (req,
 
 router.patch("/api/admin/error-reports/:id", isAuthenticated, isAdmin, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(String(req.params.id));
     if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
     const { status, adminNotes, resolved } = req.body;
     const validStatuses = ["new", "investigating", "resolved", "ignored"];
@@ -468,7 +468,7 @@ router.patch("/api/admin/error-reports/:id", isAuthenticated, isAdmin, async (re
 
 router.delete("/api/admin/error-reports/:id", isAuthenticated, isAdmin, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(String(req.params.id));
     if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
     await db.delete(errorReports).where(eq(errorReports.id, id));
     res.json({ success: true });

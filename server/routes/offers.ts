@@ -92,7 +92,7 @@ router.post("/api/property-offers", isAuthenticated, async (req: any, res) => {
 
     const assignedAgent = await storage.resolveAndAssignAgent(buyerUserId);
     if (assignedAgent) {
-      await storage.upsertBuyerInterest(propertyId, buyerUserId, "reverse_offer", assignedAgent.id, prop.agentId || null);
+      await storage.upsertBuyerInterest(propertyId, buyerUserId, "reverse_offer", assignedAgent.id, prop.agentId ?? undefined);
       const creatorName = creator?.firstName ? `${creator.firstName} ${creator.lastName || ""}`.trim() : "Listing Agent";
 
       if (assignedAgent.id === creatorId) {
@@ -379,7 +379,7 @@ router.post("/api/property-offers/:id/buyer-response", isAuthenticated, async (r
   }
 
   try {
-    const result = await executeWithAudit(
+    const result = await executeWithAudit<any>(
       { req, event: "buyer_offer_response", userId, resourceType: "property_offer", resourceId: String(id) },
       async () => {
     const offers = await db.select().from(propertyOffers).where(eq(propertyOffers.id, id));
@@ -404,11 +404,11 @@ router.post("/api/property-offers/:id/buyer-response", isAuthenticated, async (r
       .where(and(eq(propertyOffers.id, id), or(eq(propertyOffers.status, "sent_to_buyer"), eq(propertyOffers.status, "viewed"))))
       .returning();
     if (!updated) {
-      return res.status(409).json({ message: `This offer has already been responded to.` });
+      throw new Error(`CONFLICT:This offer has already been responded to.`);
     }
 
     const assignedAgent = await storage.lookupAssignedAgent(userId);
-    if (!assignedAgent) return res.status(400).json({ message: "No agent assigned" });
+    if (!assignedAgent) throw new Error("No agent assigned");
     const agentId = assignedAgent.id;
 
     const buyerUser = await storage.getUser(userId);
@@ -501,6 +501,7 @@ router.post("/api/property-offers/:id/buyer-response", isAuthenticated, async (r
     if (msg === "Offer not found") return res.status(404).json({ message: msg });
     if (msg.includes("Only the buyer")) return res.status(403).json({ message: msg });
     if (msg.startsWith("CONFLICT:")) return res.status(409).json({ message: msg.replace("CONFLICT:", "") });
+    if (msg === "No agent assigned") return res.status(400).json({ message: msg });
     res.status(500).json({ message: "Internal Server Error", requestId: req.requestId });
   }
 });

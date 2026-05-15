@@ -80,7 +80,7 @@ router.post("/api/buyer-matches", isAuthenticated, async (req, res) => {
       const assignedAgent = await storage.resolveAndAssignAgent(buyerUserId);
       if (assignedAgent) {
         const prop = await storage.getProperty(parsed.data.propertyId);
-        await storage.upsertBuyerInterest(parsed.data.propertyId, buyerUserId, "reverse_offer", assignedAgent.id, prop?.agentId || null);
+        await storage.upsertBuyerInterest(parsed.data.propertyId, buyerUserId, "reverse_offer", assignedAgent.id, prop?.agentId ?? undefined);
 
         if (assignedAgent.id === userId) {
           const buyerConvo = await storage.getOrCreateConversation(parsed.data.propertyId, buyerUserId, assignedAgent.id, "agent", "buyer");
@@ -136,7 +136,7 @@ router.post("/api/buyer-matches", isAuthenticated, async (req, res) => {
 
 router.get("/api/buyer-matches/profile/:profileId", isAuthenticated, async (req, res) => {
   try {
-    const profileId = parseInt(req.params.profileId);
+    const profileId = parseInt(String(req.params.profileId));
     const profile = await storage.getBuyerProfile(profileId);
     if (!profile || profile.userId !== req.user!.claims.sub) {
       return res.status(403).json({ message: "Access denied" });

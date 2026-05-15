@@ -128,7 +128,7 @@ export async function setupAuth(app: Express) {
             };
 
             audit({ event: "auth_login_success", outcome: "success", userId: user.id, metadata: { provider: "google", email } });
-            done(null, sessionUser);
+            done(null, sessionUser as Express.User);
           } catch (err) {
             audit({ event: "auth_login_failure", outcome: "failure", error: (err as Error).message, metadata: { provider: "google" } });
             done(err as Error);
@@ -224,7 +224,7 @@ export async function setupAuth(app: Express) {
           profile_image_url: user.profileImageUrl,
         },
       };
-      req.login(sessionUser, (err) => {
+      req.login(sessionUser as Express.User, (err) => {
         if (err) {
           console.error("[Auth] Session login error after register:", err);
           logAuthAttempt("register", "session_error", req, email);
@@ -287,7 +287,7 @@ export async function setupAuth(app: Express) {
           profile_image_url: user.profileImageUrl,
         },
       };
-      req.login(sessionUser, (err) => {
+      req.login(sessionUser as Express.User, (err) => {
         if (err) {
           console.error("[Auth] Session login error:", err);
           logAuthAttempt("login", "session_error", req, email);
@@ -373,7 +373,7 @@ export async function setupAuth(app: Express) {
           });
 
           const recipientName = user.firstName || undefined;
-          const emailResult = await sendPasswordResetEmail(user.email, rawToken, recipientName);
+          const emailResult = await sendPasswordResetEmail(user.email!, rawToken, recipientName);
 
           if (emailResult.sent) {
             await audit({ req, event: "forgot_password_email_sent", outcome: "success", userId: user.id, metadata: { email } });

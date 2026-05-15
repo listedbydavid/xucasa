@@ -405,7 +405,7 @@ router.post("/api/agent/buyer-clients", isAuthenticated, async (req, res) => {
 
 router.patch("/api/agent/buyer-clients/:id", isAuthenticated, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(String(req.params.id));
     const profile = await storage.getBuyerProfile(id);
     if (!profile || profile.agentId !== req.user!.claims.sub) {
       return res.status(403).json({ message: "Access denied" });
@@ -422,7 +422,7 @@ router.patch("/api/agent/buyer-clients/:id", isAuthenticated, async (req, res) =
 
 router.delete("/api/agent/buyer-clients/:id", isAuthenticated, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(String(req.params.id));
     const profile = await storage.getBuyerProfile(id);
     if (!profile || profile.agentId !== req.user!.claims.sub) {
       return res.status(403).json({ message: "Access denied" });

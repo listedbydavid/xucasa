@@ -251,8 +251,7 @@ export function MapView({ properties, center = [-122.4194, 37.7749], zoom = 13, 
             zoom={zoom}
           >
             <StreetViewPanorama
-              position={streetViewPosition}
-              visible={true}
+              {...({ position: streetViewPosition, visible: true } as any)}
               options={{
                 enableCloseButton: false,
                 addressControl: true,

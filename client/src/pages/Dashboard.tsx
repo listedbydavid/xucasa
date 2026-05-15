@@ -1145,13 +1145,13 @@ function MyAgentSection() {
         <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-4">
           <div className="flex items-center gap-4">
             <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
-              link.status === "active" ? "bg-green-100 text-green-600" : "bg-amber-100 text-amber-600"
+              (link as any).status === "active" ? "bg-green-100 text-green-600" : "bg-amber-100 text-amber-600"
             }`}>
-              {link.status === "active" ? <CheckCircle2 className="w-6 h-6" /> : <Mail className="w-6 h-6" />}
+              {(link as any).status === "active" ? <CheckCircle2 className="w-6 h-6" /> : <Mail className="w-6 h-6" />}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-foreground">{link.agentEmail}</p>
-              {link.status === "active" ? (
+              <p className="font-bold text-foreground">{(link as any).agentEmail}</p>
+              {(link as any).status === "active" ? (
                 <p className="text-sm text-green-600 font-medium flex items-center gap-1.5 mt-0.5">
                   <CheckCircle2 className="w-3.5 h-3.5" /> Agent connected — they can see your favorites and saved searches
                 </p>

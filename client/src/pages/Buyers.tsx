@@ -384,7 +384,7 @@ function PitchModal({ profile, onClose }: { profile: BuyerProfileWithUser; onClo
                       className="accent-primary"
                     />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{prop.address}</p>
+                      <p className="text-sm font-medium truncate">{(prop as any).address || `${prop.addressStreetNumber || ""} ${prop.addressStreetName || ""}`.trim() || prop.title}</p>
                       <p className="text-xs text-muted-foreground">
                         {prop.beds}bd / {prop.baths}ba · {prop.sqft?.toLocaleString()} sqft · ${prop.price?.toLocaleString()}
                       </p>
@@ -456,7 +456,7 @@ function PitchModal({ profile, onClose }: { profile: BuyerProfileWithUser; onClo
   );
 }
 
-const MOCK_BUYERS: BuyerProfileWithUser[] = [
+const MOCK_BUYERS = ([
   {
     id: -1, userId: "mock-1", displayName: "Sarah M.", preApprovalAmount: 850000,
     minBeds: 3, maxBeds: 4, minBaths: "2", minSqft: 1800, maxSqft: 2500, minLotSize: 5000,
@@ -517,7 +517,7 @@ const MOCK_BUYERS: BuyerProfileWithUser[] = [
     isActive: true, createdAt: new Date(),
     user: { id: "mock-6", firstName: "Rachel", lastName: "W." },
   },
-];
+] as unknown) as BuyerProfileWithUser[];
 
 function QuickCriteriaForm({ onOpenFullForm }: { onOpenFullForm: () => void }) {
   const { isAuthenticated } = useAuth();

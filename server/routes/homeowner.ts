@@ -111,7 +111,7 @@ router.get("/api/home-report/public-records", async (req, res) => {
     const result: any = { neighborhoodStats: null, floodInfo: null, nearbyPlaces: null };
     if (records.neighborhood) {
       result.neighborhoodStats = {
-        medianIncome: records.neighborhood.medianIncome,
+        medianIncome: records.neighborhood.medianHouseholdIncome,
         medianHomeValue: records.neighborhood.medianHomeValue,
         totalPopulation: records.neighborhood.totalPopulation,
         ownerOccupiedPct: records.neighborhood.ownerOccupiedPct,
@@ -119,7 +119,7 @@ router.get("/api/home-report/public-records", async (req, res) => {
     }
     if (records.flood) {
       result.floodInfo = {
-        zone: records.flood.zone,
+        zone: records.flood.floodZone,
         sfha: records.flood.sfha,
         description: records.flood.description,
       };
@@ -188,7 +188,7 @@ router.post("/api/my-homes", isAuthenticated, async (req: any, res) => {
 
     const home = await storage.createUserHome(userId, {
       nickname, addressStreetNumber, addressStreetName, addressUnitNumber,
-      addressCity, addressState, addressZip, notes, userId,
+      addressCity, addressState, addressZip, notes,
       beds, baths, sqft, lotSize, yearBuilt, homeType,
       purchasePrice, purchaseDate, principalBalance, appraisedValue,
       interestRate, loanTerm, monthlyPayment, loanType, estimatedValue,

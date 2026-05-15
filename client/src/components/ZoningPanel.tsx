@@ -161,7 +161,7 @@ export function ZoningPanel({ propertyId }: { propertyId: number }) {
             </section>
           )}
 
-          {(data?.buildingContext?.typicalLevels || data?.buildingContext?.sampleBuildings?.length > 0) && (
+          {data && (data.buildingContext?.typicalLevels || (data.buildingContext?.sampleBuildings?.length ?? 0) > 0) && (
             <section data-testid="zoning-building-context">
               <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-2">
                 <Building2 className="w-4 h-4" /> Nearby Building Heights
@@ -191,7 +191,7 @@ export function ZoningPanel({ propertyId }: { propertyId: number }) {
                   Dominant type: <span className="font-medium capitalize text-foreground">{data.buildingContext.dominantBuildingType}</span>
                 </p>
               )}
-              {data.buildingContext.sampleBuildings.length > 0 && (
+              {(data.buildingContext.sampleBuildings?.length ?? 0) > 0 && (
                 <div className="mt-3 space-y-1.5">
                   {data.buildingContext.sampleBuildings.map((b, i) => (
                     <div key={i} className="flex items-center justify-between text-sm py-1.5 border-b border-border/50 last:border-0">

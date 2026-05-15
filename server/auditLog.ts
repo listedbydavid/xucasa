@@ -29,6 +29,7 @@ interface AuditParams {
   resourceType?: string | null;
   resourceId?: string | null;
   error?: string | null;
+  errorMessage?: string | null;
   metadata?: Record<string, unknown> | null;
 }
 
@@ -92,7 +93,7 @@ async function persistAuditWithRetry(auditEvent: InsertAuditEvent, requestId: st
     event: "audit_final_failure",
     level: "critical",
     auditEventType: auditEvent.eventType,
-    outcome: auditEvent.outcome,
+    outcome: auditEvent.outcome as ("success" | "failure" | undefined),
     actorUserId: auditEvent.actorUserId,
     error: lastError?.message || "unknown",
     retriesExhausted: AUDIT_RETRY_COUNT,

@@ -45,14 +45,14 @@ router.post("/api/swipe-interest", isAuthenticated, async (req: any, res) => {
   if (!propertyId) return res.status(400).json({ message: "propertyId required" });
 
   try {
-    const result = await executeWithAudit(
+    const result = await executeWithAudit<any>(
       { req, event: "swipe_interest_created", userId: buyerUserId, propertyId },
       async () => {
         const prop = await storage.getProperty(propertyId);
         if (!prop) throw new Error("Property not found");
 
         const { agent: assignedAgent, assignmentType } = await resolveBuyerAgent(buyerUserId, storage);
-        await storage.upsertBuyerInterest(propertyId, buyerUserId, "swipe", assignedAgent?.id || null, prop?.agentId || null);
+        await storage.upsertBuyerInterest(propertyId, buyerUserId, "swipe", assignedAgent?.id ?? undefined, prop?.agentId ?? undefined);
 
         const existing = await storage.getExistingSwipeNotification(buyerUserId, propertyId);
         if (existing) return { data: { message: "Already notified", notification: existing, _status: 200 } };
@@ -261,7 +261,7 @@ router.patch("/api/buyer-profiles/:id", isAuthenticated, async (req, res) => {
     }
 
     const updated = await storage.updateBuyerProfile(
-      parseInt(req.params.id),
+      parseInt(String(req.params.id)),
       req.user!.claims.sub,
       updateData
     );
@@ -273,7 +273,7 @@ router.patch("/api/buyer-profiles/:id", isAuthenticated, async (req, res) => {
 
 router.delete("/api/buyer-profiles/:id", isAuthenticated, async (req, res) => {
   try {
-    await storage.deleteBuyerProfile(parseInt(req.params.id), req.user!.claims.sub);
+    await storage.deleteBuyerProfile(parseInt(String(req.params.id)), req.user!.claims.sub);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ message: err.message });
@@ -293,8 +293,8 @@ router.post("/api/buyer-interest", isAuthenticated, async (req: any, res) => {
         const { agent: assignedAgent, assignmentType } = await resolveBuyerAgent(userId, storage);
         const bi = await storage.upsertBuyerInterest(
           propertyId, userId, source || "swipe",
-          assignedAgent?.id || null,
-          prop?.agentId || null
+          assignedAgent?.id ?? undefined,
+          prop?.agentId ?? undefined
         );
 
         if (assignedAgent && (source === "swipe" || !source)) {
