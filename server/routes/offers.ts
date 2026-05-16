@@ -30,6 +30,27 @@ import { trySendNotificationEmail } from "../lib/notificationHelpers";
 
 router.post("/api/property-offers", isAuthenticated, async (req: any, res) => {
   const creatorId = req.user.claims.sub;
+  const offerSchema = z.object({
+    propertyId: z.number().int().positive(),
+    buyerUserId: z.string().min(1),
+    offerPrice: z.number().optional(),
+    escrowLengthDays: z.number().int().optional(),
+    inspectionContingencyDays: z.number().int().optional(),
+    loanContingencyDays: z.number().int().optional(),
+    appraisalContingencyDays: z.number().int().optional(),
+    insuranceContingencyDays: z.number().int().optional(),
+    disclosureReviewDays: z.number().int().optional(),
+    leasedLienedItemsDays: z.number().int().optional(),
+    sellerConcessions: z.number().optional(),
+    sellerConcessionNotes: z.string().max(2000).optional().nullable(),
+    buydownOffered: z.boolean().optional(),
+    buydownType: z.string().max(100).optional().nullable(),
+    buydownAmount: z.number().optional().nullable(),
+    additionalTerms: z.string().max(5000).optional().nullable(),
+    swipeNotificationId: z.number().int().positive().optional(),
+  });
+  const parsedOffer = offerSchema.safeParse(req.body);
+  if (!parsedOffer.success) return res.status(400).json({ message: "propertyId and buyerUserId required", errors: parsedOffer.error.flatten() });
   const {
     propertyId, buyerUserId, offerPrice, escrowLengthDays,
     inspectionContingencyDays, loanContingencyDays, appraisalContingencyDays,
@@ -37,11 +58,7 @@ router.post("/api/property-offers", isAuthenticated, async (req: any, res) => {
     sellerConcessions, sellerConcessionNotes,
     buydownOffered, buydownType, buydownAmount,
     additionalTerms, swipeNotificationId,
-  } = req.body;
-
-  if (!propertyId || !buyerUserId) {
-    return res.status(400).json({ message: "propertyId and buyerUserId required" });
-  }
+  } = parsedOffer.data;
 
   try {
     const result = await executeWithAudit(
@@ -246,13 +263,13 @@ router.patch("/api/property-offers/:id/status", isAuthenticated, async (req: any
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
-    const { status, adminNotes } = req.body;
-    if (!status) return res.status(400).json({ message: "status required" });
-
-    const validStatuses = ["pending_agent_review", "sent_to_buyer", "viewed", "accepted", "rejected", "countered", "declined", "expired", "pending_admin"];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ message: "Invalid status" });
-    }
+    const validStatuses = ["pending_agent_review", "sent_to_buyer", "viewed", "accepted", "rejected", "countered", "declined", "expired", "pending_admin"] as const;
+    const parsedStatus = z.object({
+      status: z.enum(validStatuses),
+      adminNotes: z.string().max(2000).optional().nullable(),
+    }).safeParse(req.body);
+    if (!parsedStatus.success) return res.status(400).json({ message: "Invalid status", errors: parsedStatus.error.flatten() });
+    const { status, adminNotes } = parsedStatus.data;
 
     const userId = req.user.claims.sub;
     const user = await storage.getUser(userId);
@@ -275,7 +292,7 @@ router.patch("/api/property-offers/:id/status", isAuthenticated, async (req: any
       return res.status(403).json({ message: "Only the listing agent or admin can update this status" });
     }
 
-    const updated = await storage.updatePropertyOfferStatus(id, status, adminNotes);
+    const updated = await storage.updatePropertyOfferStatus(id, status, adminNotes ?? undefined);
     await audit({ req, event: "offer_status_changed", outcome: "success", userId, propertyId: offer.propertyId, metadata: { offerId: id, status, previousStatus: offer.status } });
 
     const offerResponseStatuses = ["accepted", "rejected", "declined", "countered"];
@@ -370,13 +387,15 @@ router.post("/api/property-offers/:id/buyer-response", isAuthenticated, async (r
   const id = parseInt(req.params.id);
   if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
 
-  const { action, counterMessage } = req.body;
-  if (!action || !["accept", "decline", "counter"].includes(action)) {
-    return res.status(400).json({ message: "action must be accept, decline, or counter" });
-  }
-  if (action === "counter" && !counterMessage) {
-    return res.status(400).json({ message: "counterMessage required for counter action" });
-  }
+  const parsedAction = z.object({
+    action: z.enum(["accept", "decline", "counter"]),
+    counterMessage: z.string().max(5000).optional(),
+  }).refine(d => d.action !== "counter" || (d.counterMessage && d.counterMessage.length > 0), {
+    message: "counterMessage required for counter action",
+  }).safeParse(req.body);
+  if (!parsedAction.success) return res.status(400).json({ message: parsedAction.error.errors[0]?.message || "action must be accept, decline, or counter", errors: parsedAction.error.flatten() });
+  const { action } = parsedAction.data;
+  const counterMessage: string = parsedAction.data.counterMessage ?? "";
 
   try {
     const result = await executeWithAudit<any>(

@@ -69,7 +69,13 @@ router.get("/api/profile/completeness", isAuthenticated, async (req: any, res) =
 router.patch("/api/profile", isAuthenticated, async (req: any, res) => {
   try {
     const userId = req.user.claims.sub;
-    const { phone, mailingAddress } = req.body;
+    const profilePatchSchema = z.object({
+      phone: z.string().max(30).nullable().optional(),
+      mailingAddress: z.string().max(500).nullable().optional(),
+    });
+    const parsedProfile = profilePatchSchema.safeParse(req.body);
+    if (!parsedProfile.success) return res.status(400).json({ message: "Invalid request", errors: parsedProfile.error.flatten() });
+    const { phone, mailingAddress } = parsedProfile.data;
     const updates: any = {};
     if (phone !== undefined) updates.phone = phone;
     if (mailingAddress !== undefined) updates.mailingAddress = mailingAddress;

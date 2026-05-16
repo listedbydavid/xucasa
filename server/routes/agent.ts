@@ -29,16 +29,19 @@ const router = Router();
 import { checkFairHousing } from "../lib/notificationHelpers";
 
 router.post("/api/agent/verify", isAuthenticated, async (req: any, res) => {
-  const { licenseNumber, licenseState, association, brokerageName } = req.body || {};
+  const parsedVerify = z.object({
+    licenseNumber: z.string().trim().min(2).max(30).regex(/^[A-Za-z0-9\-. ]+$/, "License number contains invalid characters"),
+    licenseState: z.string().max(10).optional().nullable(),
+    association: z.string().max(200).optional().nullable(),
+    brokerageName: z.string().max(200).optional().nullable(),
+  }).safeParse(req.body);
+  if (!parsedVerify.success) {
+    const msg = parsedVerify.error.errors[0]?.message || "License number is required";
+    return res.status(400).json({ message: msg, errors: parsedVerify.error.flatten() });
+  }
+  const { licenseNumber, licenseState, association, brokerageName } = parsedVerify.data;
   try {
     const userId = req.user.claims.sub;
-
-    if (!licenseNumber || typeof licenseNumber !== "string" || licenseNumber.trim().length < 2) {
-      return res.status(400).json({ message: "License number is required" });
-    }
-    if (!/^[A-Za-z0-9\-. ]{2,30}$/.test(licenseNumber.trim())) {
-      return res.status(400).json({ message: "License number contains invalid characters" });
-    }
 
     const result = await runAgentVerificationFlow(req, userId, {
       licenseNumber: licenseNumber.trim(),
@@ -68,11 +71,14 @@ router.post("/api/agent/submit-info", isAuthenticated, async (req: any, res) => 
   try {
     const { authStorage } = await import("../replit_integrations/auth/storage");
     const userId = req.user.claims.sub;
-    const { licenseNumber, licenseState, association, brokerageName } = req.body;
-
-    if (!licenseNumber || typeof licenseNumber !== "string" || licenseNumber.trim().length < 2) {
-      return res.status(400).json({ message: "License number is required" });
-    }
+    const parsedSubmit = z.object({
+      licenseNumber: z.string().trim().min(2).max(30),
+      licenseState: z.string().max(10).optional().nullable(),
+      association: z.string().max(200).optional().nullable(),
+      brokerageName: z.string().max(200).optional().nullable(),
+    }).safeParse(req.body);
+    if (!parsedSubmit.success) return res.status(400).json({ message: "License number is required", errors: parsedSubmit.error.flatten() });
+    const { licenseNumber, licenseState, association, brokerageName } = parsedSubmit.data;
 
     const updated = await authStorage.updateAgentInfo(userId, {
       licenseNumber: licenseNumber.trim(),
@@ -99,8 +105,9 @@ router.get("/api/agent-invite", isAuthenticated, async (req: any, res) => {
 
 router.post("/api/agent-invite", isAuthenticated, async (req: any, res) => {
   try {
-    const { agentEmail } = req.body;
-    if (!agentEmail) return res.status(400).json({ message: "agentEmail required" });
+    const parsedInvite = z.object({ agentEmail: z.string().email().max(200) }).safeParse(req.body);
+    if (!parsedInvite.success) return res.status(400).json({ message: "agentEmail required", errors: parsedInvite.error.flatten() });
+    const agentEmail = parsedInvite.data.agentEmail;
     const link = await storage.upsertClientAgentLink(req.user.sub, agentEmail.trim().toLowerCase());
     await audit({ req, event: "agent_invite_created", outcome: "success", userId: req.user.sub, metadata: { agentEmail: agentEmail.trim().toLowerCase() } });
     res.json(link);
@@ -175,8 +182,18 @@ router.get("/api/agent/contacts", isAuthenticated, async (req: any, res) => {
 router.post("/api/agent/contacts", isAuthenticated, async (req: any, res) => {
   try {
     const agentId = req.user!.claims.sub;
-    const { firstName, lastName, email, phone, mailingAddress, notes, source, tagIds } = req.body;
-    if (!firstName) return res.status(400).json({ message: "First name is required" });
+    const parsedContact = z.object({
+      firstName: z.string().min(1).max(100),
+      lastName: z.string().max(100).optional().nullable(),
+      email: z.string().email().max(200).optional().nullable(),
+      phone: z.string().max(50).optional().nullable(),
+      mailingAddress: z.string().max(500).optional().nullable(),
+      notes: z.string().max(5000).optional().nullable(),
+      source: z.string().max(50).optional(),
+      tagIds: z.array(z.number().int().positive()).optional(),
+    }).safeParse(req.body);
+    if (!parsedContact.success) return res.status(400).json({ message: "First name is required", errors: parsedContact.error.flatten() });
+    const { firstName, lastName, email, phone, mailingAddress, notes, source, tagIds } = parsedContact.data;
     const contact = await storage.createAgentContact({
       agentId, firstName, lastName, email, phone, mailingAddress, notes,
       source: source || "manual",
@@ -201,7 +218,16 @@ router.put("/api/agent/contacts/:id", isAuthenticated, async (req: any, res) => 
   try {
     const agentId = req.user!.claims.sub;
     const id = Number(req.params.id);
-    const { firstName, lastName, email, phone, mailingAddress, notes } = req.body;
+    const parsedContactUpdate = z.object({
+      firstName: z.string().min(1).max(100).optional(),
+      lastName: z.string().max(100).optional().nullable(),
+      email: z.string().email().max(200).optional().nullable(),
+      phone: z.string().max(50).optional().nullable(),
+      mailingAddress: z.string().max(500).optional().nullable(),
+      notes: z.string().max(5000).optional().nullable(),
+    }).safeParse(req.body);
+    if (!parsedContactUpdate.success) return res.status(400).json({ message: "Invalid request", errors: parsedContactUpdate.error.flatten() });
+    const { firstName, lastName, email, phone, mailingAddress, notes } = parsedContactUpdate.data;
     const updated = await storage.updateAgentContact(id, agentId, {
       firstName, lastName, email, phone, mailingAddress, notes,
     });
@@ -226,13 +252,12 @@ router.delete("/api/agent/contacts/:id", isAuthenticated, async (req: any, res) 
 router.post("/api/agent/contacts/import-csv", isAuthenticated, async (req: any, res) => {
   try {
     const agentId = req.user!.claims.sub;
-    const { contacts, tagIds } = req.body;
-    if (!Array.isArray(contacts) || contacts.length === 0) {
-      return res.status(400).json({ message: "No contacts provided" });
-    }
-    if (contacts.length > 1000) {
-      return res.status(400).json({ message: "Maximum 1000 contacts per import" });
-    }
+    const parsedImport = z.object({
+      contacts: z.array(z.any()).min(1).max(1000),
+      tagIds: z.array(z.number().int().positive()).optional(),
+    }).safeParse(req.body);
+    if (!parsedImport.success) return res.status(400).json({ message: "No contacts provided (max 1000)", errors: parsedImport.error.flatten() });
+    const { contacts, tagIds } = parsedImport.data;
 
     const toInsert = contacts.map((c: any) => ({
       agentId,
@@ -266,10 +291,12 @@ router.post("/api/agent/contacts/import-csv", isAuthenticated, async (req: any, 
 router.post("/api/agent/contacts/import-phone", isAuthenticated, async (req: any, res) => {
   try {
     const agentId = req.user!.claims.sub;
-    const { contacts, tagIds } = req.body;
-    if (!Array.isArray(contacts) || contacts.length === 0) {
-      return res.status(400).json({ message: "No contacts provided" });
-    }
+    const parsedPhone = z.object({
+      contacts: z.array(z.any()).min(1).max(5000),
+      tagIds: z.array(z.number().int().positive()).optional(),
+    }).safeParse(req.body);
+    if (!parsedPhone.success) return res.status(400).json({ message: "No contacts provided", errors: parsedPhone.error.flatten() });
+    const { contacts, tagIds } = parsedPhone.data;
 
     const toInsert = contacts.map((c: any) => ({
       agentId,
@@ -310,8 +337,9 @@ router.get("/api/agent/tags", isAuthenticated, async (req: any, res) => {
 router.post("/api/agent/tags", isAuthenticated, async (req: any, res) => {
   try {
     const agentId = req.user!.claims.sub;
-    const { name, color } = req.body;
-    if (!name) return res.status(400).json({ message: "Tag name is required" });
+    const parsedTag = z.object({ name: z.string().min(1).max(100), color: z.string().max(50).optional() }).safeParse(req.body);
+    if (!parsedTag.success) return res.status(400).json({ message: "Tag name is required", errors: parsedTag.error.flatten() });
+    const { name, color } = parsedTag.data;
     const tag = await storage.createContactTag({ agentId, name, color: color || "blue" });
     res.status(201).json(tag);
   } catch (err: any) {
@@ -322,7 +350,9 @@ router.post("/api/agent/tags", isAuthenticated, async (req: any, res) => {
 router.put("/api/agent/tags/:id", isAuthenticated, async (req: any, res) => {
   try {
     const agentId = req.user!.claims.sub;
-    const { name, color } = req.body;
+    const parsedTagPut = z.object({ name: z.string().min(1).max(100).optional(), color: z.string().max(50).optional() }).safeParse(req.body);
+    if (!parsedTagPut.success) return res.status(400).json({ message: "Invalid request", errors: parsedTagPut.error.flatten() });
+    const { name, color } = parsedTagPut.data;
     const updated = await storage.updateContactTag(Number(req.params.id), agentId, { name, color });
     if (!updated) return res.status(404).json({ message: "Tag not found" });
     res.json(updated);
@@ -345,8 +375,9 @@ router.post("/api/agent/contacts/:id/tags", isAuthenticated, async (req: any, re
   try {
     const agentId = req.user!.claims.sub;
     const contactId = Number(req.params.id);
-    const { tagId } = req.body;
-    if (!tagId) return res.status(400).json({ message: "tagId is required" });
+    const parsedAssign = z.object({ tagId: z.number().int().positive() }).safeParse(req.body);
+    if (!parsedAssign.success) return res.status(400).json({ message: "tagId is required", errors: parsedAssign.error.flatten() });
+    const { tagId } = parsedAssign.data;
     const contact = await storage.getAgentContact(contactId, agentId);
     if (!contact) return res.status(404).json({ message: "Contact not found" });
     const tags = await storage.getContactTags(agentId);

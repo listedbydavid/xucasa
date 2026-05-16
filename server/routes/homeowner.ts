@@ -177,21 +177,48 @@ router.get("/api/my-homes", isAuthenticated, async (req: any, res) => {
 router.post("/api/my-homes", isAuthenticated, async (req: any, res) => {
   try {
     const userId = req.user.claims.sub;
+    const homeSchema = z.object({
+      nickname: z.string().min(1).max(200),
+      addressStreetNumber: z.string().max(50).optional(),
+      addressStreetName: z.string().max(200).optional(),
+      addressUnitNumber: z.string().max(50).optional(),
+      addressCity: z.string().max(100).optional(),
+      addressState: z.string().max(50).optional(),
+      addressZip: z.string().max(20).optional(),
+      notes: z.string().max(5000).optional(),
+      beds: z.number().int().min(0).max(100).optional(),
+      baths: z.union([z.number(), z.string()]).optional(),
+      sqft: z.number().int().optional(),
+      lotSize: z.number().optional(),
+      yearBuilt: z.number().int().optional(),
+      homeType: z.string().max(100).optional(),
+      purchasePrice: z.number().optional(),
+      purchaseDate: z.string().optional(),
+      principalBalance: z.number().optional(),
+      appraisedValue: z.number().optional(),
+      interestRate: z.union([z.number(), z.string()]).optional(),
+      loanTerm: z.number().int().optional(),
+      monthlyPayment: z.number().optional(),
+      loanType: z.string().max(100).optional(),
+      estimatedValue: z.number().optional(),
+    });
+    const parsedHome = homeSchema.safeParse(req.body);
+    if (!parsedHome.success) return res.status(400).json({ message: "nickname required", errors: parsedHome.error.flatten() });
     const {
       nickname, addressStreetNumber, addressStreetName, addressUnitNumber,
       addressCity, addressState, addressZip, notes,
       beds, baths, sqft, lotSize, yearBuilt, homeType,
       purchasePrice, purchaseDate, principalBalance, appraisedValue,
       interestRate, loanTerm, monthlyPayment, loanType, estimatedValue,
-    } = req.body;
-    if (!nickname) return res.status(400).json({ message: "nickname required" });
+    } = parsedHome.data;
 
     const home = await storage.createUserHome(userId, {
       nickname, addressStreetNumber, addressStreetName, addressUnitNumber,
       addressCity, addressState, addressZip, notes,
-      beds, baths, sqft, lotSize, yearBuilt, homeType,
+      beds, baths: baths !== undefined ? String(baths) : undefined, sqft, lotSize, yearBuilt, homeType,
       purchasePrice, purchaseDate, principalBalance, appraisedValue,
-      interestRate, loanTerm, monthlyPayment, loanType, estimatedValue,
+      interestRate: interestRate !== undefined ? String(interestRate) : undefined,
+      loanTerm, monthlyPayment, loanType, estimatedValue,
     });
 
     // Geocode in background
@@ -223,17 +250,41 @@ router.patch("/api/my-homes/:id", isAuthenticated, async (req: any, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
 
-    const allowedFields = [
-      "nickname", "addressStreetNumber", "addressStreetName", "addressUnitNumber",
-      "addressCity", "addressState", "addressZip", "notes", "imageUrl",
-      "beds", "baths", "sqft", "lotSize", "yearBuilt", "homeType",
-      "purchasePrice", "purchaseDate", "principalBalance", "appraisedValue",
-      "interestRate", "loanTerm", "monthlyPayment", "loanType", "estimatedValue",
-    ];
+    const homePatchSchema = z.object({
+      nickname: z.string().max(200).optional(),
+      addressStreetNumber: z.string().max(50).optional(),
+      addressStreetName: z.string().max(200).optional(),
+      addressUnitNumber: z.string().max(50).optional(),
+      addressCity: z.string().max(100).optional(),
+      addressState: z.string().max(50).optional(),
+      addressZip: z.string().max(20).optional(),
+      notes: z.string().max(5000).optional(),
+      imageUrl: z.string().max(2000).optional(),
+      beds: z.number().int().min(0).max(100).optional(),
+      baths: z.union([z.number(), z.string()]).optional(),
+      sqft: z.number().int().optional(),
+      lotSize: z.number().optional(),
+      yearBuilt: z.number().int().optional(),
+      homeType: z.string().max(100).optional(),
+      purchasePrice: z.number().optional(),
+      purchaseDate: z.string().optional(),
+      principalBalance: z.number().optional(),
+      appraisedValue: z.number().optional(),
+      interestRate: z.union([z.number(), z.string()]).optional(),
+      loanTerm: z.number().int().optional(),
+      monthlyPayment: z.number().optional(),
+      loanType: z.string().max(100).optional(),
+      estimatedValue: z.number().optional(),
+    });
+    const parsedHomePatch = homePatchSchema.safeParse(req.body);
+    if (!parsedHomePatch.success) return res.status(400).json({ message: "Invalid request", errors: parsedHomePatch.error.flatten() });
     const updates: Record<string, any> = {};
-    for (const key of allowedFields) {
-      if (req.body[key] !== undefined) {
-        updates[key] = req.body[key];
+    for (const [k, v] of Object.entries(parsedHomePatch.data)) {
+      if (v === undefined) continue;
+      if ((k === "baths" || k === "interestRate") && typeof v === "number") {
+        updates[k] = String(v);
+      } else {
+        updates[k] = v;
       }
     }
     if (Object.keys(updates).length === 0) {

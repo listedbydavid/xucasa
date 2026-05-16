@@ -41,8 +41,9 @@ function redactBuyerProfile(profile: any) {
 
 router.post("/api/swipe-interest", isAuthenticated, async (req: any, res) => {
   const buyerUserId = req.user.claims.sub;
-  const { propertyId } = req.body;
-  if (!propertyId) return res.status(400).json({ message: "propertyId required" });
+  const parsedSwipe = z.object({ propertyId: z.number().int().positive() }).safeParse(req.body);
+  if (!parsedSwipe.success) return res.status(400).json({ message: "propertyId required", errors: parsedSwipe.error.flatten() });
+  const { propertyId } = parsedSwipe.data;
 
   try {
     const result = await executeWithAudit<any>(
@@ -282,8 +283,12 @@ router.delete("/api/buyer-profiles/:id", isAuthenticated, async (req, res) => {
 
 router.post("/api/buyer-interest", isAuthenticated, async (req: any, res) => {
   const userId = req.user.claims.sub;
-  const { propertyId, source } = req.body;
-  if (!propertyId) return res.status(400).json({ message: "propertyId required" });
+  const parsedInterest = z.object({
+    propertyId: z.number().int().positive(),
+    source: z.string().max(50).optional(),
+  }).safeParse(req.body);
+  if (!parsedInterest.success) return res.status(400).json({ message: "propertyId required", errors: parsedInterest.error.flatten() });
+  const { propertyId, source } = parsedInterest.data;
 
   try {
     const result = await executeWithAudit(
@@ -380,7 +385,9 @@ router.get("/api/buyer-interest/mine", isAuthenticated, async (req: any, res) =>
 router.patch("/api/buyer-interest/:id", isAuthenticated, async (req: any, res) => {
   const userId = req.user.claims.sub;
   const id = parseInt(req.params.id);
-  const { stage } = req.body;
+  const parsedStage = z.object({ stage: z.string().max(50).optional() }).safeParse(req.body);
+  if (!parsedStage.success) return res.status(400).json({ message: "Invalid request", errors: parsedStage.error.flatten() });
+  const { stage } = parsedStage.data;
 
   const existing = await db.select().from(buyerInterest).where(eq(buyerInterest.id, id)).limit(1);
   if (!existing.length) return res.status(404).json({ message: "Not found" });

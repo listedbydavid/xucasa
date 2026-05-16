@@ -51,9 +51,13 @@ router.patch("/api/admin/seller-pitches/:id", isAuthenticated, isAdmin, async (r
   try {
     const id = parseInt(String(req.params.id));
     if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
-    const { status, adminNotes } = req.body;
-    if (!status) return res.status(400).json({ message: "Status is required" });
-    const updated = await storage.updateSellerPitchStatus(id, status, adminNotes);
+    const parsedStatusBody = z.object({
+      status: z.string().min(1).max(50),
+      adminNotes: z.string().max(2000).optional().nullable(),
+    }).safeParse(req.body);
+    if (!parsedStatusBody.success) return res.status(400).json({ message: "Status is required", errors: parsedStatusBody.error.flatten() });
+    const { status, adminNotes } = parsedStatusBody.data;
+    const updated = await storage.updateSellerPitchStatus(id, status, adminNotes ?? undefined);
     await audit({ req, event: "admin_seller_pitch_updated", outcome: "success", userId: req.user?.claims?.sub, metadata: { pitchId: id, status } });
     res.json(updated);
   } catch (err: any) {
@@ -452,11 +456,16 @@ router.patch("/api/admin/error-reports/:id", isAuthenticated, isAdmin, async (re
   try {
     const id = parseInt(String(req.params.id));
     if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
-    const { status, adminNotes, resolved } = req.body;
-    const validStatuses = ["new", "investigating", "resolved", "ignored"];
+    const parsedErrUpdate = z.object({
+      status: z.enum(["new", "investigating", "resolved", "ignored"]).optional(),
+      adminNotes: z.string().max(2000).optional(),
+      resolved: z.boolean().optional(),
+    }).safeParse(req.body);
+    if (!parsedErrUpdate.success) return res.status(400).json({ error: "Invalid request", errors: parsedErrUpdate.error.flatten() });
+    const { status, adminNotes, resolved } = parsedErrUpdate.data;
     const updates: any = {};
-    if (status && validStatuses.includes(status)) updates.status = status;
-    if (typeof adminNotes === "string") updates.adminNotes = adminNotes.slice(0, 2000);
+    if (status) updates.status = status;
+    if (typeof adminNotes === "string") updates.adminNotes = adminNotes;
     if (typeof resolved === "boolean") updates.resolved = resolved;
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid updates" });
     const updated = await storage.updateErrorReport(id, updates);

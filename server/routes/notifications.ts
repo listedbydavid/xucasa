@@ -169,7 +169,9 @@ router.patch("/api/notifications/:id", isAuthenticated, async (req: any, res) =>
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
     const userId = req.user.claims.sub;
-    const { read, archived } = req.body;
+    const parsedBody = z.object({ read: z.boolean().optional(), archived: z.boolean().optional() }).safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ error: "Invalid request", errors: parsedBody.error.flatten() });
+    const { read, archived } = parsedBody.data;
     if (archived === true) {
       const updated = await storage.archiveNotification(id, userId);
       if (!updated) return res.status(404).json({ error: "Notification not found" });

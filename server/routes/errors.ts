@@ -41,11 +41,22 @@ router.post("/api/error-reports", async (req, res) => {
     errorReportLimiter.set(ip, { count: 1, resetAt: now + 60000 });
   }
   try {
-    const { type, message, stack, componentStack, url, userAgent, userId, sessionId, breadcrumbs, metadata } = req.body;
-    if (!type || !message) {
-      return res.status(400).json({ error: "type and message are required" });
-    }
-    const existing = await storage.incrementErrorOccurrence(message, url);
+    const errorReportSchema = z.object({
+      type: z.string().min(1),
+      message: z.string().min(1),
+      stack: z.string().optional(),
+      componentStack: z.string().optional(),
+      url: z.string().optional(),
+      userAgent: z.string().optional(),
+      userId: z.string().optional(),
+      sessionId: z.string().optional(),
+      breadcrumbs: z.any().optional(),
+      metadata: z.any().optional(),
+    });
+    const parsedError = errorReportSchema.safeParse(req.body);
+    if (!parsedError.success) return res.status(400).json({ error: "type and message are required" });
+    const { type, message, stack, componentStack, url, userAgent, userId, sessionId, breadcrumbs, metadata } = parsedError.data;
+    const existing = await storage.incrementErrorOccurrence(message, url || "");
     if (existing) {
       return res.json({ id: existing.id, deduplicated: true });
     }

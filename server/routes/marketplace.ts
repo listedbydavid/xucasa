@@ -30,13 +30,21 @@ import { trySendNotificationEmail, checkFairHousing } from "../lib/notificationH
 
 router.post("/api/seller-pitches", async (req: any, res) => {
   try {
-    const body = req.body;
-    if (!body.name || !body.email) {
-      return res.status(400).json({ message: "Name and email are required" });
-    }
+    const pitchSchema = z.object({
+      name: z.string().min(1).max(200),
+      email: z.string().email().max(200),
+      phone: z.string().max(50).optional(),
+      address: z.string().max(500).optional(),
+      message: z.string().max(5000).optional(),
+      propertyId: z.number().int().positive().optional(),
+      timeline: z.string().max(100).optional(),
+    });
+    const parsedPitch = pitchSchema.safeParse(req.body);
+    if (!parsedPitch.success) return res.status(400).json({ message: "Name and email are required", errors: parsedPitch.error.flatten() });
+    const { name, email, phone, address, message, timeline } = parsedPitch.data;
     const userId = req.user?.claims?.sub || null;
-    const pitch = await storage.createSellerPitch({ ...body, userId });
-    await audit({ req, event: "seller_pitch_created", outcome: "success", userId, metadata: { email: body.email } });
+    const pitch = await storage.createSellerPitch({ name, email, phone, fullAddress: address, description: message, timeline, userId });
+    await audit({ req, event: "seller_pitch_created", outcome: "success", userId, metadata: { email } });
     res.status(201).json(pitch);
   } catch (err: any) {
     await audit({ req, event: "seller_pitch_created", outcome: "failure", errorMessage: err.message });

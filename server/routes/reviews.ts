@@ -115,13 +115,16 @@ router.post("/api/properties/:id/reviews", isAuthenticated, async (req: any, res
       return res.status(409).json({ message: "You have already reviewed this property" });
     }
 
-    const { rating, comment } = req.body;
-    if (!rating || rating < 1 || rating > 5) {
-      return res.status(400).json({ message: "Rating must be between 1 and 5" });
+    const reviewSchema = z.object({
+      rating: z.number().int().min(1).max(5),
+      comment: z.string().min(1).max(300),
+    });
+    const parsedReview = reviewSchema.safeParse(req.body);
+    if (!parsedReview.success) {
+      const msg = parsedReview.error.errors[0]?.message || "Invalid input";
+      return res.status(400).json({ message: msg, errors: parsedReview.error.flatten() });
     }
-    if (!comment || typeof comment !== "string" || comment.length > 300) {
-      return res.status(400).json({ message: "Comment is required and must be 300 characters or less" });
-    }
+    const { rating, comment } = parsedReview.data;
 
     const prop = await storage.getProperty(propertyId);
     if (!prop) return res.status(404).json({ message: "Property not found" });
@@ -158,11 +161,10 @@ router.patch("/api/reviews/:id/visibility", isAuthenticated, async (req: any, re
     if (!isAdmin && !isListingAgent) {
       return res.status(403).json({ message: "Only the listing agent or admin can moderate reviews" });
     }
-    const { isPublic } = req.body;
-    if (typeof isPublic !== "boolean") {
-      return res.status(400).json({ message: "isPublic must be a boolean" });
-    }
-    const updated = await storage.updateReviewVisibility(id, isPublic, userId);
+    const visibilityParsed = z.object({ isPublic: z.boolean() }).safeParse(req.body);
+    if (!visibilityParsed.success) return res.status(400).json({ message: "isPublic must be a boolean", errors: visibilityParsed.error.flatten() });
+    const updated = await storage.updateReviewVisibility(id, visibilityParsed.data.isPublic, userId);
+    const isPublic = visibilityParsed.data.isPublic;
     await audit({ req, event: "review_visibility_changed", outcome: "success", userId, metadata: { reviewId: id, isPublic } });
     res.json(updated);
   } catch (err: any) {

@@ -281,8 +281,12 @@ router.post("/api/conversations/:id/messages", isAuthenticated, async (req: any,
     return res.status(403).json({ message: access.reason });
   }
 
-  const { content, type } = req.body;
-  if (!content) return res.status(400).json({ message: "content required" });
+  const parsedMsg = z.object({
+    content: z.string().min(1).max(10000),
+    type: z.string().max(50).optional(),
+  }).safeParse(req.body);
+  if (!parsedMsg.success) return res.status(400).json({ message: "content required", errors: parsedMsg.error.flatten() });
+  const { content, type } = parsedMsg.data;
 
   const result = await executeWithAudit(
       { req, event: "message_sent", userId, conversationId, propertyId: convo.propertyId, metadata: { type: type || "text" } },
@@ -342,10 +346,13 @@ router.get("/api/showing-requests", isAuthenticated, async (req: any, res) => {
 
 router.post("/api/showing-requests", isAuthenticated, async (req: any, res) => {
   const userId = req.user.claims.sub;
-  const { propertyId, requestedDates, notes } = req.body;
-  if (!propertyId || !requestedDates || !Array.isArray(requestedDates) || requestedDates.length === 0) {
-    return res.status(400).json({ message: "propertyId and requestedDates required" });
-  }
+  const parsedShow = z.object({
+    propertyId: z.number().int().positive(),
+    requestedDates: z.array(z.string()).min(1),
+    notes: z.string().max(2000).optional(),
+  }).safeParse(req.body);
+  if (!parsedShow.success) return res.status(400).json({ message: "propertyId and requestedDates required", errors: parsedShow.error.flatten() });
+  const { propertyId, requestedDates, notes } = parsedShow.data;
 
   try {
     const result = await executeWithAudit(
@@ -412,8 +419,12 @@ router.patch("/api/showing-requests/:id", isAuthenticated, async (req: any, res)
   try {
   const userId = req.user.claims.sub;
   const id = parseInt(req.params.id);
-  const { status, confirmedDate } = req.body;
-  if (!status) return res.status(400).json({ message: "status required" });
+  const parsedShowPatch = z.object({
+    status: z.string().min(1).max(50),
+    confirmedDate: z.string().optional().nullable(),
+  }).safeParse(req.body);
+  if (!parsedShowPatch.success) return res.status(400).json({ message: "status required", errors: parsedShowPatch.error.flatten() });
+  const { status, confirmedDate } = parsedShowPatch.data;
 
   const existing = await storage.getShowingRequest(id);
   if (!existing) return res.status(404).json({ message: "Showing request not found" });

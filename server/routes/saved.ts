@@ -69,8 +69,9 @@ router.patch("/api/saved-properties/:propertyId/list", isAuthenticated, async (r
     const user = req.user.claims;
     const propertyId = parseInt(req.params.propertyId);
     if (isNaN(propertyId)) return res.status(400).json({ message: "Invalid ID" });
-    const { listId } = req.body;
-    await storage.movePropertyToList(user.sub, propertyId, listId ?? null);
+    const parsed = z.object({ listId: z.number().int().positive().nullable().optional() }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid request", errors: parsed.error.flatten() });
+    await storage.movePropertyToList(user.sub, propertyId, parsed.data.listId ?? null);
     res.status(200).json({ ok: true });
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
@@ -90,11 +91,9 @@ router.get("/api/favorite-lists", isAuthenticated, async (req: any, res) => {
 router.post("/api/favorite-lists", isAuthenticated, async (req: any, res) => {
   try {
     const user = req.user.claims;
-    const { name } = req.body;
-    if (!name || typeof name !== "string" || name.trim().length === 0 || name.trim().length > 100) {
-      return res.status(400).json({ message: "List name is required and must be under 100 characters" });
-    }
-    const list = await storage.createFavoriteList(user.sub, name.trim());
+    const parsed = z.object({ name: z.string().trim().min(1).max(100) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "List name is required and must be under 100 characters", errors: parsed.error.flatten() });
+    const list = await storage.createFavoriteList(user.sub, parsed.data.name);
     res.status(201).json(list);
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
@@ -106,11 +105,9 @@ router.patch("/api/favorite-lists/:id", isAuthenticated, async (req: any, res) =
     const user = req.user.claims;
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
-    const { name } = req.body;
-    if (!name || typeof name !== "string" || name.trim().length === 0) {
-      return res.status(400).json({ message: "List name is required" });
-    }
-    const list = await storage.renameFavoriteList(id, user.sub, name.trim());
+    const parsed = z.object({ name: z.string().trim().min(1).max(100) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "List name is required", errors: parsed.error.flatten() });
+    const list = await storage.renameFavoriteList(id, user.sub, parsed.data.name);
     res.status(200).json(list);
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
@@ -172,11 +169,9 @@ router.patch("/api/saved-searches/:id", isAuthenticated, async (req: any, res) =
     const user = req.user.claims;
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
-    const { name } = req.body;
-    if (!name || typeof name !== "string" || name.trim().length === 0) {
-      return res.status(400).json({ message: "Name is required" });
-    }
-    await storage.renameSavedSearch(id, user.sub, name.trim());
+    const parsed = z.object({ name: z.string().trim().min(1).max(200) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Name is required", errors: parsed.error.flatten() });
+    await storage.renameSavedSearch(id, user.sub, parsed.data.name);
     res.status(200).json({ ok: true });
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
@@ -196,9 +191,9 @@ router.get("/api/search-history", isAuthenticated, async (req: any, res) => {
 router.post("/api/search-history", isAuthenticated, async (req: any, res) => {
   try {
     const userId = req.user.claims.sub;
-    const { query, criteria } = req.body;
-    if (!query) return res.status(400).json({ message: "query required" });
-    const entry = await storage.addSearchHistory(userId, query, criteria || {});
+    const parsed = z.object({ query: z.string().min(1).max(500), criteria: z.any().optional() }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "query required", errors: parsed.error.flatten() });
+    const entry = await storage.addSearchHistory(userId, parsed.data.query, parsed.data.criteria || {});
     res.status(201).json(entry);
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
