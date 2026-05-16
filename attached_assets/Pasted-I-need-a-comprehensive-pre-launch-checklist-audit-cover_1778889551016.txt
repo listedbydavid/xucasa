@@ -1,0 +1,211 @@
+I need a comprehensive pre-launch checklist audit covering three areas: full buyer journey, full agent journey, and security audit. This is not a feature build — it is a verification and hardening pass. Find real issues, fix what you can, and flag what needs attention before real users touch the platform.
+
+Area 1 — Full Buyer Journey Smoke Test
+Walk through every step of the buyer experience and verify each one works correctly end to end. For each step, confirm it works, note any issues, and fix anything broken.
+Step 1 — Guest arrival
+
+Visit / as an unauthenticated user
+Confirm the hero renders with address autocomplete and Buy/Sell/Estimate CTAs
+Confirm /swipe is accessible without auth — cards render, swiping works
+Confirm swiping right as a guest shows the AuthPromptModal with the correct message
+Confirm swiping left as a guest just advances the card with no API call
+
+Step 2 — Account creation
+
+Register a new test buyer account via email/password
+Confirm strong password policy is enforced (10+ chars, uppercase, lowercase, digit, special char)
+Confirm the account is created with accountSource = 'real' (not test/seed)
+Confirm the user lands on /onboarding after registration
+
+Step 3 — Buyer onboarding
+
+Complete all 5 wizard steps: cities, home type, beds/budget, timeline, must-haves
+Confirm each step saves correctly to buyer_profiles
+Confirm moveInTimeline is normalized (lowercase, ASCII hyphens)
+Confirm buyerProfileCompleted = true is set on the user record after completing steps worth ≥60 points
+Confirm the user is routed to /swipe after completing onboarding
+Confirm profile completeness score is ≥60 after onboarding
+
+Step 4 — Swipe experience
+
+Confirm property cards render with correct data (address, price, beds, baths, photos)
+Confirm the BuyerProfileNudge banner appears if profile is incomplete
+Confirm the SpotlightTour triggers on first visit (800ms delay)
+Confirm swiping right creates a buyer_interest row in the DB
+Confirm swiping right assigns David Hussain (id 55534280) as the agent if buyer has no assigned agent
+Confirm an audit event is logged with assignmentType: 'platform_default'
+Confirm swiping right on a property with an active concession shows ConcessionDetailsModal
+Confirm swiping left does NOT create a buyer_interest row
+
+Step 5 — Shortlist and dashboard
+
+Confirm swiped-right properties appear in the buyer's saved properties
+Confirm /dashboard renders correctly with saved homes tab
+Confirm saved searches can be created and retrieved
+
+Step 6 — Messaging
+
+Confirm a conversation is created when a buyer swipes right
+Confirm the buyer can view the conversation thread at /conversations/:id
+Confirm the buyer can send a message
+Confirm unread count badge updates correctly
+
+Step 7 — Offer flow
+
+Confirm the offer gate (OfferGateModal) appears if buyer has no assigned agent
+Confirm the offer form renders correctly when agent is assigned
+Confirm a submitted offer creates a property_offers row with status = 'pending_agent_review'
+
+Step 8 — Profile and notifications
+
+Confirm PATCH /api/buyer-profile saves all fields correctly
+Confirm notification preferences can be updated
+Confirm in-app notifications appear in the bell dropdown
+
+For each step above, run the relevant DB query to confirm data was written correctly. Fix any broken steps before moving on.
+
+Area 2 — Full Agent Journey Smoke Test
+Walk through the complete agent experience. Fix anything broken.
+Step 1 — Agent registration and verification
+
+Register a new test agent account
+Complete agent onboarding (license number, MLS ID, brokerage)
+Confirm agentVerificationStatus = 'pending' after submission
+Manually set agent_verified = true via SQL for testing
+Confirm the agent is routed to /agent after onboarding
+
+Step 2 — Agent dashboard
+
+Confirm all tabs render: listings, clients, contacts, beacon, buyer interest, IDX sync
+Confirm the SpotlightTour triggers on first visit
+Confirm data-tour attributes are present on all targeted elements
+
+Step 3 — Confidential MLS fields
+
+Find a property in the DB with confidential_remarks or showing_instructions set
+If none exist, update one: UPDATE properties SET confidential_remarks = 'Test confidential remark', showing_instructions = 'Lockbox on front door' WHERE id = [any id]
+Confirm GET /api/properties/:id/agent-mls returns confidential fields for verified agent
+Confirm the same endpoint returns 403 for an unverified user
+
+Step 4 — Beacon
+
+Open the Beacon tab
+Enter: price=900000, beds=3, baths=2, sqft=1500, city=San Diego, propertyType=Single Family
+Confirm the API returns { matches: [...], total: N }
+Confirm each match has matchScore, matchTier, and scoreBreakdown
+Confirm results are sorted by matchScore descending
+Download the PDF report and confirm it generates without error
+
+Step 5 — CRM
+
+Create a new contact manually
+Create a tag and assign it to the contact
+Confirm contact appears in the contacts list with the tag
+Test CSV import: create a minimal CSV with name, email, phone and import it
+Confirm imported contacts appear in the list
+
+Step 6 — Buyer interest queue
+
+Confirm the buyer interest tab shows the swipe-right from the buyer journey test
+Confirm the agent can update the stage (e.g. interested → agent_reviewing)
+Confirm lastActivityAt updates on stage change
+
+Step 7 — Seller concessions
+
+Find a listing the test agent manages (or create one)
+Add a concession: closing cost 3%, assumable loan false, headline "Seller paying closing costs"
+Confirm GET /api/properties/:id/concessions returns the concession
+Confirm the amber badge appears on the property card
+Confirm only one active concession exists per property (partial unique index)
+
+Step 8 — Showing requests
+
+Confirm a showing request can be created in a conversation thread
+Confirm the agent can confirm or cancel the showing
+Confirm status updates correctly in showing_requests
+
+
+Area 3 — Security Audit
+Run through every security concern systematically. Fix every issue found.
+Auth and session security:
+
+Confirm all session cookies are httpOnly: true, secure: true, sameSite: 'lax'
+Confirm SESSION_SECRET is set and not a default/weak value
+Confirm unauthenticated requests to all isAuthenticated routes return 401
+Confirm unauthenticated requests to all isAdmin routes return 401 (not 403)
+Confirm the forgot password endpoint always returns 200 regardless of whether the email exists (no enumeration)
+Confirm password reset tokens are single-use (used tokens cannot be reused)
+Confirm password reset invalidates all existing sessions for that user
+
+Rate limiting:
+
+Confirm registerRateLimit fires after 5 attempts from the same IP
+Confirm loginRateLimit fires after 10 attempts from the same IP
+Confirm forgotPasswordRateLimit fires after 5 per IP / 3 per email per hour
+Confirm progressive blocking fires on repeated failed login attempts
+
+Authorization and data exposure:
+
+Confirm GET /api/properties/:id/agent-mls returns 403 for non-agent users
+Confirm GET /api/admin/stats returns 401 for non-admin users
+Confirm GET /api/admin/users returns 401 for non-admin users
+Confirm a buyer cannot read another buyer's saved properties (IDOR check):
+bash# Get buyer A's saved properties as buyer B — should return empty or 403
+
+Confirm a buyer cannot read another buyer's conversations (IDOR check)
+Confirm dealBreakers field is NOT returned in Beacon match results (privacy)
+Confirm passwordHash is never returned in any API response:
+bashgrep -rn "passwordHash\|password_hash" server/routes/ --include="*.ts" | grep -v "update\|insert\|select.*password"
+
+Confirm clientEmail, clientPhone are not exposed in public buyer profile endpoints
+
+Input validation:
+
+Confirm all POST/PATCH endpoints validate body with Zod — find any that don't:
+bashgrep -rn "req\.body" server/routes/ --include="*.ts" | grep -v "safeParse\|parse\|schema\|zod\|Schema"
+
+Confirm numeric query params are coerced (not raw strings) before DB queries
+Confirm array inputs (preferredCities, mustHaves) are validated as arrays not strings
+
+SQL injection and query safety:
+
+Confirm all DB queries use Drizzle parameterized queries — find any raw SQL:
+bashgrep -rn "db\.execute\|pool\.query\|sql\`" server/ --include="*.ts" | grep -v "node_modules"
+Review each `sql`` template literal to confirm parameters are passed as bindings not interpolated strings
+
+Audit coverage:
+
+Run the existing audit coverage check:
+bashnpx tsx scripts/find-unaudited-mutations.ts
+Must exit 0. Fix any unaudited mutations found.
+
+Error handling:
+
+Confirm no stack traces are exposed in production API error responses
+Confirm the global error handler in server/index.ts sanitizes errors before sending
+Confirm NODE_ENV check gates stack trace exposure
+
+Data at rest:
+
+Confirm passwordHash column is never logged (check logger calls)
+Confirm no sensitive fields appear in audit_events.metadata:
+bashSELECT metadata FROM audit_events WHERE metadata::text ILIKE '%password%' OR metadata::text ILIKE '%hash%' LIMIT 5;
+
+
+
+Reporting format
+For each item in all three areas, report one of:
+
+✅ Pass — works correctly, no action needed
+⚠️ Warning — works but has a concern worth noting
+❌ Fail — broken or missing, fixed inline
+🔒 Security fix — security issue found and fixed
+
+At the end, provide:
+
+A summary table of all findings
+A list of everything that was fixed during this audit
+A list of anything that needs follow-up but was out of scope to fix inline
+The final state: TypeScript errors, test count, smoke endpoint results
+
+Do not skip any item. Do not mark something as passing without verifying it. Show the DB queries and curl commands you used to verify each step.

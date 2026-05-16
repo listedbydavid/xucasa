@@ -82,8 +82,11 @@ app.use((req, res, next) => {
 
   app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    const rawMessage = err.message || "Internal Server Error";
     const reqId = (req as any).requestId || null;
+    const isProd = process.env.NODE_ENV === "production";
+    const isClientError = status >= 400 && status < 500;
+    const clientMessage = isProd && !isClientError ? "Internal Server Error" : rawMessage;
 
     logger.error({
       event: "unexpected_server_error",
@@ -99,7 +102,7 @@ app.use((req, res, next) => {
       return next(err);
     }
 
-    return res.status(status).json({ message, requestId: reqId });
+    return res.status(status).json({ message: clientMessage, requestId: reqId });
   });
 
   // importantly only setup vite in development and after
