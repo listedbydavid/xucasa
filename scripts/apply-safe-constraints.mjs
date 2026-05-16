@@ -100,6 +100,108 @@ const CONSTRAINTS = [
     description: 'Normalize property_type: Residential Income → Multi-Family',
     sql: `UPDATE properties SET property_type = 'Multi-Family' WHERE property_type = 'Residential Income'`,
   },
+  {
+    type: 'sql',
+    description: 'Backfill NULL property_type to Unknown',
+    sql: `UPDATE properties SET property_type = 'Unknown' WHERE property_type IS NULL`,
+  },
+  // Performance indexes (Area 4 audit)
+  {
+    type: 'sql',
+    description: 'Index on properties(status, price)',
+    existsCheck: { sql: `SELECT 1 FROM pg_indexes WHERE indexname = $1`, params: ['properties_status_price_idx'] },
+    sql: `CREATE INDEX IF NOT EXISTS properties_status_price_idx ON properties(status, price)`,
+  },
+  {
+    type: 'sql',
+    description: 'Index on properties(address_city, address_state)',
+    existsCheck: { sql: `SELECT 1 FROM pg_indexes WHERE indexname = $1`, params: ['properties_city_state_idx'] },
+    sql: `CREATE INDEX IF NOT EXISTS properties_city_state_idx ON properties(address_city, address_state)`,
+  },
+  {
+    type: 'sql',
+    description: 'Index on properties(beds, baths)',
+    existsCheck: { sql: `SELECT 1 FROM pg_indexes WHERE indexname = $1`, params: ['properties_beds_baths_idx'] },
+    sql: `CREATE INDEX IF NOT EXISTS properties_beds_baths_idx ON properties(beds, baths)`,
+  },
+  {
+    type: 'sql',
+    description: 'Index on properties(property_type)',
+    existsCheck: { sql: `SELECT 1 FROM pg_indexes WHERE indexname = $1`, params: ['properties_type_idx'] },
+    sql: `CREATE INDEX IF NOT EXISTS properties_type_idx ON properties(property_type)`,
+  },
+  {
+    type: 'sql',
+    description: 'Index on properties(lat, lng)',
+    existsCheck: { sql: `SELECT 1 FROM pg_indexes WHERE indexname = $1`, params: ['properties_lat_lng_idx'] },
+    sql: `CREATE INDEX IF NOT EXISTS properties_lat_lng_idx ON properties(lat, lng)`,
+  },
+  {
+    type: 'sql',
+    description: 'Index on properties(price)',
+    existsCheck: { sql: `SELECT 1 FROM pg_indexes WHERE indexname = $1`, params: ['properties_price_idx'] },
+    sql: `CREATE INDEX IF NOT EXISTS properties_price_idx ON properties(price)`,
+  },
+  {
+    type: 'sql',
+    description: 'Index on saved_properties(user_id)',
+    existsCheck: { sql: `SELECT 1 FROM pg_indexes WHERE indexname = $1`, params: ['saved_properties_user_id_idx'] },
+    sql: `CREATE INDEX IF NOT EXISTS saved_properties_user_id_idx ON saved_properties(user_id)`,
+  },
+  {
+    type: 'sql',
+    description: 'Index on conversations(buyer_user_id)',
+    existsCheck: { sql: `SELECT 1 FROM pg_indexes WHERE indexname = $1`, params: ['conversations_buyer_user_id_idx'] },
+    sql: `CREATE INDEX IF NOT EXISTS conversations_buyer_user_id_idx ON conversations(buyer_user_id)`,
+  },
+  {
+    type: 'sql',
+    description: 'Index on conversations(agent_user_id)',
+    existsCheck: { sql: `SELECT 1 FROM pg_indexes WHERE indexname = $1`, params: ['conversations_agent_user_id_idx'] },
+    sql: `CREATE INDEX IF NOT EXISTS conversations_agent_user_id_idx ON conversations(agent_user_id)`,
+  },
+  {
+    type: 'sql',
+    description: 'Index on messages(conversation_id)',
+    existsCheck: { sql: `SELECT 1 FROM pg_indexes WHERE indexname = $1`, params: ['messages_conversation_id_idx'] },
+    sql: `CREATE INDEX IF NOT EXISTS messages_conversation_id_idx ON messages(conversation_id)`,
+  },
+  {
+    type: 'sql',
+    description: 'Index on buyer_profiles(user_id)',
+    existsCheck: { sql: `SELECT 1 FROM pg_indexes WHERE indexname = $1`, params: ['buyer_profiles_user_id_idx'] },
+    sql: `CREATE INDEX IF NOT EXISTS buyer_profiles_user_id_idx ON buyer_profiles(user_id)`,
+  },
+  {
+    type: 'sql',
+    description: 'Index on users(assigned_agent_user_id)',
+    existsCheck: { sql: `SELECT 1 FROM pg_indexes WHERE indexname = $1`, params: ['users_assigned_agent_idx'] },
+    sql: `CREATE INDEX IF NOT EXISTS users_assigned_agent_idx ON users(assigned_agent_user_id)`,
+  },
+  {
+    type: 'sql',
+    description: 'Index on users(primary_intent)',
+    existsCheck: { sql: `SELECT 1 FROM pg_indexes WHERE indexname = $1`, params: ['users_primary_intent_idx'] },
+    sql: `CREATE INDEX IF NOT EXISTS users_primary_intent_idx ON users(primary_intent)`,
+  },
+  {
+    type: 'sql',
+    description: 'Index on buyer_interest(assigned_agent_user_id)',
+    existsCheck: { sql: `SELECT 1 FROM pg_indexes WHERE indexname = $1`, params: ['buyer_interest_agent_idx'] },
+    sql: `CREATE INDEX IF NOT EXISTS buyer_interest_agent_idx ON buyer_interest(assigned_agent_user_id)`,
+  },
+  {
+    type: 'sql',
+    description: 'Index on notifications(user_id, read)',
+    existsCheck: { sql: `SELECT 1 FROM pg_indexes WHERE indexname = $1`, params: ['notifications_user_read_idx'] },
+    sql: `CREATE INDEX IF NOT EXISTS notifications_user_read_idx ON notifications(user_id, read)`,
+  },
+  {
+    type: 'sql',
+    description: 'Index on audit_events(actor_user_id)',
+    existsCheck: { sql: `SELECT 1 FROM pg_indexes WHERE indexname = $1`, params: ['audit_events_actor_idx'] },
+    sql: `CREATE INDEX IF NOT EXISTS audit_events_actor_idx ON audit_events(actor_user_id)`,
+  },
 ];
 
 async function applyConstraints() {

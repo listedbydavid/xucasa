@@ -1,0 +1,352 @@
+This is a consolidated hardening prompt based on a full pre-launch audit. Work through the sections in order. Each section is self-contained — complete and verify each before moving to the next.
+
+Section 1 — Database indexes (CRITICAL — do this first)
+The properties table has 11,161 rows and the only indexes are the primary key and idx_id_unique. Every search query does a full table scan. Add all of the following indexes:
+Add to scripts/apply-safe-constraints.mjs CONSTRAINTS array:
+javascript// Properties search indexes
+{
+  type: 'sql',
+  description: 'Index on properties(status, price) for filtered search',
+  existsCheck: `SELECT 1 FROM pg_indexes WHERE indexname = 'properties_status_price_idx'`,
+  sql: `CREATE INDEX IF NOT EXISTS properties_status_price_idx ON properties(status, price)`,
+},
+{
+  type: 'sql',
+  description: 'Index on properties(address_city, address_state) for city search',
+  existsCheck: `SELECT 1 FROM pg_indexes WHERE indexname = 'properties_city_state_idx'`,
+  sql: `CREATE INDEX IF NOT EXISTS properties_city_state_idx ON properties(address_city, address_state)`,
+},
+{
+  type: 'sql',
+  description: 'Index on properties(beds, baths) for bedroom/bath filtering',
+  existsCheck: `SELECT 1 FROM pg_indexes WHERE indexname = 'properties_beds_baths_idx'`,
+  sql: `CREATE INDEX IF NOT EXISTS properties_beds_baths_idx ON properties(beds, baths)`,
+},
+{
+  type: 'sql',
+  description: 'Index on properties(property_type) for type filtering',
+  existsCheck: `SELECT 1 FROM pg_indexes WHERE indexname = 'properties_type_idx'`,
+  sql: `CREATE INDEX IF NOT EXISTS properties_type_idx ON properties(property_type)`,
+},
+{
+  type: 'sql',
+  description: 'Index on properties(lat, lng) for geo queries',
+  existsCheck: `SELECT 1 FROM pg_indexes WHERE indexname = 'properties_lat_lng_idx'`,
+  sql: `CREATE INDEX IF NOT EXISTS properties_lat_lng_idx ON properties(lat, lng)`,
+},
+{
+  type: 'sql',
+  description: 'Index on properties(price) for price range queries',
+  existsCheck: `SELECT 1 FROM pg_indexes WHERE indexname = 'properties_price_idx'`,
+  sql: `CREATE INDEX IF NOT EXISTS properties_price_idx ON properties(price)`,
+},
+// Saved properties
+{
+  type: 'sql',
+  description: 'Index on saved_properties(user_id) for dashboard queries',
+  existsCheck: `SELECT 1 FROM pg_indexes WHERE indexname = 'saved_properties_user_id_idx'`,
+  sql: `CREATE INDEX IF NOT EXISTS saved_properties_user_id_idx ON saved_properties(user_id)`,
+},
+// Conversations
+{
+  type: 'sql',
+  description: 'Index on conversations(buyer_user_id)',
+  existsCheck: `SELECT 1 FROM pg_indexes WHERE indexname = 'conversations_buyer_user_id_idx'`,
+  sql: `CREATE INDEX IF NOT EXISTS conversations_buyer_user_id_idx ON conversations(buyer_user_id)`,
+},
+{
+  type: 'sql',
+  description: 'Index on conversations(agent_user_id)',
+  existsCheck: `SELECT 1 FROM pg_indexes WHERE indexname = 'conversations_agent_user_id_idx'`,
+  sql: `CREATE INDEX IF NOT EXISTS conversations_agent_user_id_idx ON conversations(agent_user_id)`,
+},
+// Messages
+{
+  type: 'sql',
+  description: 'Index on messages(conversation_id) for thread queries',
+  existsCheck: `SELECT 1 FROM pg_indexes WHERE indexname = 'messages_conversation_id_idx'`,
+  sql: `CREATE INDEX IF NOT EXISTS messages_conversation_id_idx ON messages(conversation_id)`,
+},
+// Buyer profiles
+{
+  type: 'sql',
+  description: 'Index on buyer_profiles(user_id)',
+  existsCheck: `SELECT 1 FROM pg_indexes WHERE indexname = 'buyer_profiles_user_id_idx'`,
+  sql: `CREATE INDEX IF NOT EXISTS buyer_profiles_user_id_idx ON buyer_profiles(user_id)`,
+},
+// Users
+{
+  type: 'sql',
+  description: 'Index on users(assigned_agent_user_id) for agent queries',
+  existsCheck: `SELECT 1 FROM pg_indexes WHERE indexname = 'users_assigned_agent_idx'`,
+  sql: `CREATE INDEX IF NOT EXISTS users_assigned_agent_idx ON users(assigned_agent_user_id)`,
+},
+{
+  type: 'sql',
+  description: 'Index on users(primary_intent) for role queries',
+  existsCheck: `SELECT 1 FROM pg_indexes WHERE indexname = 'users_primary_intent_idx'`,
+  sql: `CREATE INDEX IF NOT EXISTS users_primary_intent_idx ON users(primary_intent)`,
+},
+// Buyer interest
+{
+  type: 'sql',
+  description: 'Index on buyer_interest(assigned_agent_user_id)',
+  existsCheck: `SELECT 1 FROM pg_indexes WHERE indexname = 'buyer_interest_agent_idx'`,
+  sql: `CREATE INDEX IF NOT EXISTS buyer_interest_agent_idx ON buyer_interest(assigned_agent_user_id)`,
+},
+// Notifications
+{
+  type: 'sql',
+  description: 'Index on notifications(user_id, read) for bell queries',
+  existsCheck: `SELECT 1 FROM pg_indexes WHERE indexname = 'notifications_user_read_idx'`,
+  sql: `CREATE INDEX IF NOT EXISTS notifications_user_read_idx ON notifications(user_id, read)`,
+},
+// Audit events
+{
+  type: 'sql',
+  description: 'Index on audit_events(actor_user_id)',
+  existsCheck: `SELECT 1 FROM pg_indexes WHERE indexname = 'audit_events_actor_idx'`,
+  sql: `CREATE INDEX IF NOT EXISTS audit_events_actor_idx ON audit_events(actor_user_id)`,
+},
+// Backfill NULL property_type
+{
+  type: 'sql',
+  description: 'Backfill NULL property_type to Unknown',
+  sql: `UPDATE properties SET property_type = 'Unknown' WHERE property_type IS NULL`,
+},
+After adding to the file, run:
+bashnode scripts/apply-safe-constraints.mjs
+Show full output. Every index should report "Applied" or "Already exists".
+Then verify the indexes exist:
+sqlSELECT indexname, tablename
+FROM pg_indexes
+WHERE schemaname = 'public'
+  AND indexname LIKE '%_idx'
+ORDER BY tablename, indexname;
+
+Section 2 — Zod validation sweep on req.body
+Find all routes that destructure req.body without Zod validation:
+bashgrep -rn "req\.body" server/routes/ --include="*.ts" | grep -v "safeParse\|\.parse\|Schema\|schema\|zod\|Zod" | grep -v node_modules
+For every result, add a Zod schema and safeParse call. Priority order:
+High risk first (accept user-supplied data and write to DB):
+
+Any POST/PATCH in conversations.ts, saved.ts, notifications.ts, reviews.ts, marketplace.ts, tours.ts, homeowner.ts
+
+Pattern to follow for each:
+typescriptconst schema = z.object({
+  // only the fields this endpoint actually uses
+});
+const parsed = schema.safeParse(req.body);
+if (!parsed.success) {
+  return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+}
+const { field1, field2 } = parsed.data;
+// use parsed.data fields below, not req.body directly
+After the sweep, re-run:
+bashgrep -rn "req\.body" server/routes/ --include="*.ts" | grep -v "safeParse\|\.parse\|Schema\|schema\|zod\|Zod" | grep -v node_modules | wc -l
+Target: 0.
+
+Section 3 — SEO quick wins
+A. noindex meta on private pages
+In client/src/App.tsx or the relevant page components, add <meta name="robots" content="noindex, nofollow"> to these pages using react-helmet or a direct <head> injection:
+
+/admin
+/dashboard
+/onboarding
+/reset-password
+/conversations
+/agent
+
+If there is no helmet or head management library, add it to each page's JSX directly:
+tsx// At top of page component return
+<>
+  <head>
+    <meta name="robots" content="noindex, nofollow" />
+  </head>
+  {/* rest of page */}
+</>
+B. og:image and base meta tags in index.html
+Update client/index.html to include:
+html<meta property="og:title" content="Xucasa — Find Your Home in San Diego" />
+<meta property="og:description" content="Search San Diego homes for sale. Swipe, save, and connect with an agent — without your data being sold." />
+<meta property="og:image" content="https://xucasa.com/icons/og-image.png" />
+<meta property="og:url" content="https://xucasa.com" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Xucasa — Find Your Home in San Diego" />
+<meta name="twitter:description" content="Search San Diego homes for sale. No lead selling. No data selling. Just homes." />
+<meta name="description" content="Search San Diego homes for sale. Swipe, save, and connect with an agent — without your data being sold to the highest bidder." />
+C. JSON-LD structured data on PropertyDetail
+In client/src/pages/PropertyDetail.tsx, add a JSON-LD script tag that emits RealEstateListing schema for each property. Add this inside the page's return, after data is loaded:
+tsx{property && (
+  <script
+    type="application/ld+json"
+    dangerouslySetInnerHTML={{
+      __html: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "RealEstateListing",
+        "name": property.title,
+        "description": property.description ?? `${property.beds} bed, ${property.baths} bath home in ${property.addressCity}, ${property.addressState}`,
+        "url": `https://xucasa.com/property/${property.id}`,
+        "image": property.photos?.[0] ?? property.imageUrl,
+        "offers": {
+          "@type": "Offer",
+          "price": property.price,
+          "priceCurrency": "USD",
+          "availability": "https://schema.org/InStock",
+        },
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": `${property.addressStreetNumber ?? ''} ${property.addressStreetName ?? ''}`.trim(),
+          "addressLocality": property.addressCity,
+          "addressRegion": property.addressState,
+          "postalCode": property.addressZip,
+          "addressCountry": "US",
+        },
+        "numberOfRooms": property.beds,
+        "floorSize": {
+          "@type": "QuantitativeValue",
+          "value": property.sqft,
+          "unitCode": "FTK",
+        },
+      })
+    }}
+  />
+)}
+
+Section 4 — Swipe empty state
+In client/src/pages/Swipe.tsx, find where the card stack runs out of properties. Add an explicit empty state:
+tsx// When there are no more cards to show
+<div className="flex flex-col items-center justify-center h-full gap-4 text-center px-6">
+  <div className="text-6xl">🏡</div>
+  <h2 className="text-xl font-medium">You've seen all available homes</h2>
+  <p className="text-muted-foreground text-sm max-w-xs">
+    Check back soon — new listings are added daily. In the meantime, browse your saved homes or update your search.
+  </p>
+  <div className="flex gap-3 mt-2">
+    <a href="/dashboard" className="btn btn-outline text-sm">View saved homes</a>
+    <a href="/search" className="btn btn-primary text-sm bg-amber-500 hover:bg-amber-600 text-white">Browse all listings</a>
+  </div>
+</div>
+
+Section 5 — Lender role foundation
+The admin UI already references lender users. Build the foundation:
+A. Schema (shared/schema.ts) — add:
+typescriptexport const lenderProfiles = pgTable("lender_profiles", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  companyName: text("company_name").notNull(),
+  nmls: text("nmls"), // NMLS license number
+  licenseState: text("license_state"),
+  phone: text("phone"),
+  website: text("website"),
+  bio: text("bio"),
+  specialties: text("specialties").array(), // e.g. ["FHA", "VA", "Jumbo", "Conventional"]
+  isVerified: boolean("is_verified").default(false).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+Also add 'lender' as a valid value to primaryIntent in the users table comment/documentation.
+B. Onboarding (client/src/pages/Onboarding.tsx) — add a lender intent option to the intent picker alongside Buyer / Sell-Track / Agent / Explorer:
+
+Label: "Lender"
+Icon: use Building2 from lucide-react
+Routes to a 3-step lender wizard: company name + NMLS, license state + specialties, bio
+On completion: routes to /dashboard (lenders use the same dashboard for now)
+
+C. API (server/routes/onboarding.ts) — add:
+POST /api/onboarding/lender — isAuthenticated
+Accepts: companyName, nmls, licenseState, specialties, bio, phone, website
+Creates/updates lender_profiles row, sets onboardingCompleted = true, audit logs
+D. resolveUserDestination (shared/routing.ts) — add lender destination:
+
+Lender with completed onboarding → /dashboard
+Lender without completed onboarding → /onboarding
+
+
+Section 6 — Vendor directory foundation
+A. Schema (shared/schema.ts) — add:
+typescriptexport const vendorProfiles = pgTable("vendor_profiles", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id), // optional — vendor may not have account
+  businessName: text("business_name").notNull(),
+  category: text("category").notNull(), // pest, plumbing, hvac, landscaping, gutters, renovation, garage_door, roofing, electrical, painting, inspection, staging, photography
+  description: text("description"),
+  phone: text("phone"),
+  email: text("email"),
+  website: text("website"),
+  serviceArea: text("service_area").array(), // cities they serve
+  isVerified: boolean("is_verified").default(false).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  rating: decimal("rating"), // future: aggregate from reviews
+  reviewCount: integer("review_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+B. API (server/routes/vendors.ts) — create new router:
+GET  /api/vendors                    public — list vendors, filter by category + city
+GET  /api/vendors/:id                public — single vendor
+POST /api/vendors                    isAuthenticated + isAdmin — create vendor (admin only for now)
+PATCH /api/vendors/:id               isAuthenticated + isAdmin — update
+DELETE /api/vendors/:id              isAuthenticated + isAdmin — soft delete
+POST /api/vendors/:id/request-bid    isAuthenticated — buyer/homeowner requests a bid (creates notification)
+Register in server/routes/index.ts.
+C. Frontend (client/src/pages/Vendors.tsx) — create a simple vendors directory page:
+
+Route: /vendors
+Category filter pills at top: All, Pest, Plumbing, HVAC, Landscaping, Gutters, Renovation, Roofing, Electrical, Inspection, Staging, Photography
+Grid of vendor cards: business name, category badge, description, phone, "Request a Bid" button
+"Request a Bid" requires auth — shows AuthPromptModal if not logged in
+Add /vendors to the main navigation in layout/Navbar.tsx
+
+D. Admin — add a "Vendors" tab to the admin dashboard to manage vendor listings.
+
+Section 7 — Verification
+After all sections complete:
+
+Run indexes:
+
+bashnode scripts/apply-safe-constraints.mjs
+
+TypeScript — must stay at 0:
+
+bashnpx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+
+Full test suite:
+
+bashfor f in server/__tests__/*.test.ts; do echo "--- $f ---"; npx tsx "$f" 2>&1 | tail -5; done
+
+Schema push:
+
+bashnpx drizzle-kit push --force 2>&1 </dev/null
+
+Smoke tests:
+
+bashcurl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/properties?limit=1"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/vendors"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/changelog"
+curl -s -o /dev/null -w "%{http_code} " -X POST "http://localhost:5000/api/buyer-interest"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/admin/stats"
+Expected: 200 200 200 401 401
+
+Verify indexes applied:
+
+sqlSELECT count(*) as index_count
+FROM pg_indexes
+WHERE schemaname = 'public'
+  AND indexname LIKE '%_idx';
+Should be significantly higher than before (was ~2, should now be 15+)
+
+Show summary of everything fixed or built in this pass:
+
+
+Section 1: indexes applied (list each)
+Section 2: routes with req.body now validated (list each)
+Section 3: SEO changes made (list each)
+Section 4: Swipe empty state added
+Section 5: Lender foundation (schema, onboarding, route, routing)
+Section 6: Vendor directory (schema, routes, page, nav, admin tab)
+
+Paste the full output of all 7 verification steps.
+Sonnet 4.6Claude is AI and can make mistakes. Please double-check responses.

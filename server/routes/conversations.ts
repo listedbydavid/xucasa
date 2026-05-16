@@ -111,11 +111,20 @@ router.get("/api/conversations/:id", isAuthenticated, async (req: any, res) => {
   }
 });
 
+const createConvoSchema = z.object({
+  propertyId: z.number().int().positive(),
+  buyerUserId: z.string().min(1).optional(),
+  initialMessage: z.string().max(5000).optional(),
+  type: z.string().max(50).optional(),
+  conversationType: z.enum(["buyer", "agent_coordination"]).optional(),
+});
+
 router.post("/api/conversations", isAuthenticated, async (req: any, res) => {
   try {
     const userId = req.user.claims.sub;
-    const { propertyId, buyerUserId, initialMessage, type: msgType, conversationType } = req.body;
-    if (!propertyId) return res.status(400).json({ message: "propertyId required" });
+    const parsedBody = createConvoSchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ message: "Invalid request", errors: parsedBody.error.flatten() });
+    const { propertyId, buyerUserId, initialMessage, type: msgType, conversationType } = parsedBody.data;
 
     const prop = await storage.getProperty(propertyId);
     if (!prop) return res.status(404).json({ message: "Property not found" });
