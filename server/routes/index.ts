@@ -22,6 +22,7 @@ import profileRouter from "./profile";
 import errorsRouter from "./errors";
 import adminRouter from "./admin";
 import toursRouter from "./tours";
+import vendorsRouter from "./vendors";
 import { seedChangelog } from "../lib/changelogSeed";
 
 export async function registerRoutes(
@@ -55,6 +56,7 @@ export async function registerRoutes(
   // be on routers registered before catch-all routers).
   app.use(adminRouter);          // /api/admin/* — registered first to win over property/etc fallbacks
   app.use(toursRouter);          // /api/tours/*, /api/tips/*, /api/changelog/*
+  app.use(vendorsRouter);        // /api/vendors/*, /api/admin/vendors/*, /api/partners/*
   app.use(concessionsRouter);    // /api/concessions/*, /api/properties/:id/concessions
   app.use(reviewsRouter);        // /api/properties/:id/reviews
   app.use(beaconRouter);         // /api/beacon/*

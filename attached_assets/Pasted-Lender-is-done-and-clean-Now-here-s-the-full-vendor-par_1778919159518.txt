@@ -1,0 +1,582 @@
+Lender is done and clean. Now here's the full vendor + partners prompt with all your additions folded in:
+
+PROMPT FOR REPLIT:
+
+Build the vendor directory with self-serve applications, logo upload, admin approval queue, and a partner page. This is a single focused task — do only this and nothing else.
+
+Step A — Update shared/schema.ts
+Add these two tables:
+typescriptexport const vendorProfiles = pgTable("vendor_profiles", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id),
+  businessName: text("business_name").notNull(),
+  category: text("category").notNull(),
+  description: text("description"),
+  phone: text("phone"),
+  email: text("email"),
+  website: text("website"),
+  logoUrl: text("logo_url"),
+  // Social & online presence
+  instagramHandle: text("instagram_handle"),
+  facebookUrl: text("facebook_url"),
+  yelpUrl: text("yelp_url"),
+  googleBusinessUrl: text("google_business_url"),
+  nextdoorUrl: text("nextdoor_url"),
+  // Service area
+  serviceArea: text("service_area").array(), // legacy
+  serviceAreaNeighborhoods: text("service_area_neighborhoods").array(),
+  serviceAreaZips: text("service_area_zips").array(),
+  // Application
+  applicationNotes: text("application_notes"),
+  contactName: text("contact_name"),
+  status: text("status").default("pending").notNull(), // pending | approved | rejected
+  adminNotes: text("admin_notes"),
+  isVerified: boolean("is_verified").default(false).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  rating: decimal("rating"),
+  reviewCount: integer("review_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const partnerInquiries = pgTable("partner_inquiries", {
+  id: serial("id").primaryKey(),
+  partnerType: text("partner_type").notNull(), // vendor | lender | brokerage | integration | investor
+  businessName: text("business_name").notNull(),
+  contactName: text("contact_name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone"),
+  website: text("website"),
+  message: text("message"),
+  // Type-specific fields
+  nmls: text("nmls"),                    // lender
+  agentCount: text("agent_count"),        // brokerage
+  mlsAffiliation: text("mls_affiliation"), // brokerage
+  apiUseCase: text("api_use_case"),       // integration
+  status: text("status").default("new").notNull(), // new | contacted | approved | rejected
+  adminNotes: text("admin_notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+Also add this constant to the file (outside any table definition) for use in the frontend:
+typescriptexport const SD_NEIGHBORHOODS = [
+  // North County Coastal
+  'Carlsbad', 'Encinitas', 'Oceanside', 'Del Mar', 'Solana Beach', 'Cardiff',
+  // North County Inland
+  'Escondido', 'San Marcos', 'Vista', 'Fallbrook', 'Ramona',
+  // Central San Diego
+  'Downtown', 'Hillcrest', 'North Park', 'South Park', 'Golden Hill',
+  'Mission Hills', 'Bankers Hill', 'Little Italy',
+  // Beach Communities
+  'Pacific Beach', 'Mission Beach', 'Ocean Beach', 'La Jolla', 'Point Loma',
+  // East San Diego
+  'El Cajon', 'Santee', 'La Mesa', 'San Carlos', 'Lemon Grove',
+  'Spring Valley', 'Lakeside',
+  // South Bay
+  'Chula Vista', 'National City', 'Coronado', 'Imperial Beach',
+  // Central Communities
+  'Clairemont', 'Linda Vista', 'Serra Mesa', 'Kearny Mesa',
+  'Mira Mesa', 'Scripps Ranch', 'Rancho Bernardo', 'Poway',
+  'Rancho Penasquitos', '4S Ranch', 'Carmel Valley', 'Torrey Highlands',
+];
+
+export const SD_NEIGHBORHOOD_GROUPS = {
+  'North County Coastal': ['Carlsbad', 'Encinitas', 'Oceanside', 'Del Mar', 'Solana Beach', 'Cardiff'],
+  'North County Inland': ['Escondido', 'San Marcos', 'Vista', 'Fallbrook', 'Ramona'],
+  'Central San Diego': ['Downtown', 'Hillcrest', 'North Park', 'South Park', 'Golden Hill', 'Mission Hills', 'Bankers Hill', 'Little Italy'],
+  'Beach Communities': ['Pacific Beach', 'Mission Beach', 'Ocean Beach', 'La Jolla', 'Point Loma'],
+  'East San Diego': ['El Cajon', 'Santee', 'La Mesa', 'San Carlos', 'Lemon Grove', 'Spring Valley', 'Lakeside'],
+  'South Bay': ['Chula Vista', 'National City', 'Coronado', 'Imperial Beach'],
+  'Central Communities': ['Clairemont', 'Linda Vista', 'Serra Mesa', 'Kearny Mesa', 'Mira Mesa', 'Scripps Ranch', 'Rancho Bernardo', 'Poway', 'Rancho Penasquitos', '4S Ranch', 'Carmel Valley', 'Torrey Highlands'],
+};
+
+Step B — Add storage methods (server/storage.ts)
+Add to both IStorage interface and DatabaseStorage class:
+typescript// Vendors
+listVendors(filters: { category?: string; city?: string; status?: string }): Promise<typeof vendorProfiles.$inferSelect[]>
+getVendor(id: number): Promise<typeof vendorProfiles.$inferSelect | null>
+createVendor(data: Partial<typeof vendorProfiles.$inferSelect>): Promise<typeof vendorProfiles.$inferSelect>
+updateVendor(id: number, data: Partial<typeof vendorProfiles.$inferSelect>): Promise<typeof vendorProfiles.$inferSelect>
+
+// Partner inquiries
+createPartnerInquiry(data: Partial<typeof partnerInquiries.$inferSelect>): Promise<typeof partnerInquiries.$inferSelect>
+listPartnerInquiries(status?: string): Promise<typeof partnerInquiries.$inferSelect[]>
+updatePartnerInquiry(id: number, data: Partial<typeof partnerInquiries.$inferSelect>): Promise<typeof partnerInquiries.$inferSelect>
+Implement listVendors to filter by status when provided, and filter serviceAreaNeighborhoods by city when provided using = ANY().
+
+Step C — Install multer
+bashnpm install multer @types/multer
+
+Step D — Create server/routes/vendors.ts
+typescriptimport { Router } from 'express';
+import { z } from 'zod';
+import { isAuthenticated, isAdmin } from '../authMiddleware';
+import { storage } from '../storage';
+import { executeWithAudit, audit } from '../auditLog';
+import multer from 'multer';
+import sharp from 'sharp';
+import path from 'path';
+import fs from 'fs/promises';
+
+const router = Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only image files are allowed'));
+  },
+});
+
+// Public — list approved vendors
+router.get('/vendors', async (req, res) => {
+  const category = typeof req.query.category === 'string' ? req.query.category : undefined;
+  const city = typeof req.query.city === 'string' ? req.query.city : undefined;
+  const vendors = await storage.listVendors({ category, city, status: 'approved' });
+  res.json({ vendors });
+});
+
+// Public — single approved vendor
+router.get('/vendors/:id', async (req, res) => {
+  const vendor = await storage.getVendor(Number(req.params.id));
+  if (!vendor || vendor.status !== 'approved') {
+    return res.status(404).json({ message: 'Vendor not found' });
+  }
+  res.json({ vendor });
+});
+
+// Public — self-serve vendor application with optional logo upload
+router.post('/vendors/apply', upload.single('logo'), async (req: any, res) => {
+  const schema = z.object({
+    businessName: z.string().min(1).max(100),
+    category: z.string().min(1),
+    contactName: z.string().min(1),
+    email: z.string().email(),
+    phone: z.string().optional(),
+    website: z.string().url().optional().or(z.literal('')),
+    yelpUrl: z.string().url().optional().or(z.literal('')),
+    googleBusinessUrl: z.string().url().optional().or(z.literal('')),
+    instagramHandle: z.string().max(50).optional(),
+    facebookUrl: z.string().url().optional().or(z.literal('')),
+    nextdoorUrl: z.string().url().optional().or(z.literal('')),
+    description: z.string().max(500).optional(),
+    serviceAreaNeighborhoods: z.union([
+      z.array(z.string()),
+      z.string().transform(s => s.split(',').map(x => x.trim()).filter(Boolean)),
+    ]).optional().default([]),
+    serviceAreaZips: z.string().optional(),
+    applicationNotes: z.string().max(1000).optional(),
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+  }
+
+  const serviceAreaZips = parsed.data.serviceAreaZips
+    ? parsed.data.serviceAreaZips.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+
+  // Handle logo upload
+  let logoUrl: string | undefined;
+  if (req.file) {
+    try {
+      const uploadsDir = 'dist/public/vendor-logos';
+      await fs.mkdir(uploadsDir, { recursive: true });
+      const filename = `vendor-${Date.now()}.webp`;
+      const outputPath = path.join(uploadsDir, filename);
+      await sharp(req.file.buffer)
+        .resize(400, 400, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+        .webp({ quality: 85 })
+        .toFile(outputPath);
+      logoUrl = `/vendor-logos/${filename}`;
+    } catch (err) {
+      console.error('Logo upload failed:', err);
+    }
+  }
+
+  const vendor = await storage.createVendor({
+    businessName: parsed.data.businessName,
+    category: parsed.data.category,
+    contactName: parsed.data.contactName,
+    description: parsed.data.description,
+    phone: parsed.data.phone,
+    email: parsed.data.email,
+    website: parsed.data.website || undefined,
+    yelpUrl: parsed.data.yelpUrl || undefined,
+    googleBusinessUrl: parsed.data.googleBusinessUrl || undefined,
+    instagramHandle: parsed.data.instagramHandle,
+    facebookUrl: parsed.data.facebookUrl || undefined,
+    nextdoorUrl: parsed.data.nextdoorUrl || undefined,
+    serviceAreaNeighborhoods: parsed.data.serviceAreaNeighborhoods as string[],
+    serviceAreaZips,
+    applicationNotes: parsed.data.applicationNotes,
+    logoUrl,
+    status: 'pending',
+    isVerified: false,
+    isActive: false,
+  });
+
+  // Notify David
+  await storage.createNotification({
+    userId: '55534280',
+    type: 'vendor_application',
+    title: `New vendor application: ${vendor.businessName}`,
+    message: `${parsed.data.contactName} (${parsed.data.email}) applied to list ${vendor.businessName} in ${vendor.category}.`,
+    metadata: { vendorId: vendor.id },
+  });
+
+  // Confirmation email to applicant
+  try {
+    const { sendNotificationEmail } = await import('../emailService');
+    await sendNotificationEmail(
+      parsed.data.email,
+      'We received your application — Xucasa',
+      `Hi ${parsed.data.contactName},\n\nThank you for applying to be listed on Xucasa! We review all applications within 2 business days.\n\nOnce approved, your business will appear in our local vendor directory where buyers and homeowners in your service area can find and contact you.\n\nBest,\nDavid Hussain\nXucasa`
+    );
+  } catch (err) {
+    console.error('Confirmation email failed:', err);
+  }
+
+  res.status(201).json({
+    success: true,
+    message: 'Application submitted! We will review and be in touch within 2 business days.',
+  });
+});
+
+// Authenticated — request a bid
+router.post('/vendors/:id/request-bid', isAuthenticated, async (req: any, res) => {
+  const schema = z.object({
+    message: z.string().min(1).max(500),
+    propertyAddress: z.string().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+  const vendor = await storage.getVendor(Number(req.params.id));
+  if (!vendor || vendor.status !== 'approved') {
+    return res.status(404).json({ message: 'Vendor not found' });
+  }
+  await storage.createNotification({
+    userId: '55534280',
+    type: 'vendor_bid_request',
+    title: `Bid request for ${vendor.businessName}`,
+    message: `${parsed.data.message}${parsed.data.propertyAddress ? ` — Property: ${parsed.data.propertyAddress}` : ''}`,
+    metadata: { vendorId: vendor.id, requestingUserId: req.user?.claims?.sub },
+  });
+  res.json({ success: true, message: 'Bid request sent. We will be in touch shortly.' });
+});
+
+// Admin — list all vendors including pending
+router.get('/admin/vendors', isAuthenticated, isAdmin, async (req, res) => {
+  const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+  const vendors = await storage.listVendors({ status });
+  res.json({ vendors });
+});
+
+// Admin — approve
+router.patch('/admin/vendors/:id/approve', isAuthenticated, isAdmin, async (req: any, res) => {
+  await executeWithAudit({
+    eventType: 'vendor_approved',
+    actorUserId: req.user.claims.sub,
+    actorRole: 'admin',
+    resourceType: 'vendor_profile',
+    resourceId: req.params.id,
+    outcome: 'success',
+  }, async () => {
+    const vendor = await storage.updateVendor(Number(req.params.id), {
+      status: 'approved',
+      isVerified: true,
+      isActive: true,
+    });
+    if (vendor.email) {
+      try {
+        const { sendNotificationEmail } = await import('../emailService');
+        await sendNotificationEmail(
+          vendor.email,
+          'Your business is now listed on Xucasa!',
+          `Congratulations! ${vendor.businessName} has been approved and is now live in the Xucasa vendor directory.\n\nBuyers and homeowners in your service area can now find and contact you.\n\nView your listing: https://xucasa.com/vendors\n\nBest,\nDavid Hussain\nXucasa`
+        );
+      } catch (err) {
+        console.error('Approval email failed:', err);
+      }
+    }
+    return { data: vendor };
+  });
+  res.json({ success: true });
+});
+
+// Admin — reject
+router.patch('/admin/vendors/:id/reject', isAuthenticated, isAdmin, async (req: any, res) => {
+  const schema = z.object({ reason: z.string().optional() });
+  const parsed = schema.safeParse(req.body);
+  await executeWithAudit({
+    eventType: 'vendor_rejected',
+    actorUserId: req.user.claims.sub,
+    actorRole: 'admin',
+    resourceType: 'vendor_profile',
+    resourceId: req.params.id,
+    outcome: 'success',
+  }, async () => {
+    await storage.updateVendor(Number(req.params.id), {
+      status: 'rejected',
+      isActive: false,
+      adminNotes: parsed.success ? parsed.data.reason : undefined,
+    });
+    return { data: null };
+  });
+  res.json({ success: true });
+});
+
+// Admin — update any vendor field
+router.patch('/admin/vendors/:id', isAuthenticated, isAdmin, async (req, res) => {
+  const schema = z.object({
+    businessName: z.string().min(1).optional(),
+    category: z.string().optional(),
+    description: z.string().optional(),
+    phone: z.string().optional(),
+    email: z.string().email().optional(),
+    website: z.string().url().optional().or(z.literal('')),
+    yelpUrl: z.string().url().optional().or(z.literal('')),
+    googleBusinessUrl: z.string().url().optional().or(z.literal('')),
+    instagramHandle: z.string().optional(),
+    facebookUrl: z.string().url().optional().or(z.literal('')),
+    nextdoorUrl: z.string().url().optional().or(z.literal('')),
+    serviceAreaNeighborhoods: z.array(z.string()).optional(),
+    serviceAreaZips: z.array(z.string()).optional(),
+    isVerified: z.boolean().optional(),
+    isActive: z.boolean().optional(),
+    status: z.enum(['pending', 'approved', 'rejected']).optional(),
+    adminNotes: z.string().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+  const vendor = await storage.updateVendor(Number(req.params.id), parsed.data);
+  res.json({ vendor });
+});
+
+// Public — partner inquiry submission
+router.post('/partners/inquire', async (req, res) => {
+  const schema = z.object({
+    partnerType: z.enum(['vendor', 'lender', 'brokerage', 'integration', 'investor']),
+    businessName: z.string().min(1).max(100),
+    contactName: z.string().min(1).max(100),
+    email: z.string().email(),
+    phone: z.string().optional(),
+    website: z.string().url().optional().or(z.literal('')),
+    message: z.string().max(1000).optional(),
+    nmls: z.string().optional(),
+    agentCount: z.string().optional(),
+    mlsAffiliation: z.string().optional(),
+    apiUseCase: z.string().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+
+  const inquiry = await storage.createPartnerInquiry(parsed.data);
+
+  await storage.createNotification({
+    userId: '55534280',
+    type: 'partner_inquiry',
+    title: `New ${parsed.data.partnerType} partner inquiry: ${parsed.data.businessName}`,
+    message: `${parsed.data.contactName} (${parsed.data.email}) wants to partner as a ${parsed.data.partnerType}.`,
+    metadata: { inquiryId: inquiry.id },
+  });
+
+  // Send confirmation
+  try {
+    const { sendNotificationEmail } = await import('../emailService');
+    await sendNotificationEmail(
+      parsed.data.email,
+      'Thanks for reaching out — Xucasa',
+      `Hi ${parsed.data.contactName},\n\nThank you for your interest in partnering with Xucasa! We review all inquiries personally and will be in touch within 2 business days.\n\nBest,\nDavid Hussain\nXucasa`
+    );
+  } catch (err) {
+    console.error('Partner inquiry email failed:', err);
+  }
+
+  res.status(201).json({ success: true, message: 'Thank you for your interest. We will be in touch within 2 business days.' });
+});
+
+// Admin — list partner inquiries
+router.get('/admin/partner-inquiries', isAuthenticated, isAdmin, async (req, res) => {
+  const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+  const inquiries = await storage.listPartnerInquiries(status);
+  res.json({ inquiries });
+});
+
+// Admin — update partner inquiry
+router.patch('/admin/partner-inquiries/:id', isAuthenticated, isAdmin, async (req, res) => {
+  const schema = z.object({
+    status: z.enum(['new', 'contacted', 'approved', 'rejected']).optional(),
+    adminNotes: z.string().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+  const inquiry = await storage.updatePartnerInquiry(Number(req.params.id), parsed.data);
+  res.json({ inquiry });
+});
+
+export default router;
+Register in server/routes/index.ts:
+typescriptimport vendorsRouter from './vendors';
+app.use('/api', vendorsRouter);
+
+Step E — Create client/src/pages/Vendors.tsx
+Full vendor directory page with:
+Top bar: Page title "Local Home Services" + "List Your Business" button (right aligned, amber)
+Category filter pills: All, Pest Control, Plumbing, HVAC, Landscaping, Gutters, Renovation, Roofing, Electrical, Inspection, Staging, Photography, Garage Door, Painting
+Vendor cards grid (3 cols desktop, 2 tablet, 1 mobile):
+Each card shows:
+
+Logo image if logoUrl exists, else a category emoji/icon
+Business name + Verified badge (amber) if isVerified
+Category badge (outline)
+Description (2 lines max, truncated)
+Service area chips — first 4 neighborhoods, "+N more" if more exist
+Social links row — small icons (use lucide-react or react-icons) linking to Yelp, Google, Instagram, Facebook, Nextdoor if present. Open in new tab.
+Phone number as tel: link
+"Request a Bid" button (amber, full width)
+
+"Request a Bid" — requires auth. If not authenticated, open AuthPromptModal with message: "Create a free account to request bids from local vendors."
+Empty state: "No vendors in this category yet. Be the first — click 'List Your Business' above."
+"List Your Business" modal — opens an application form with these sections:
+Business Info:
+
+Business Name (required)
+Category (select dropdown, required)
+Contact Name (required)
+Email (required)
+Phone
+Description (textarea, max 500 chars, char counter)
+Logo upload (file input, accepts image/*, shows preview after selection)
+
+Online Presence:
+
+Website URL
+Yelp Profile URL (placeholder: https://yelp.com/biz/your-business)
+Google Business URL (placeholder: https://g.page/your-business)
+Instagram handle (placeholder: @yourbusiness, strip @ on save)
+Facebook URL
+Nextdoor URL
+
+Service Area:
+
+Neighborhood checkbox grid organized by region group using SD_NEIGHBORHOOD_GROUPS imported from @shared/schema
+"Select All" button per region group
+Zip codes text input (placeholder: "92101, 92130, 92037" — comma separated)
+
+Additional Notes:
+
+Application notes textarea (max 1000 chars) — "Anything else you'd like us to know?"
+
+Submit button: "Submit Application" — POST to /api/vendors/apply as multipart/form-data when logo is present, otherwise JSON.
+Success state replaces form: checkmark icon + "Application submitted! We'll review within 2 business days and send you an email confirmation."
+Add at top of component:
+typescriptusePageMeta({
+  title: 'Local Home Services',
+  description: 'Find verified local vendors for pest control, plumbing, HVAC, landscaping, and more in San Diego.',
+});
+
+Step F — Create client/src/pages/Partners.tsx
+Public partnerships page at /partners:
+Hero section:
+
+Heading: "Partner with Xucasa"
+Subheading: "We're building the most transparent real estate platform in the country. Join us as a partner and grow your business alongside ours."
+
+Partner type selector — 5 large clickable cards:
+TypeIconHeadlineDescriptionVendor🔨"List your home service business"Get discovered by buyers and homeowners looking for trusted local prosLender🏦"Connect with pre-approved buyers"Reach active buyers who need financing from a trusted professionalBrokerage🏢"Onboard your entire team"Bring your agents onto xucasa and keep your client relationships intactIntegration🔌"Build with our platform"API access and co-development for PropTech companiesInvestor📈"Learn about our vision"We're growing fast and looking for aligned partners who share our mission
+Selected card gets amber border + amber checkmark.
+Inquiry form (appears below when a type is selected):
+All types include: Business/Company Name, Contact Name, Email, Phone (optional), Message
+Additional fields by type:
+
+Lender: NMLS number
+Brokerage: Number of agents (text input), MLS affiliation
+Integration: API use case (textarea)
+Investor: just message (simplify — no extra fields)
+
+Submit: POST to /api/partners/inquire
+Success: "Thank you! We'll be in touch within 2 business days." with a checkmark.
+"Why Partner with Xucasa?" section below the form:
+
+No lead selling — your clients stay yours
+Growing San Diego market, expanding nationally
+Built by a real estate professional who understands your business
+Early partners get priority placement and founding partner rates
+
+Add:
+typescriptusePageMeta({
+  title: 'Partner With Us',
+  description: 'Partner with Xucasa — the transparent, agent-first real estate platform growing across San Diego and beyond.',
+});
+
+Step G — Wire into app
+In client/src/App.tsx:
+tsximport Vendors from '@/pages/Vendors';
+import Partners from '@/pages/Partners';
+// inside <Switch>:
+<Route path="/vendors" component={Vendors} />
+<Route path="/partners" component={Partners} />
+In client/src/components/layout/Navbar.tsx:
+
+Add "Vendors" link to the main nav
+
+Find the footer in the app (check App.tsx or layout/). If a footer exists, add "Partner With Us" linking to /partners. If no footer exists, create a minimal one in App.tsx with:
+
+© 2026 Xucasa. All rights reserved.
+Links: Privacy Policy · Terms of Service · Partner With Us
+
+
+Step H — Admin tabs
+In client/src/pages/Admin.tsx, add two new tabs:
+"Vendors" tab:
+
+Filter toggle: Pending / Approved / Rejected (default: Pending)
+Table columns: Logo thumbnail (40px), Business Name, Category, Contact Email, Service Areas (first 2), Status badge, Applied date
+Per row actions:
+
+Approve button (green) → PATCH /api/admin/vendors/:id/approve
+Reject button (red, with optional reason input) → PATCH /api/admin/vendors/:id/reject
+Edit button → inline expandable form showing all fields including social links
+
+
+Pending count badge on the tab label if pending > 0
+
+"Partners" tab:
+
+Table columns: Partner Type badge (color-coded), Business Name, Contact Name, Email, Status, Date
+Per row: Status select dropdown (new/contacted/approved/rejected) + Notes field
+Inline save on change → PATCH /api/admin/partner-inquiries/:id
+New inquiry count badge on tab label if new > 0
+
+
+Final verification
+bash# Schema has both tables
+grep -c "vendor_profiles\|partner_inquiries" shared/schema.ts
+
+# Routes registered
+grep -c "vendors\|partners" server/routes/index.ts
+
+# Pages exist
+ls client/src/pages/Vendors.tsx client/src/pages/Partners.tsx 2>&1
+
+# multer installed
+grep -c "multer" package.json
+
+# TS clean
+npx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+
+# Schema pushed
+npx drizzle-kit push --force 2>&1 </dev/null | tail -3
+
+# Tests pass
+for f in server/__tests__/*.test.ts; do echo "--- $f ---"; npx tsx "$f" 2>&1 | tail -3; done
+
+# Smoke tests
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/vendors"
+curl -s -o /dev/null -w "%{http_code} " -X POST "http://localhost:5000/api/partners/inquire"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/admin/vendors"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/admin/partner-inquiries"
+Expected: 200 400 401 401
+Show me all outputs. Do not do anything else.

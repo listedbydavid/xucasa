@@ -850,3 +850,82 @@ export const lenderProfiles = pgTable("lender_profiles", {
 export const insertLenderProfileSchema = createInsertSchema(lenderProfiles).omit({ id: true, createdAt: true, updatedAt: true });
 export type LenderProfile = typeof lenderProfiles.$inferSelect;
 export type InsertLenderProfile = z.infer<typeof insertLenderProfileSchema>;
+
+export const vendorProfiles = pgTable("vendor_profiles", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id),
+  businessName: text("business_name").notNull(),
+  category: text("category").notNull(),
+  description: text("description"),
+  phone: text("phone"),
+  email: text("email"),
+  website: text("website"),
+  logoUrl: text("logo_url"),
+  instagramHandle: text("instagram_handle"),
+  facebookUrl: text("facebook_url"),
+  yelpUrl: text("yelp_url"),
+  googleBusinessUrl: text("google_business_url"),
+  nextdoorUrl: text("nextdoor_url"),
+  serviceArea: text("service_area").array(),
+  serviceAreaNeighborhoods: text("service_area_neighborhoods").array(),
+  serviceAreaZips: text("service_area_zips").array(),
+  applicationNotes: text("application_notes"),
+  contactName: text("contact_name"),
+  status: text("status").default("pending").notNull(),
+  adminNotes: text("admin_notes"),
+  isVerified: boolean("is_verified").default(false).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  rating: decimal("rating"),
+  reviewCount: integer("review_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const partnerInquiries = pgTable("partner_inquiries", {
+  id: serial("id").primaryKey(),
+  partnerType: text("partner_type").notNull(),
+  businessName: text("business_name").notNull(),
+  contactName: text("contact_name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone"),
+  website: text("website"),
+  message: text("message"),
+  nmls: text("nmls"),
+  agentCount: text("agent_count"),
+  mlsAffiliation: text("mls_affiliation"),
+  apiUseCase: text("api_use_case"),
+  status: text("status").default("new").notNull(),
+  adminNotes: text("admin_notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertVendorProfileSchema = createInsertSchema(vendorProfiles).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPartnerInquirySchema = createInsertSchema(partnerInquiries).omit({ id: true, createdAt: true });
+export type VendorProfile = typeof vendorProfiles.$inferSelect;
+export type InsertVendorProfile = z.infer<typeof insertVendorProfileSchema>;
+export type PartnerInquiry = typeof partnerInquiries.$inferSelect;
+export type InsertPartnerInquiry = z.infer<typeof insertPartnerInquirySchema>;
+
+export const SD_NEIGHBORHOODS = [
+  'Carlsbad', 'Encinitas', 'Oceanside', 'Del Mar', 'Solana Beach', 'Cardiff',
+  'Escondido', 'San Marcos', 'Vista', 'Fallbrook', 'Ramona',
+  'Downtown', 'Hillcrest', 'North Park', 'South Park', 'Golden Hill',
+  'Mission Hills', 'Bankers Hill', 'Little Italy',
+  'Pacific Beach', 'Mission Beach', 'Ocean Beach', 'La Jolla', 'Point Loma',
+  'El Cajon', 'Santee', 'La Mesa', 'San Carlos', 'Lemon Grove',
+  'Spring Valley', 'Lakeside',
+  'Chula Vista', 'National City', 'Coronado', 'Imperial Beach',
+  'Clairemont', 'Linda Vista', 'Serra Mesa', 'Kearny Mesa',
+  'Mira Mesa', 'Scripps Ranch', 'Rancho Bernardo', 'Poway',
+  'Rancho Penasquitos', '4S Ranch', 'Carmel Valley', 'Torrey Highlands',
+];
+
+export const SD_NEIGHBORHOOD_GROUPS: Record<string, string[]> = {
+  'North County Coastal': ['Carlsbad', 'Encinitas', 'Oceanside', 'Del Mar', 'Solana Beach', 'Cardiff'],
+  'North County Inland': ['Escondido', 'San Marcos', 'Vista', 'Fallbrook', 'Ramona'],
+  'Central San Diego': ['Downtown', 'Hillcrest', 'North Park', 'South Park', 'Golden Hill', 'Mission Hills', 'Bankers Hill', 'Little Italy'],
+  'Beach Communities': ['Pacific Beach', 'Mission Beach', 'Ocean Beach', 'La Jolla', 'Point Loma'],
+  'East San Diego': ['El Cajon', 'Santee', 'La Mesa', 'San Carlos', 'Lemon Grove', 'Spring Valley', 'Lakeside'],
+  'South Bay': ['Chula Vista', 'National City', 'Coronado', 'Imperial Beach'],
+  'Central Communities': ['Clairemont', 'Linda Vista', 'Serra Mesa', 'Kearny Mesa', 'Mira Mesa', 'Scripps Ranch', 'Rancho Bernardo', 'Poway', 'Rancho Penasquitos', '4S Ranch', 'Carmel Valley', 'Torrey Highlands'],
+};

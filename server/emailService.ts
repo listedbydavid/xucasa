@@ -303,6 +303,24 @@ async function sendViaGmail(to: string, subject: string, htmlBody: string): Prom
   });
 }
 
+export async function sendSimpleEmail(to: string, subject: string, body: string): Promise<{ sent: boolean; reason?: string }> {
+  const configured = await isEmailConfigured();
+  if (!configured) return { sent: false, reason: "Email service not configured" };
+  try {
+    const safeBody = body
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\n/g, "<br>");
+    const html = `<!DOCTYPE html><html><body style="margin:0;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f4f5;"><div style="max-width:600px;margin:0 auto;background:#fff;padding:32px;border-radius:12px;color:#3f3f46;font-size:15px;line-height:1.6;">${safeBody}</div></body></html>`;
+    await sendViaGmail(to, subject, html);
+    return { sent: true };
+  } catch (err: any) {
+    console.error("[Email] sendSimpleEmail failed:", err.message);
+    return { sent: false, reason: err.message };
+  }
+}
+
 export interface SendNotificationEmailParams {
   to: string;
   recipientName?: string;

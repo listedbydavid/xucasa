@@ -76,6 +76,12 @@ import {
   lenderProfiles,
   type LenderProfile,
   type InsertLenderProfile,
+  vendorProfiles,
+  partnerInquiries,
+  type VendorProfile,
+  type InsertVendorProfile,
+  type PartnerInquiry,
+  type InsertPartnerInquiry,
 } from "@shared/schema";
 import { eq, and, desc, asc, sql, gte, gt, count, inArray, isNull } from "drizzle-orm";
 import { authStorage } from "./replit_integrations/auth/storage";
@@ -404,6 +410,17 @@ export interface IStorage {
   // Lender Profiles
   getLenderProfile(userId: string): Promise<LenderProfile | null>;
   upsertLenderProfile(userId: string, data: Partial<InsertLenderProfile>): Promise<LenderProfile>;
+
+  // Vendors
+  listVendors(filters: { category?: string; city?: string; status?: string }): Promise<VendorProfile[]>;
+  getVendor(id: number): Promise<VendorProfile | null>;
+  createVendor(data: Partial<InsertVendorProfile>): Promise<VendorProfile>;
+  updateVendor(id: number, data: Partial<InsertVendorProfile>): Promise<VendorProfile>;
+
+  // Partner Inquiries
+  createPartnerInquiry(data: Partial<InsertPartnerInquiry>): Promise<PartnerInquiry>;
+  listPartnerInquiries(status?: string): Promise<PartnerInquiry[]>;
+  updatePartnerInquiry(id: number, data: Partial<InsertPartnerInquiry>): Promise<PartnerInquiry>;
 
   // Beacon
   matchBuyersForListing(criteria: { price: number; beds: number; baths: number; sqft: number; city: string; propertyType: string; mustHaves?: string[] }): Promise<(BuyerProfile & { user: any; matchScore: number; matchTier: string; scoreBreakdown: Record<string, number> })[]>;
@@ -2100,6 +2117,60 @@ export class DatabaseStorage implements IStorage {
       .insert(lenderProfiles)
       .values(insertData)
       .onConflictDoUpdate({ target: lenderProfiles.userId, set: updateData })
+      .returning();
+    return row;
+  }
+
+  async listVendors(filters: { category?: string; city?: string; status?: string }): Promise<VendorProfile[]> {
+    const conditions: any[] = [];
+    if (filters.status) conditions.push(eq(vendorProfiles.status, filters.status));
+    if (filters.category) conditions.push(eq(vendorProfiles.category, filters.category));
+    if (filters.city) {
+      conditions.push(sql`${filters.city} = ANY(${vendorProfiles.serviceAreaNeighborhoods})`);
+    }
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    const rows = whereClause
+      ? await db.select().from(vendorProfiles).where(whereClause).orderBy(desc(vendorProfiles.createdAt))
+      : await db.select().from(vendorProfiles).orderBy(desc(vendorProfiles.createdAt));
+    return rows;
+  }
+
+  async getVendor(id: number): Promise<VendorProfile | null> {
+    const [row] = await db.select().from(vendorProfiles).where(eq(vendorProfiles.id, id)).limit(1);
+    return row ?? null;
+  }
+
+  async createVendor(data: Partial<InsertVendorProfile>): Promise<VendorProfile> {
+    const [row] = await db.insert(vendorProfiles).values(data as any).returning();
+    return row;
+  }
+
+  async updateVendor(id: number, data: Partial<InsertVendorProfile>): Promise<VendorProfile> {
+    const [row] = await db
+      .update(vendorProfiles)
+      .set({ ...data, updatedAt: new Date() } as any)
+      .where(eq(vendorProfiles.id, id))
+      .returning();
+    return row;
+  }
+
+  async createPartnerInquiry(data: Partial<InsertPartnerInquiry>): Promise<PartnerInquiry> {
+    const [row] = await db.insert(partnerInquiries).values(data as any).returning();
+    return row;
+  }
+
+  async listPartnerInquiries(status?: string): Promise<PartnerInquiry[]> {
+    const rows = status
+      ? await db.select().from(partnerInquiries).where(eq(partnerInquiries.status, status)).orderBy(desc(partnerInquiries.createdAt))
+      : await db.select().from(partnerInquiries).orderBy(desc(partnerInquiries.createdAt));
+    return rows;
+  }
+
+  async updatePartnerInquiry(id: number, data: Partial<InsertPartnerInquiry>): Promise<PartnerInquiry> {
+    const [row] = await db
+      .update(partnerInquiries)
+      .set(data as any)
+      .where(eq(partnerInquiries.id, id))
       .returning();
     return row;
   }
