@@ -1,9 +1,11 @@
 import { useAuth } from "@/hooks/use-auth";
+import { usePreview } from "@/lib/preview-context";
 import { Redirect } from "wouter";
 import type { ComponentType } from "react";
 
 export function ProtectedRoute({ component: Component }: { component: ComponentType }) {
   const { user, isAuthenticated, isLoading } = useAuth();
+  const { isPreviewActive } = usePreview();
 
   if (isLoading) {
     return (
@@ -17,7 +19,7 @@ export function ProtectedRoute({ component: Component }: { component: ComponentT
     return <Redirect to="/auth" />;
   }
 
-  if (!user.onboardingCompleted) {
+  if (!isPreviewActive && !user.onboardingCompleted) {
     return <Redirect to="/onboarding" />;
   }
 

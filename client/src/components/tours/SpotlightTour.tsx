@@ -59,7 +59,11 @@ function mergeSteps(defaults: TourStep[], overrides: Override[]): TourStep[] {
   return out;
 }
 
+import { usePreview as usePreviewModeContext } from "@/lib/preview-context";
+
 export default function SpotlightTour({ pageKey, isAuthenticated, preview, onPreviewClose }: SpotlightTourProps) {
+  const { isPreviewActive: isAdminPreview } = usePreviewModeContext();
+  if (isAdminPreview && !preview) return null;
   const queryClient = useQueryClient();
   const definition = TOUR_REGISTRY[pageKey];
   const [visible, setVisible] = useState(false);

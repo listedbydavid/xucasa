@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { usePreview } from "@/lib/preview-context";
 import { Search, User, LogOut, Briefcase, Layers, TrendingUp, Users, Shield, Menu, X, FileText, ChevronLeft, Wrench, Handshake } from "lucide-react";
 import { useState } from "react";
 import { ThemeToggle } from "./ThemeToggle";
@@ -7,10 +8,14 @@ import { NotificationBell } from "./NotificationBell";
 
 export function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
+  const { previewRole, isPreviewActive } = usePreview();
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const isAdmin = isAuthenticated && (user as any)?.isAdmin;
-  const isAgent = isAuthenticated && ((user as any)?.isAgent || (user as any)?.role === "agent");
+  // Admin link is suppressed during preview (admin is "pretending" to be another role)
+  const isAdmin = isAuthenticated && (user as any)?.isAdmin && !isPreviewActive;
+  const realIsAgent = isAuthenticated && ((user as any)?.isAgent || (user as any)?.role === "agent");
+  // When previewing, the effective role determines agent-only UI
+  const isAgent = previewRole ? previewRole === "agent" : realIsAgent;
 
   const navLink = (href: string, icon: any, label: string, testId?: string) => {
     const Icon = icon;
@@ -49,7 +54,7 @@ export function Navbar() {
   ];
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60" role="banner">
+    <header className={`sticky ${isPreviewActive ? "top-10" : "top-0"} z-50 w-full border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60`} role="banner">
       <div className="max-w-7xl mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-6">
           <button

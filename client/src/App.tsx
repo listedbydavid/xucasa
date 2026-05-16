@@ -63,6 +63,8 @@ import { CookieConsent } from "@/components/CookieConsent";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import RestartButton from "@/components/tours/RestartButton";
 import { ProtectedRoute, AuthOnlyRoute } from "@/components/OnboardingGuard";
+import { PreviewProvider, usePreview } from "@/lib/preview-context";
+import { AdminPreviewBar } from "@/components/AdminPreviewBar";
 
 function Router() {
   return (
@@ -137,6 +139,28 @@ function Footer() {
   );
 }
 
+function AppContent() {
+  const { isPreviewActive } = usePreview();
+  return (
+    <div className={`min-h-screen bg-background flex flex-col font-sans ${isPreviewActive ? "pt-10" : ""}`}>
+      <a href="#main-content" className="skip-to-main">
+        Skip to main content
+      </a>
+      <AdminPreviewBar />
+      <Navbar />
+      <main id="main-content" className="flex-1" tabIndex={-1}>
+        <ErrorBoundary>
+          <Router />
+        </ErrorBoundary>
+      </main>
+      <Footer />
+      <CookieConsent />
+      <InstallPrompt />
+      <RestartButton />
+    </div>
+  );
+}
+
 function App() {
   useEffect(() => {
     initErrorTracker();
@@ -145,21 +169,9 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <div className="min-h-screen bg-background flex flex-col font-sans">
-          <a href="#main-content" className="skip-to-main">
-            Skip to main content
-          </a>
-          <Navbar />
-          <main id="main-content" className="flex-1" tabIndex={-1}>
-            <ErrorBoundary>
-              <Router />
-            </ErrorBoundary>
-          </main>
-          <Footer />
-          <CookieConsent />
-          <InstallPrompt />
-          <RestartButton />
-        </div>
+        <PreviewProvider>
+          <AppContent />
+        </PreviewProvider>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

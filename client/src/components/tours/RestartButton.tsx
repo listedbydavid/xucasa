@@ -5,6 +5,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { HelpCircle } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/hooks/use-auth";
+import { usePreview } from "@/lib/preview-context";
 import ChangelogModal from "./ChangelogModal";
 
 const PATH_TO_PAGE_KEY: Record<string, string> = {
@@ -24,6 +25,7 @@ function pageKeyForPath(path: string): string | null {
 
 export default function RestartButton() {
   const { isAuthenticated } = useAuth();
+  const { isPreviewActive } = usePreview();
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
   const [changelogOpen, setChangelogOpen] = useState(false);
@@ -82,7 +84,7 @@ export default function RestartButton() {
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="fixed bottom-6 right-6 z-[9000] w-12 h-12 rounded-full bg-amber-500 hover:bg-amber-600 text-white shadow-lg flex items-center justify-center"
+            className={`fixed ${isPreviewActive ? "bottom-36" : "bottom-6"} right-6 z-[9000] w-12 h-12 rounded-full bg-amber-500 hover:bg-amber-600 text-white shadow-lg flex items-center justify-center`}
             style={{ animation: "xucasa-tour-dot-pulse 2.5s infinite" }}
             aria-label="Help and tours"
             data-testid="button-tour-restart"
