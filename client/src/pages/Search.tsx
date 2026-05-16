@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
+import { usePageMeta } from "@/hooks/use-page-meta";
 import { PropertyCard } from "@/components/PropertyCard";
 import { useProperties } from "@/hooks/use-properties";
 import { useCreateSavedSearch } from "@/hooks/use-saved";
@@ -24,6 +25,7 @@ function formatPrice(price: number): string {
 }
 
 export default function Search() {
+  usePageMeta({ title: 'Search Homes in San Diego', description: 'Browse San Diego homes for sale. Filter by price, beds, baths, and more.' });
   const [location, setNavigate] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
 

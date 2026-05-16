@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, Fragment } from "react";
 import { useRoute, Link } from "wouter";
+import { usePageMeta } from "@/hooks/use-page-meta";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -10,6 +11,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 
 export default function ConversationThread({ adminMode = false, adminConversationId }: { adminMode?: boolean; adminConversationId?: number } = {}) {
+  usePageMeta({ title: 'Messages', noIndex: true });
   const [, params] = useRoute("/conversations/:id");
   const conversationId = adminConversationId || (params?.id ? parseInt(params.id) : null);
   const { user, isAuthenticated } = useAuth();

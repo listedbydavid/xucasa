@@ -1,0 +1,136 @@
+Clean. Zod sweep is done — 0 unvalidated req.body sites across the entire codebase.
+Now SEO:
+
+PROMPT FOR REPLIT — Task 3 only (SEO foundations):
+
+This is a single focused task. Do only this and nothing else.
+
+Step A — Create client/src/hooks/use-page-meta.ts:
+typescriptimport { useEffect } from 'react';
+
+interface PageMetaOptions {
+  title: string;
+  description?: string;
+  noIndex?: boolean;
+}
+
+export function usePageMeta({ title, description, noIndex = false }: PageMetaOptions) {
+  useEffect(() => {
+    document.title = `${title} | Xucasa`;
+
+    let robotsMeta = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
+    if (!robotsMeta) {
+      robotsMeta = document.createElement('meta');
+      robotsMeta.setAttribute('name', 'robots');
+      document.head.appendChild(robotsMeta);
+    }
+    robotsMeta.setAttribute('content', noIndex ? 'noindex, nofollow' : 'index, follow');
+
+    if (description) {
+      let descMeta = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+      if (!descMeta) {
+        descMeta = document.createElement('meta');
+        descMeta.setAttribute('name', 'description');
+        document.head.appendChild(descMeta);
+      }
+      descMeta.setAttribute('content', description);
+    }
+
+    return () => {
+      const rm = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
+      if (rm) rm.setAttribute('content', 'index, follow');
+    };
+  }, [title, description, noIndex]);
+}
+
+Step B — Add usePageMeta calls to these pages:
+Import usePageMeta from @/hooks/use-page-meta and add these calls inside each component function, before the return statement:
+
+client/src/pages/Admin.tsx:
+usePageMeta({ title: 'Admin', noIndex: true })
+client/src/pages/Dashboard.tsx:
+usePageMeta({ title: 'Dashboard', noIndex: true })
+client/src/pages/Onboarding.tsx:
+usePageMeta({ title: 'Get Started', noIndex: true })
+client/src/pages/ResetPasswordPage.tsx:
+usePageMeta({ title: 'Reset Password', noIndex: true })
+client/src/pages/ConversationThread.tsx:
+usePageMeta({ title: 'Messages', noIndex: true })
+client/src/pages/AgentDashboard.tsx:
+usePageMeta({ title: 'Agent Portal', noIndex: true })
+client/src/pages/Search.tsx:
+usePageMeta({ title: 'Search Homes in San Diego', description: 'Browse San Diego homes for sale. Filter by price, beds, baths, and more.' })
+client/src/pages/Home.tsx:
+usePageMeta({ title: 'Find Your Home in San Diego', description: 'Search San Diego homes for sale. Swipe, save, and connect with an agent — without your data being sold.' })
+client/src/pages/PropertyDetail.tsx:
+Add this after the property data is available (inside the component, not in a conditional):
+typescriptusePageMeta({
+  title: property?.title ?? 'Property Details',
+  description: property
+    ? `${property.beds} bed, ${property.baths} bath home in ${property.addressCity}, ${property.addressState}. Listed at $${property.price?.toLocaleString()}.`
+    : undefined,
+});
+
+
+
+Step C — Update client/index.html:
+Add these tags inside <head> after whatever og tags already exist:
+html<meta property="og:image" content="https://xucasa.com/icons/icon-512x512.png" />
+<meta property="og:url" content="https://xucasa.com" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Xucasa — Find Your Home in San Diego" />
+<meta name="twitter:description" content="Search San Diego homes for sale. No lead selling. No data selling. Just homes." />
+
+Step D — Add JSON-LD to client/src/pages/PropertyDetail.tsx:
+Find the JSX return in PropertyDetail. After the property data is loaded and rendered, add this script tag inside the JSX (it can go right after the opening wrapper div, or at the bottom before the closing tag — wherever fits cleanly):
+tsx{property && (
+  <script
+    type="application/ld+json"
+    dangerouslySetInnerHTML={{
+      __html: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "RealEstateListing",
+        "name": property.title,
+        "description": property.description ??
+          `${property.beds} bed, ${property.baths} bath home in ${property.addressCity}, ${property.addressState}`,
+        "url": `https://xucasa.com/property/${property.id}`,
+        "image": property.photos?.[0] ?? property.imageUrl,
+        "offers": {
+          "@type": "Offer",
+          "price": property.price,
+          "priceCurrency": "USD",
+          "availability": "https://schema.org/InStock",
+        },
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": `${property.addressStreetNumber ?? ''} ${property.addressStreetName ?? ''}`.trim(),
+          "addressLocality": property.addressCity,
+          "addressRegion": property.addressState,
+          "postalCode": property.addressZip,
+          "addressCountry": "US",
+        },
+        "numberOfRooms": property.beds,
+        "floorSize": {
+          "@type": "QuantitativeValue",
+          "value": property.sqft,
+          "unitCode": "FTK",
+        },
+      })
+    }}
+  />
+)}
+
+After all 4 steps, run only these checks:
+bash# Hook exists
+ls client/src/hooks/use-page-meta.ts
+
+# og tags in index.html
+grep -c "og:image\|twitter:card" client/index.html
+
+# JSON-LD in PropertyDetail
+grep -c "ld+json\|RealEstateListing" client/src/pages/PropertyDetail.tsx
+
+# TS clean
+npx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+Show me all 4 outputs. Do not do anything else.

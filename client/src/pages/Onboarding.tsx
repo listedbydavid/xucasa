@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { usePageMeta } from "@/hooks/use-page-meta";
 import { useAuth } from "@/hooks/use-auth";
 import SpotlightTour from "@/components/tours/SpotlightTour";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -41,6 +42,7 @@ function normalizeTimeline(input: string): string {
 }
 
 export default function Onboarding() {
+  usePageMeta({ title: 'Get Started', noIndex: true });
   const { user, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();

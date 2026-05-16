@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { usePageMeta } from "@/hooks/use-page-meta";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -824,6 +825,7 @@ function ErrorReportCard({ report, onUpdateStatus, onResolve, onDelete, onAddNot
 }
 
 export default function Admin() {
+  usePageMeta({ title: 'Admin', noIndex: true });
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals" | "buyers" | "users" | "representation" | "errors" | "conversations" | "audit" | "tours">("overview");

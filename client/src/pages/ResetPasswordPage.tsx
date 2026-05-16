@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
+import { usePageMeta } from "@/hooks/use-page-meta";
 import { Lock, Eye, EyeOff, Loader2, CheckCircle, AlertCircle } from "lucide-react";
 
 export default function ResetPasswordPage() {
+  usePageMeta({ title: 'Reset Password', noIndex: true });
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const params = new URLSearchParams(searchString);

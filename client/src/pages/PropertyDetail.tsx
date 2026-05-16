@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, Component, type ReactNode, type ErrorInfo } from "react";
 import { useParams, useLocation, Link } from "wouter";
+import { usePageMeta } from "@/hooks/use-page-meta";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useProperty, useProperties } from "@/hooks/use-properties";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
@@ -1318,6 +1319,12 @@ export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const { data: property, isLoading } = useProperty(Number(id));
+  usePageMeta({
+    title: property?.title ?? 'Property Details',
+    description: property
+      ? `${property.beds} bed, ${property.baths} bath home in ${property.addressCity}, ${property.addressState}. Listed at $${property.price?.toLocaleString()}.`
+      : undefined,
+  });
   const { data: savedProps = [] } = useSavedProperties();
   const { mutate: toggleSave, isPending: isSaving } = useToggleSavedProperty();
   const { user, isAuthenticated } = useAuth();
@@ -1603,6 +1610,42 @@ export default function PropertyDetail() {
 
   return (
     <>
+      {property && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "RealEstateListing",
+              "name": property.title,
+              "description": property.description ??
+                `${property.beds} bed, ${property.baths} bath home in ${property.addressCity}, ${property.addressState}`,
+              "url": `https://xucasa.com/property/${property.id}`,
+              "image": property.photos?.[0] ?? property.imageUrl,
+              "offers": {
+                "@type": "Offer",
+                "price": property.price,
+                "priceCurrency": "USD",
+                "availability": "https://schema.org/InStock",
+              },
+              "address": {
+                "@type": "PostalAddress",
+                "streetAddress": `${property.addressStreetNumber ?? ''} ${property.addressStreetName ?? ''}`.trim(),
+                "addressLocality": property.addressCity,
+                "addressRegion": property.addressState,
+                "postalCode": property.addressZip,
+                "addressCountry": "US",
+              },
+              "numberOfRooms": property.beds,
+              "floorSize": {
+                "@type": "QuantitativeValue",
+                "value": property.sqft,
+                "unitCode": "FTK",
+              },
+            })
+          }}
+        />
+      )}
       {showAuthPrompt && (
         <AuthPromptModal feature="favorite" onClose={() => setShowAuthPrompt(false)} />
       )}

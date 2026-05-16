@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { useLocation } from "wouter";
+import { usePageMeta } from "@/hooks/use-page-meta";
 import { useAuth } from "@/hooks/use-auth";
 import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
 import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar, Send, Eye, ContactRound, MessageSquare, AlertCircle, Loader2, BadgeCheck, Tag } from "lucide-react";
@@ -27,6 +28,7 @@ function buildStreetViewUrl(lat: number, lng: number, size = "800x500"): string 
 }
 
 export default function AgentDashboard() {
+  usePageMeta({ title: 'Agent Portal', noIndex: true });
   const { user, isAuthenticated } = useAuth();
   const { data: propertiesData, isLoading } = useProperties({ limit: 200 });
   const properties = propertiesData?.properties || [];

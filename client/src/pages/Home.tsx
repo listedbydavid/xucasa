@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { useLocation } from "wouter";
+import { usePageMeta } from "@/hooks/use-page-meta";
 import {
   Search, Map, Home as HomeIcon, DollarSign, TrendingUp,
   Heart, Users, ArrowRight, Sparkles,
@@ -13,6 +14,7 @@ import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 type HeroTab = "buy" | "sell" | "estimate";
 
 export default function Home() {
+  usePageMeta({ title: 'Find Your Home in San Diego', description: 'Search San Diego homes for sale. Swipe, save, and connect with an agent — without your data being sold.' });
   const [, setLocation] = useLocation();
   const { data: propertiesData, isLoading } = useProperties({ limit: 20 });
   const currentQueryRef = useRef("");

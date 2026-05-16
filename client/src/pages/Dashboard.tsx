@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { usePageMeta } from "@/hooks/use-page-meta";
 import SpotlightTour from "@/components/tours/SpotlightTour";
 import { PropertyCard } from "@/components/PropertyCard";
 import { SdmlsDisclaimer } from "@/components/SdmlsDisclaimer";
@@ -42,6 +43,7 @@ import type { BuyerProfile } from "@shared/schema";
 type Section = "profile" | "myhome" | "favorites" | "searches" | "history" | "agent" | "openhouses" | "offers" | "notifications" | "messages" | "showings";
 
 export default function Dashboard() {
+  usePageMeta({ title: 'Dashboard', noIndex: true });
   const { user, isAuthenticated } = useAuth();
   const urlSection = new URLSearchParams(window.location.search).get("section");
   const [activeSection, setActiveSection] = useState<Section>(
