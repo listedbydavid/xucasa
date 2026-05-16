@@ -1,0 +1,108 @@
+Area 4 — Codebase Loose Ends Audit
+Do a thorough sweep of the entire codebase and identify anything that is incomplete, inconsistent, forgotten, or that doesn't match the product vision described in VISION.md. Be honest and specific — this is not a feature request list, it's a gap analysis.
+Check for these categories:
+1. UI components with no backend:
+bashgrep -rn "fetch\|apiRequest\|useQuery" client/src/components/ client/src/pages/ --include="*.tsx" | grep -v "node_modules"
+For each API call in the frontend, confirm the corresponding endpoint exists in server/routes/. Flag any that call endpoints that don't exist.
+2. Backend endpoints with no frontend:
+List every endpoint in server/routes/ and identify any that have no corresponding frontend consumer — these may be forgotten features or dead code.
+3. Schema tables with no routes:
+sqlSELECT table_name FROM information_schema.tables
+WHERE table_schema = 'public'
+ORDER BY table_name;
+For each table, confirm there is at least one API route that reads or writes to it. Flag orphaned tables.
+4. TODOs, FIXMEs, stubs, and placeholder data:
+bashgrep -rn "TODO\|FIXME\|HACK\|XXX\|placeholder\|coming soon\|not implemented\|stub\|hardcoded" \
+  server/ client/src/ shared/ --include="*.ts" --include="*.tsx" \
+  | grep -v node_modules | grep -v ".git"
+5. Features mentioned in VISION.md that have no code:
+Cross-reference VISION.md against the codebase. Specifically check:
+
+Vendor directory — any tables, routes, or UI for this?
+Lender user type — is there a lender role, lender onboarding, or lender profile?
+SEO foundations — are there meta tags, structured data, sitemap, robots.txt?
+GreatSchools full API — is the API key wired or is it falling back to public data?
+Stripe/payments — STRIPE_* env vars are referenced in code. What is actually implemented?
+Open house route planner — component exists but is it fully wired?
+
+6. Onboarding gaps:
+
+Is there an onboarding flow for lenders?
+Is there an onboarding flow for vendors?
+Does agent onboarding collect everything needed for verification?
+Does homeowner onboarding fully populate the user_homes table?
+
+7. Mobile responsiveness:
+
+Are all 7 main pages tested for mobile viewports?
+Does the SpotlightTour correctly switch to bottom sheet mode on mobile?
+Is the swipe experience usable on a real phone?
+
+8. Empty states:
+Check every page for empty state handling:
+
+/swipe — what shows when there are no more properties to swipe?
+/dashboard — what shows when a buyer has no saved homes?
+/agent — what shows when an agent has no contacts or buyer interest?
+/conversations — what shows when there are no conversations?
+Beacon — what shows when there are zero buyer matches?
+
+9. Error states:
+
+Does every data-fetching page handle loading and error states gracefully?
+Are there any pages that show a blank white screen on API failure?
+Does the errorTracker in client/src/lib/errorTracker.ts have initErrorTracker() called in main.tsx?
+
+10. Tour system completeness:
+
+Are all data-tour attributes actually present in the rendered DOM?
+Does the RestartButton appear on all authenticated pages?
+Does the ChangelogModal show the 4 seeded entries?
+Does the admin Tours tab render correctly at /admin?
+
+11. Notification gaps:
+
+Are email notifications actually firing for key events (swipe right, new message, showing request)?
+Are in-app notifications created for all key buyer and agent events?
+Is there a notification sent to David when a new user registers?
+
+12. Data integrity:
+sql-- Buyer interest rows with no assigned agent
+SELECT count(*) FROM buyer_interest WHERE assigned_agent_user_id IS NULL;
+
+-- Conversations with no messages
+SELECT count(*) FROM conversations c
+WHERE NOT EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id);
+
+-- Users with onboarding_completed = true but no buyer_profile
+SELECT count(*) FROM users u
+WHERE u.primary_intent = 'buyer'
+AND u.onboarding_completed = true
+AND NOT EXISTS (SELECT 1 FROM buyer_profiles bp WHERE bp.user_id = u.id);
+
+-- Properties with null property_type
+SELECT count(*) FROM properties WHERE property_type IS NULL;
+
+-- Active concessions on properties that don't exist
+SELECT count(*) FROM seller_concessions sc
+WHERE NOT EXISTS (SELECT 1 FROM properties p WHERE p.id = sc.property_id);
+13. Performance concerns:
+
+Is there pagination on /api/properties? What happens with 9,000+ listings returned at once?
+Is there pagination on /api/conversations?
+Are there database indexes on the most-queried columns (property price, city, beds, baths, status)?
+Run:
+
+sqlSELECT schemaname, tablename, indexname, indexdef
+FROM pg_indexes
+WHERE schemaname = 'public'
+ORDER BY tablename, indexname;
+Flag any high-traffic query pattern with no supporting index.
+
+Final output for Area 4
+Provide:
+
+Gap summary table — feature/area, status (missing/incomplete/working), priority (high/medium/low)
+Top 5 things to build next based on what you found, ranked by impact on the 2026 goal of 100 users of each type
+Quick wins — things that can be fixed in under 30 minutes that were found during this audit
+Anything fixed inline during this audit pass
