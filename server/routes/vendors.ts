@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
-import { isAuthenticated, isAdmin } from "../authMiddleware";
+import { isAuthenticated } from "../replit_integrations/auth";
+import { isAdmin } from "../authMiddleware";
 import { storage } from "../storage";
-import { executeWithAudit } from "../auditLog";
+import { executeWithAudit, audit } from "../auditLog";
+import rateLimit from "express-rate-limit";
 import multer from "multer";
 import sharp from "sharp";
 import path from "path";
@@ -10,6 +12,14 @@ import fs from "fs/promises";
 
 const router = Router();
 const DAVID_USER_ID = "55534280";
+
+const publicSubmitLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many submissions. Please try again later." },
+});
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -35,7 +45,7 @@ router.get("/api/vendors/:id", async (req, res) => {
   res.json({ vendor });
 });
 
-router.post("/api/vendors/apply", upload.single("logo"), async (req: any, res) => {
+router.post("/api/vendors/apply", publicSubmitLimiter, upload.single("logo"), async (req: any, res) => {
   const schema = z.object({
     businessName: z.string().min(1).max(100),
     category: z.string().min(1),
@@ -130,6 +140,14 @@ router.post("/api/vendors/apply", upload.single("logo"), async (req: any, res) =
     console.error("Confirmation email failed:", err);
   }
 
+  audit({
+    req,
+    event: "vendor_application_submitted",
+    outcome: "success",
+    resourceType: "vendor_profile",
+    resourceId: String(vendor.id),
+  } as any);
+
   res.status(201).json({
     success: true,
     message: "Application submitted! We will review and be in touch within 2 business days.",
@@ -156,6 +174,15 @@ router.post("/api/vendors/:id/request-bid", isAuthenticated, async (req: any, re
     message: `${parsed.data.message}${parsed.data.propertyAddress ? ` — Property: ${parsed.data.propertyAddress}` : ""}`,
     metadata: { vendorId: vendor.id, requestingUserId: req.user?.claims?.sub },
   });
+
+  audit({
+    req,
+    event: "vendor_bid_requested",
+    outcome: "success",
+    userId: req.user?.claims?.sub,
+    resourceType: "vendor_profile",
+    resourceId: String(vendor.id),
+  } as any);
 
   res.json({ success: true, message: "Bid request sent. We will be in touch shortly." });
 });
@@ -260,7 +287,7 @@ router.patch("/api/admin/vendors/:id", isAuthenticated, isAdmin, async (req, res
   res.json({ vendor });
 });
 
-router.post("/api/partners/inquire", async (req, res) => {
+router.post("/api/partners/inquire", publicSubmitLimiter, async (req, res) => {
   const schema = z.object({
     partnerType: z.enum(["vendor", "lender", "brokerage", "integration", "investor"]),
     businessName: z.string().min(1).max(100),
@@ -301,6 +328,14 @@ router.post("/api/partners/inquire", async (req, res) => {
   } catch (err) {
     console.error("Partner inquiry email failed:", err);
   }
+
+  audit({
+    req,
+    event: "partner_inquiry_submitted",
+    outcome: "success",
+    resourceType: "partner_inquiry",
+    resourceId: String(inquiry.id),
+  } as any);
 
   res.status(201).json({ success: true, message: "Thank you for your interest. We will be in touch within 2 business days." });
 });

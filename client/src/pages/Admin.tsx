@@ -828,7 +828,7 @@ export default function Admin() {
   usePageMeta({ title: 'Admin', noIndex: true });
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals" | "buyers" | "users" | "representation" | "errors" | "conversations" | "audit" | "tours">("overview");
+  const [activeTab, setActiveTab] = useState<"pitches" | "leads" | "overview" | "referrals" | "buyers" | "users" | "representation" | "errors" | "conversations" | "audit" | "tours" | "vendors" | "partners">("overview");
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
   const [convoSearch, setConvoSearch] = useState("");
   const [convoStatusFilter, setConvoStatusFilter] = useState("all");
@@ -1116,7 +1116,7 @@ export default function Admin() {
         </div>
 
         <div className="flex gap-1 mb-6 bg-muted/30 rounded-xl p-1 overflow-x-auto" data-testid="section-admin-tabs">
-          {(["overview", "users", "pitches", "leads", "buyers", "conversations", "referrals", "representation", "errors", "audit", "tours"] as const).map(tab => (
+          {(["overview", "users", "pitches", "leads", "buyers", "conversations", "referrals", "representation", "errors", "audit", "tours", "vendors", "partners"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => { setActiveTab(tab); if (tab === "conversations") setSelectedConversationId(null); }}
@@ -1135,6 +1135,8 @@ export default function Admin() {
                 : tab === "errors" ? `Errors (${errorReports?.filter((e: any) => !e.resolved).length || 0})`
                 : tab === "audit" ? "Audit Log"
                 : tab === "tours" ? "Tours"
+                : tab === "vendors" ? "Vendors"
+                : tab === "partners" ? "Partners"
                 : `Representation (${swipeNotifications?.length || 0})`}
             </button>
           ))}
@@ -2137,7 +2139,209 @@ export default function Admin() {
         {activeTab === "tours" && (
           <AdminToursEditor />
         )}
+
+        {activeTab === "vendors" && <VendorsAdminPanel />}
+        {activeTab === "partners" && <PartnersAdminPanel />}
       </div>
+    </div>
+  );
+}
+
+function VendorsAdminPanel() {
+  const { toast } = useToast();
+  const [statusFilter, setStatusFilter] = useState<string>("pending");
+  const { data, isLoading } = useQuery<{ vendors: any[] }>({
+    queryKey: ["/api/admin/vendors", statusFilter],
+    queryFn: async () => {
+      const url = statusFilter ? `/api/admin/vendors?status=${statusFilter}` : "/api/admin/vendors";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load vendors");
+      return res.json();
+    },
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: async (id: number) => apiRequest("PATCH", `/api/admin/vendors/${id}/approve`, {}),
+    onSuccess: () => {
+      toast({ title: "Vendor approved" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/vendors"] });
+    },
+    onError: (err: any) => toast({ title: "Approval failed", description: err?.message, variant: "destructive" }),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: number; reason: string }) => apiRequest("PATCH", `/api/admin/vendors/${id}/reject`, { reason }),
+    onSuccess: () => {
+      toast({ title: "Vendor rejected" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/vendors"] });
+    },
+    onError: (err: any) => toast({ title: "Rejection failed", description: err?.message, variant: "destructive" }),
+  });
+
+  const vendors = data?.vendors || [];
+
+  return (
+    <div className="space-y-4" data-testid="admin-vendors-panel">
+      <div className="flex flex-wrap items-center gap-2">
+        {["pending", "approved", "rejected", ""].map(s => (
+          <button
+            key={s || "all"}
+            onClick={() => setStatusFilter(s)}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium border ${statusFilter === s ? "bg-primary text-white border-primary" : "bg-white border-border text-muted-foreground"}`}
+            data-testid={`button-vendor-status-${s || "all"}`}
+          >
+            {s || "All"}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <div className="text-muted-foreground">Loading…</div>
+      ) : vendors.length === 0 ? (
+        <div className="bg-white border border-border rounded-xl p-8 text-center text-muted-foreground">No vendors</div>
+      ) : (
+        <div className="space-y-3">
+          {vendors.map(v => (
+            <div key={v.id} className="bg-white border border-border rounded-xl p-4" data-testid={`admin-vendor-${v.id}`}>
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="flex items-start gap-3 min-w-0">
+                  {v.logoUrl && <img src={v.logoUrl} alt="" className="w-12 h-12 rounded-lg object-contain border border-border" />}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-bold truncate">{v.businessName}</h4>
+                      <span className="text-xs px-2 py-0.5 rounded-full border border-border text-muted-foreground">{v.category}</span>
+                      <StatusBadge status={v.status} />
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {v.contactName} · {v.email} {v.phone ? `· ${v.phone}` : ""}
+                    </div>
+                  </div>
+                </div>
+                {v.status === "pending" && (
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => approveMutation.mutate(v.id)}
+                      disabled={approveMutation.isPending}
+                      className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-bold disabled:opacity-50"
+                      data-testid={`button-approve-vendor-${v.id}`}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => {
+                        const reason = window.prompt("Rejection reason (optional)") || "";
+                        rejectMutation.mutate({ id: v.id, reason });
+                      }}
+                      disabled={rejectMutation.isPending}
+                      className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold disabled:opacity-50"
+                      data-testid={`button-reject-vendor-${v.id}`}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                )}
+              </div>
+              {v.description && <p className="text-sm text-muted-foreground mb-2">{v.description}</p>}
+              {v.serviceAreaNeighborhoods?.length > 0 && (
+                <div className="text-xs text-muted-foreground">
+                  <strong>Service area:</strong> {v.serviceAreaNeighborhoods.join(", ")}
+                </div>
+              )}
+              {v.applicationNotes && (
+                <div className="text-xs text-muted-foreground mt-2 p-2 bg-muted/50 rounded-lg">
+                  <strong>Notes:</strong> {v.applicationNotes}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PartnersAdminPanel() {
+  const { toast } = useToast();
+  const [statusFilter, setStatusFilter] = useState<string>("new");
+  const { data, isLoading } = useQuery<{ inquiries: any[] }>({
+    queryKey: ["/api/admin/partner-inquiries", statusFilter],
+    queryFn: async () => {
+      const url = statusFilter ? `/api/admin/partner-inquiries?status=${statusFilter}` : "/api/admin/partner-inquiries";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load inquiries");
+      return res.json();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, status, adminNotes }: { id: number; status?: string; adminNotes?: string }) =>
+      apiRequest("PATCH", `/api/admin/partner-inquiries/${id}`, { status, adminNotes }),
+    onSuccess: () => {
+      toast({ title: "Updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/partner-inquiries"] });
+    },
+    onError: (err: any) => toast({ title: "Update failed", description: err?.message, variant: "destructive" }),
+  });
+
+  const inquiries = data?.inquiries || [];
+
+  return (
+    <div className="space-y-4" data-testid="admin-partners-panel">
+      <div className="flex flex-wrap items-center gap-2">
+        {["new", "contacted", "approved", "rejected", ""].map(s => (
+          <button
+            key={s || "all"}
+            onClick={() => setStatusFilter(s)}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium border ${statusFilter === s ? "bg-primary text-white border-primary" : "bg-white border-border text-muted-foreground"}`}
+            data-testid={`button-partner-status-${s || "all"}`}
+          >
+            {s || "All"}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <div className="text-muted-foreground">Loading…</div>
+      ) : inquiries.length === 0 ? (
+        <div className="bg-white border border-border rounded-xl p-8 text-center text-muted-foreground">No inquiries</div>
+      ) : (
+        <div className="space-y-3">
+          {inquiries.map(q => (
+            <div key={q.id} className="bg-white border border-border rounded-xl p-4" data-testid={`admin-partner-${q.id}`}>
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-bold truncate">{q.businessName}</h4>
+                    <span className="text-xs px-2 py-0.5 rounded-full border border-border text-muted-foreground capitalize">{q.partnerType}</span>
+                    <StatusBadge status={q.status} />
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {q.contactName} · {q.email} {q.phone ? `· ${q.phone}` : ""} {q.website ? `· ${q.website}` : ""}
+                  </div>
+                </div>
+                <select
+                  value={q.status}
+                  onChange={e => updateMutation.mutate({ id: q.id, status: e.target.value })}
+                  className="text-xs border border-border rounded-lg px-2 py-1 bg-white"
+                  data-testid={`select-partner-status-${q.id}`}
+                >
+                  <option value="new">new</option>
+                  <option value="contacted">contacted</option>
+                  <option value="approved">approved</option>
+                  <option value="rejected">rejected</option>
+                </select>
+              </div>
+              {q.message && <p className="text-sm text-muted-foreground mb-2 whitespace-pre-wrap">{q.message}</p>}
+              <div className="text-xs text-muted-foreground space-y-0.5">
+                {q.nmls && <div><strong>NMLS:</strong> {q.nmls}</div>}
+                {q.agentCount && <div><strong>Agents:</strong> {q.agentCount}</div>}
+                {q.mlsAffiliation && <div><strong>MLS:</strong> {q.mlsAffiliation}</div>}
+                {q.apiUseCase && <div><strong>Use case:</strong> {q.apiUseCase}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

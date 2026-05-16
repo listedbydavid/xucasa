@@ -4,7 +4,7 @@ import { usePageMeta } from "@/hooks/use-page-meta";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import AuthPromptModal from "@/components/AuthPromptModal";
+import { AuthPromptModal } from "@/components/AuthPromptModal";
 import { SD_NEIGHBORHOOD_GROUPS, type VendorProfile } from "@shared/schema";
 import {
   CheckCircle2, X, Phone, Globe, Instagram, Facebook, ExternalLink,
@@ -417,11 +417,7 @@ export default function Vendors() {
 
       {showApply && <ApplyModal onClose={() => { setShowApply(false); queryClient.invalidateQueries({ queryKey: ["/api/vendors"] }); }} />}
       {bidVendor && <BidModal vendor={bidVendor} onClose={() => setBidVendor(null)} />}
-      <AuthPromptModal
-        isOpen={showAuthPrompt}
-        onClose={() => setShowAuthPrompt(false)}
-        message="Create a free account to request bids from local vendors."
-      />
+      {showAuthPrompt && <AuthPromptModal feature="favorite" onClose={() => setShowAuthPrompt(false)} />}
     </div>
   );
 }

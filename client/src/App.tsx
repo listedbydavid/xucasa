@@ -57,6 +57,8 @@ import ConversationThread from "@/pages/ConversationThread";
 import Onboarding from "@/pages/Onboarding";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsOfService from "@/pages/TermsOfService";
+import Vendors from "@/pages/Vendors";
+import Partners from "@/pages/Partners";
 import { CookieConsent } from "@/components/CookieConsent";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import RestartButton from "@/components/tours/RestartButton";
@@ -75,6 +77,8 @@ function Router() {
       <Route path="/reset-password" component={ResetPasswordPage} />
       <Route path="/privacy" component={PrivacyPolicy} />
       <Route path="/terms" component={TermsOfService} />
+      <Route path="/vendors" component={Vendors} />
+      <Route path="/partners" component={Partners} />
       <Route path="/onboarding">{() => <AuthOnlyRoute component={Onboarding} />}</Route>
       <Route path="/dashboard">{() => <ProtectedRoute component={Dashboard} />}</Route>
       <Route path="/conversations/:id">{() => <ProtectedRoute component={ConversationThread} />}</Route>

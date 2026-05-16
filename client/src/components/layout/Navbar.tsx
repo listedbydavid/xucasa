@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { Search, User, LogOut, Briefcase, Layers, TrendingUp, Users, Shield, Menu, X, FileText, ChevronLeft } from "lucide-react";
+import { Search, User, LogOut, Briefcase, Layers, TrendingUp, Users, Shield, Menu, X, FileText, ChevronLeft, Wrench, Handshake } from "lucide-react";
 import { useState } from "react";
 import { ThemeToggle } from "./ThemeToggle";
 import { NotificationBell } from "./NotificationBell";
@@ -39,6 +39,8 @@ export function Navbar() {
     { href: "/sell", icon: TrendingUp, label: "Sell" },
     { href: "/home-report", icon: FileText, label: "Home Report", testId: "link-home-report" },
     { href: "/buyers", icon: Users, label: "Buy" },
+    { href: "/vendors", icon: Wrench, label: "Vendors", testId: "link-vendors-nav" },
+    { href: "/partners", icon: Handshake, label: "Partners", testId: "link-partners-nav" },
     ...(isAuthenticated ? [{ href: "/swipe", icon: Layers, label: "My Feed" }] : []),
     ...(!isAuthenticated ? [{ href: "/agent", icon: Briefcase, label: "For Agents" }] : []),
     ...(isAgent ? [{ href: "/agent", icon: Briefcase, label: "Agent Dashboard", testId: "link-agent-dashboard" }] : []),
