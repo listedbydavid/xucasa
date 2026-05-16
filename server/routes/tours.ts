@@ -5,6 +5,7 @@ import { eq, and, desc, sql, asc } from "drizzle-orm";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { isAdmin } from "../authMiddleware";
 import { executeWithAudit, audit } from "../auditLog";
+import { z } from "zod";
 
 const router = Router();
 
@@ -32,7 +33,14 @@ router.get("/api/tours/progress/:pageKey", isAuthenticated, async (req: any, res
 router.post("/api/tours/progress/:pageKey", isAuthenticated, async (req: any, res) => {
   const userId = req.user.claims.sub;
   const pageKey = String(req.params.pageKey);
-  const { currentStep, completed, skipped } = req.body || {};
+  const schema = z.object({
+    currentStep: z.number().int().min(0).optional(),
+    completed: z.boolean().optional(),
+    skipped: z.boolean().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+  const { currentStep, completed, skipped } = parsed.data;
 
   try {
     const result = await executeWithAudit<any>(
@@ -144,7 +152,19 @@ router.get("/api/tours/overrides", isAuthenticated, isAdmin, async (_req, res) =
 
 router.post("/api/tours/overrides", isAuthenticated, isAdmin, async (req: any, res) => {
   const userId = req.user.claims.sub;
-  const { pageKey, stepIndex, title, body, targetSelector, placement, sortOrder, isActive } = req.body || {};
+  const schema = z.object({
+    pageKey: z.string().min(1),
+    stepIndex: z.number().int().min(0),
+    title: z.string().optional(),
+    body: z.string().optional(),
+    targetSelector: z.string().optional(),
+    placement: z.enum(['top', 'bottom', 'left', 'right']).optional(),
+    sortOrder: z.number().int().optional(),
+    isActive: z.boolean().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+  const { pageKey, stepIndex, title, body, targetSelector, placement, sortOrder, isActive } = parsed.data;
   if (!pageKey || typeof stepIndex !== "number") {
     return res.status(400).json({ message: "pageKey and stepIndex required" });
   }
@@ -217,7 +237,12 @@ router.get("/api/tips/dismissed", isAuthenticated, async (req: any, res) => {
 
 router.post("/api/tips/dismiss", isAuthenticated, async (req: any, res) => {
   const userId = req.user.claims.sub;
-  const { tipKey } = req.body || {};
+  const schema = z.object({
+    tipKey: z.string().min(1).max(200),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+  const { tipKey } = parsed.data;
   if (!tipKey || typeof tipKey !== "string") return res.status(400).json({ message: "tipKey required" });
   try {
     await executeWithAudit<any>(
@@ -272,7 +297,12 @@ router.get("/api/changelog/unviewed-count", isAuthenticated, async (req: any, re
 
 router.post("/api/changelog/viewed", isAuthenticated, async (req: any, res) => {
   const userId = req.user.claims.sub;
-  const { version } = req.body || {};
+  const schema = z.object({
+    version: z.string().min(1).max(50),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+  const { version } = parsed.data;
   try {
     const result = await executeWithAudit<{ ok: true }>(
       { req, event: "changelog_viewed", userId, resourceType: "changelog_view", resourceId: version || null, critical: false },
