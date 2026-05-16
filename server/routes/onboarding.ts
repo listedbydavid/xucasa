@@ -296,6 +296,7 @@ router.post("/api/onboarding/lender", onboardingRateLimit, isAuthenticated, asyn
           primaryIntent: "lender",
           currentMode: "lender",
         });
+        return { data: null };
       },
     );
     return res.json({ destination: "/dashboard" });
