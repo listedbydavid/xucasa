@@ -73,6 +73,9 @@ import {
   type PasswordResetToken,
   type InsertPasswordResetToken,
   users,
+  lenderProfiles,
+  type LenderProfile,
+  type InsertLenderProfile,
 } from "@shared/schema";
 import { eq, and, desc, asc, sql, gte, gt, count, inArray, isNull } from "drizzle-orm";
 import { authStorage } from "./replit_integrations/auth/storage";
@@ -397,6 +400,10 @@ export interface IStorage {
   deleteBuyerProfile(id: number, userId: string): Promise<void>;
   getUserBuyerProfile(userId: string): Promise<BuyerProfile | undefined>;
   getAgentBuyerProfiles(agentId: string): Promise<BuyerProfile[]>;
+
+  // Lender Profiles
+  getLenderProfile(userId: string): Promise<LenderProfile | null>;
+  upsertLenderProfile(userId: string, data: Partial<InsertLenderProfile>): Promise<LenderProfile>;
 
   // Beacon
   matchBuyersForListing(criteria: { price: number; beds: number; baths: number; sqft: number; city: string; propertyType: string; mustHaves?: string[] }): Promise<(BuyerProfile & { user: any; matchScore: number; matchTier: string; scoreBreakdown: Record<string, number> })[]>;
@@ -2067,6 +2074,34 @@ export class DatabaseStorage implements IStorage {
     await db.update(users)
       .set({ passwordHash, updatedAt: new Date() })
       .where(eq(users.id, userId));
+  }
+
+  async getLenderProfile(userId: string): Promise<LenderProfile | null> {
+    const [row] = await db.select().from(lenderProfiles).where(eq(lenderProfiles.userId, userId)).limit(1);
+    return row ?? null;
+  }
+
+  async upsertLenderProfile(userId: string, data: Partial<InsertLenderProfile>): Promise<LenderProfile> {
+    const insertData = {
+      userId,
+      companyName: data.companyName ?? "",
+      nmls: data.nmls ?? null,
+      licenseState: data.licenseState ?? null,
+      phone: data.phone ?? null,
+      website: data.website ?? null,
+      bio: data.bio ?? null,
+      specialties: data.specialties ?? null,
+    } as any;
+    const updateData: any = { updatedAt: new Date() };
+    for (const k of ["companyName", "nmls", "licenseState", "phone", "website", "bio", "specialties"] as const) {
+      if (data[k] !== undefined) updateData[k] = data[k];
+    }
+    const [row] = await db
+      .insert(lenderProfiles)
+      .values(insertData)
+      .onConflictDoUpdate({ target: lenderProfiles.userId, set: updateData })
+      .returning();
+    return row;
   }
 
   async invalidateUserSessions(userId: string): Promise<number> {

@@ -10,5 +10,6 @@ export function resolveUserDestination(user: RoutableUser | null | undefined): s
   if (mode === "buyer" || mode === "explorer") return "/swipe";
   if (mode === "homeowner") return "/home-report";
   if (mode === "agent") return "/agent";
+  if (mode === "lender") return "/dashboard";
   return "/dashboard";
 }

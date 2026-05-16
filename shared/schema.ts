@@ -828,3 +828,25 @@ export type PageTipDismissed = typeof pageTipsDismissed.$inferSelect;
 export type FeatureChangelogEntry = typeof featureChangelog.$inferSelect;
 export type InsertFeatureChangelogEntry = z.infer<typeof insertFeatureChangelogSchema>;
 export type ChangelogView = typeof changelogViews.$inferSelect;
+
+export const lenderProfiles = pgTable("lender_profiles", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  companyName: text("company_name").notNull(),
+  nmls: text("nmls"),
+  licenseState: text("license_state"),
+  phone: text("phone"),
+  website: text("website"),
+  bio: text("bio"),
+  specialties: text("specialties").array(),
+  isVerified: boolean("is_verified").default(false).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  userIdUnique: uniqueIndex("lender_profiles_user_id_unique").on(table.userId),
+}));
+
+export const insertLenderProfileSchema = createInsertSchema(lenderProfiles).omit({ id: true, createdAt: true, updatedAt: true });
+export type LenderProfile = typeof lenderProfiles.$inferSelect;
+export type InsertLenderProfile = z.infer<typeof insertLenderProfileSchema>;

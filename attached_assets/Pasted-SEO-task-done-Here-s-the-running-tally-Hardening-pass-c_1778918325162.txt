@@ -1,0 +1,135 @@
+SEO task done. Here's the running tally:
+Hardening pass — current status:
+
+✅ DB indexes (23 non-pkey/non-unique indexes applied)
+✅ Zod sweep (0 unvalidated req.body sites)
+✅ SEO foundations (use-page-meta hook, noindex on private pages, og tags, JSON-LD on PropertyDetail)
+✅ Swipe empty state (already done in prior session)
+⏳ Lender role — not started
+⏳ Vendor directory — not started
+
+
+Send this next:
+
+PROMPT FOR REPLIT — Task 4 only (Lender role foundation):
+
+Single focused task. Do only this and nothing else.
+Build the lender user type foundation — schema, storage, API route, routing logic, and onboarding UI.
+
+Step A — Add to shared/schema.ts:
+typescriptexport const lenderProfiles = pgTable("lender_profiles", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  companyName: text("company_name").notNull(),
+  nmls: text("nmls"),
+  licenseState: text("license_state"),
+  phone: text("phone"),
+  website: text("website"),
+  bio: text("bio"),
+  specialties: text("specialties").array(),
+  isVerified: boolean("is_verified").default(false).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+Step B — Add to server/storage.ts (both IStorage interface and DatabaseStorage class):
+typescriptgetLenderProfile(userId: string): Promise<typeof lenderProfiles.$inferSelect | null>
+upsertLenderProfile(userId: string, data: Partial<typeof lenderProfiles.$inferSelect>): Promise<typeof lenderProfiles.$inferSelect>
+Implement using Drizzle with onConflictDoUpdate on userId.
+
+Step C — Add to server/routes/onboarding.ts:
+typescriptrouter.post('/onboarding/lender', onboardingRateLimit, isAuthenticated, async (req: any, res) => {
+  const schema = z.object({
+    companyName: z.string().min(1),
+    nmls: z.string().optional(),
+    licenseState: z.string().optional(),
+    specialties: z.array(z.string()).optional().default([]),
+    bio: z.string().optional(),
+    phone: z.string().optional(),
+    website: z.string().url().optional().or(z.literal('')),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+  }
+
+  const userId = req.user.claims.sub;
+
+  await executeWithAudit({
+    eventType: 'lender_onboarding_completed',
+    actorUserId: userId,
+    actorRole: 'lender',
+    resourceType: 'lender_profile',
+    outcome: 'success',
+  }, async () => {
+    await storage.upsertLenderProfile(userId, parsed.data);
+    await storage.updateUser(userId, {
+      onboardingCompleted: true,
+      primaryIntent: 'lender',
+    });
+  });
+
+  res.json({ destination: '/dashboard' });
+});
+
+Step D — Update shared/routing.ts:
+In resolveUserDestination(), add lender handling alongside the other intents:
+typescriptif (user.primaryIntent === 'lender') {
+  return user.onboardingCompleted ? '/dashboard' : '/onboarding';
+}
+
+Step E — Update client/src/pages/Onboarding.tsx:
+Add Building2 to the lucide-react imports.
+Add a Lender option to the intent picker grid alongside Buyer / Sell-Track / Agent / Explorer:
+tsx{
+  id: 'lender',
+  label: 'Lender',
+  description: 'Connect with buyers and agents as a mortgage professional',
+  icon: Building2,
+}
+When lender intent is selected, show a 3-step wizard (same pattern as the buyer wizard already in the file):
+Lender Step 1 — "Tell us about your company":
+
+Company name input (required, placeholder: "ABC Mortgage")
+NMLS number input (optional, placeholder: "NMLS #123456")
+Next button disabled until company name is filled
+
+Lender Step 2 — "Your license and specialties":
+
+License state text input (optional, placeholder: "CA")
+Specialties checkbox group (multi-select): FHA, VA, Jumbo, Conventional, USDA, Reverse Mortgage
+Skip link: "Skip for now →"
+
+Lender Step 3 — "How buyers can reach you" (all optional):
+
+Bio textarea (placeholder: "Tell buyers and agents about your experience...")
+Phone input
+Website input
+Finish button that calls POST /api/onboarding/lender with all collected data
+On success: navigate to /dashboard
+
+Progress bar should show "Step X of 3" during lender wizard steps.
+
+After all steps, run only these checks:
+bash# Schema has lender_profiles
+grep -c "lenderProfiles\|lender_profiles" shared/schema.ts
+
+# Route exists
+grep -c "onboarding/lender" server/routes/onboarding.ts
+
+# Routing updated
+grep -c "lender" shared/routing.ts
+
+# Lender in onboarding UI
+grep -c "lender\|Lender" client/src/pages/Onboarding.tsx
+
+# Schema pushed
+npx drizzle-kit push --force 2>&1 </dev/null | tail -3
+
+# TS clean
+npx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+
+# Tests still pass
+for f in server/__tests__/*.test.ts; do echo "--- $f ---"; npx tsx "$f" 2>&1 | tail -3; done
+Show me all outputs. Do not do anything else.

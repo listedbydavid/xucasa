@@ -270,6 +270,41 @@ router.post("/api/onboarding/agent", onboardingRateLimit, isAuthenticated, async
   }
 });
 
+router.post("/api/onboarding/lender", onboardingRateLimit, isAuthenticated, async (req: any, res) => {
+  const userId = req.user.claims.sub;
+  const lenderSchema = z.object({
+    companyName: z.string().min(1),
+    nmls: z.string().optional(),
+    licenseState: z.string().optional(),
+    specialties: z.array(z.string()).optional().default([]),
+    bio: z.string().optional(),
+    phone: z.string().optional(),
+    website: z.string().url().optional().or(z.literal("")),
+  });
+  const parsed = lenderSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: "Invalid request", errors: parsed.error.flatten() });
+  }
+
+  try {
+    await executeWithAudit(
+      { req, event: "onboarding_completed", userId, metadata: { intent: "lender" } },
+      async () => {
+        await storage.upsertLenderProfile(userId, parsed.data);
+        await authStorage.updateOnboarding(userId, {
+          onboardingCompleted: true,
+          primaryIntent: "lender",
+          currentMode: "lender",
+        });
+      },
+    );
+    return res.json({ destination: "/dashboard" });
+  } catch (err: any) {
+    console.error("Onboarding lender error:", err);
+    return res.status(500).json({ message: "Failed to save lender data", requestId: req.requestId });
+  }
+});
+
 router.post("/api/onboarding/switch-mode", onboardingRateLimit, isAuthenticated, async (req: any, res) => {
   const userId = req.user.claims.sub;
   const modeSchema = z.object({

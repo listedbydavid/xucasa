@@ -10,7 +10,7 @@ import {
   Search, Home, Briefcase, Compass, ArrowRight, ArrowLeft,
   Loader2, MapPin, DollarSign, BedDouble, Bath, Clock, Users,
   Building, FileText, Hash, CheckCircle2, AlertCircle, ShieldCheck,
-  X, Sparkles,
+  X, Sparkles, Building2, Phone, Globe,
 } from "lucide-react";
 
 type AgentVerifyResult = {
@@ -19,15 +19,19 @@ type AgentVerifyResult = {
   error?: string;
 };
 
-type Intent = "buyer" | "homeowner" | "agent" | "explorer";
-type Step = "intent" | "buyer" | "homeowner" | "agent";
+type Intent = "buyer" | "homeowner" | "agent" | "explorer" | "lender";
+type Step = "intent" | "buyer" | "homeowner" | "agent" | "lender";
 
 const INTENT_CARDS: { id: Intent; title: string; desc: string; icon: typeof Search; color: string }[] = [
   { id: "buyer", title: "I'm looking to buy", desc: "Find your dream home in San Diego", icon: Search, color: "text-blue-500 bg-blue-500/10" },
   { id: "homeowner", title: "I own a home", desc: "Track your home's value and explore selling", icon: Home, color: "text-green-500 bg-green-500/10" },
   { id: "agent", title: "I'm a real estate agent", desc: "Manage listings and connect with clients", icon: Briefcase, color: "text-purple-500 bg-purple-500/10" },
+  { id: "lender", title: "I'm a lender", desc: "Connect with buyers and agents as a mortgage professional", icon: Building2, color: "text-indigo-500 bg-indigo-500/10" },
   { id: "explorer", title: "Just exploring", desc: "Browse homes and learn about the market", icon: Compass, color: "text-amber-500 bg-amber-500/10" },
 ];
+
+const LENDER_SPECIALTIES = ["FHA", "VA", "Jumbo", "Conventional", "USDA", "Reverse Mortgage"];
+const TOTAL_LENDER_STEPS = 3;
 
 const CITY_SUGGESTIONS = ["San Diego", "La Jolla", "Chula Vista", "Encinitas", "Carlsbad", "Oceanside", "El Cajon", "Santee", "Escondido", "Coronado"];
 const HOME_TYPE_OPTIONS = ["Single Family", "Condo", "Townhouse", "Multi-Family", "Mobile", "Land"];
@@ -74,6 +78,16 @@ export default function Onboarding() {
   const [brokerageName, setBrokerageName] = useState("");
   const [mlsId, setMlsId] = useState("");
   const [association, setAssociation] = useState("");
+
+  // Lender wizard state
+  const [lenderStep, setLenderStep] = useState<number>(1);
+  const [lenderCompanyName, setLenderCompanyName] = useState("");
+  const [lenderNmls, setLenderNmls] = useState("");
+  const [lenderLicenseState, setLenderLicenseState] = useState("");
+  const [lenderSpecialties, setLenderSpecialties] = useState<string[]>([]);
+  const [lenderBio, setLenderBio] = useState("");
+  const [lenderPhone, setLenderPhone] = useState("");
+  const [lenderWebsite, setLenderWebsite] = useState("");
 
   const searchParams = new URLSearchParams(window.location.search);
   const reentry = searchParams.get("reentry") === "1";
@@ -219,6 +233,33 @@ export default function Onboarding() {
     }
   };
 
+  const handleLenderSubmit = async () => {
+    if (!lenderCompanyName.trim()) return;
+    setLoading(true);
+    try {
+      await apiRequest("POST", "/api/onboarding/lender", {
+        companyName: lenderCompanyName.trim(),
+        nmls: lenderNmls.trim() || undefined,
+        licenseState: lenderLicenseState.trim() || undefined,
+        specialties: lenderSpecialties,
+        bio: lenderBio.trim() || undefined,
+        phone: lenderPhone.trim() || undefined,
+        website: lenderWebsite.trim() || "",
+      });
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      toast({ title: "Welcome aboard!", description: "Your lender profile is set up." });
+      setLocation("/dashboard");
+    } catch (err: any) {
+      toast({ title: "Could not save", description: err?.message || "Please try again.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleLenderSpecialty = (s: string) => {
+    setLenderSpecialties(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+  };
+
   const inputClass = "w-full bg-background border-2 border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors";
 
   return (
@@ -230,12 +271,14 @@ export default function Onboarding() {
             {step === "buyer" && "Tell us about your home search"}
             {step === "homeowner" && "Tell us about your home"}
             {step === "agent" && "Set up your agent profile"}
+            {step === "lender" && "Set up your lender profile"}
           </h1>
           <p className="text-muted-foreground mt-2">
             {step === "intent" && "What brings you to xucasa?"}
             {step === "buyer" && "We'll match you with the right homes"}
             {step === "homeowner" && "We'll help you track your home's value"}
             {step === "agent" && "Get verified to manage listings"}
+            {step === "lender" && "Connect with buyers and agents"}
           </p>
         </div>
 
@@ -784,6 +827,174 @@ export default function Onboarding() {
                 >
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
                   {agentVerifyResult ? "Try Again" : "Submit for Verification"}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {step === "lender" && (
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-5" data-testid="lender-wizard" data-tour="onboarding-form">
+            <div data-testid="lender-progress">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-semibold text-muted-foreground">Step {lenderStep} of {TOTAL_LENDER_STEPS}</span>
+                <span className="text-xs text-muted-foreground">{Math.round((lenderStep / TOTAL_LENDER_STEPS) * 100)}%</span>
+              </div>
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                <div className="h-full bg-primary transition-all duration-300 rounded-full" style={{ width: `${(lenderStep / TOTAL_LENDER_STEPS) * 100}%` }} />
+              </div>
+            </div>
+
+            {lenderStep === 1 && (
+              <div className="space-y-4" data-testid="lender-step-company">
+                <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-indigo-500" /> Tell us about your company
+                </h2>
+                <div>
+                  <label className="text-sm font-bold text-foreground mb-1 block">Company name *</label>
+                  <input
+                    value={lenderCompanyName}
+                    onChange={e => setLenderCompanyName(e.target.value)}
+                    placeholder="ABC Mortgage"
+                    className={inputClass}
+                    data-testid="input-lender-company"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-bold text-foreground mb-1 flex items-center gap-2">
+                    <Hash className="w-4 h-4 text-muted-foreground" /> NMLS number
+                  </label>
+                  <input
+                    value={lenderNmls}
+                    onChange={e => setLenderNmls(e.target.value)}
+                    placeholder="NMLS #123456"
+                    className={inputClass}
+                    data-testid="input-lender-nmls"
+                  />
+                </div>
+              </div>
+            )}
+
+            {lenderStep === 2 && (
+              <div className="space-y-4" data-testid="lender-step-license">
+                <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-indigo-500" /> Your license and specialties
+                </h2>
+                <div>
+                  <label className="text-sm font-bold text-foreground mb-1 block">License state</label>
+                  <input
+                    value={lenderLicenseState}
+                    onChange={e => setLenderLicenseState(e.target.value)}
+                    placeholder="CA"
+                    className={inputClass}
+                    data-testid="input-lender-license-state"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-bold text-foreground mb-2 block">Specialties</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {LENDER_SPECIALTIES.map(s => {
+                      const active = lenderSpecialties.includes(s);
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => toggleLenderSpecialty(s)}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 text-sm transition-colors ${
+                            active ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/40"
+                          }`}
+                          data-testid={`button-lender-specialty-${s.replace(/\s+/g, "-").toLowerCase()}`}
+                        >
+                          {active && <CheckCircle2 className="w-4 h-4" />}
+                          {s}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLenderStep(3)}
+                  className="text-sm text-muted-foreground hover:text-foreground underline"
+                  data-testid="button-lender-skip-step-2"
+                >
+                  Skip for now →
+                </button>
+              </div>
+            )}
+
+            {lenderStep === 3 && (
+              <div className="space-y-4" data-testid="lender-step-contact">
+                <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+                  <Users className="w-5 h-5 text-indigo-500" /> How buyers can reach you
+                </h2>
+                <div>
+                  <label className="text-sm font-bold text-foreground mb-1 block">Bio</label>
+                  <textarea
+                    value={lenderBio}
+                    onChange={e => setLenderBio(e.target.value)}
+                    placeholder="Tell buyers and agents about your experience..."
+                    rows={3}
+                    className={inputClass}
+                    data-testid="input-lender-bio"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-bold text-foreground mb-1 flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-muted-foreground" /> Phone
+                  </label>
+                  <input
+                    value={lenderPhone}
+                    onChange={e => setLenderPhone(e.target.value)}
+                    placeholder="(555) 555-5555"
+                    className={inputClass}
+                    data-testid="input-lender-phone"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-bold text-foreground mb-1 flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-muted-foreground" /> Website
+                  </label>
+                  <input
+                    value={lenderWebsite}
+                    onChange={e => setLenderWebsite(e.target.value)}
+                    placeholder="https://yourcompany.com"
+                    className={inputClass}
+                    data-testid="input-lender-website"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => {
+                  if (lenderStep === 1) { setStep("intent"); return; }
+                  setLenderStep(s => Math.max(s - 1, 1));
+                }}
+                className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-muted-foreground hover:bg-muted transition-colors"
+                data-testid="button-lender-back"
+              >
+                <ArrowLeft className="w-4 h-4" /> Back
+              </button>
+              {lenderStep < TOTAL_LENDER_STEPS ? (
+                <button
+                  onClick={() => setLenderStep(s => Math.min(s + 1, TOTAL_LENDER_STEPS))}
+                  disabled={lenderStep === 1 && !lenderCompanyName.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-xl font-bold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  data-testid="button-lender-next"
+                >
+                  Next <ArrowRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  onClick={handleLenderSubmit}
+                  disabled={loading || !lenderCompanyName.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 bg-primary text-white py-3 rounded-xl font-bold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  data-testid="button-lender-submit"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Finish
                 </button>
               )}
             </div>
