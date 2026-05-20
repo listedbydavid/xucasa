@@ -289,38 +289,138 @@ router.post("/api/agent/contacts/import-csv", isAuthenticated, async (req: any, 
 });
 
 router.post("/api/agent/contacts/import-phone", isAuthenticated, async (req: any, res) => {
-  try {
-    const agentId = req.user!.claims.sub;
-    const parsedPhone = z.object({
-      contacts: z.array(z.any()).min(1).max(5000),
-      tagIds: z.array(z.number().int().positive()).optional(),
-    }).safeParse(req.body);
-    if (!parsedPhone.success) return res.status(400).json({ message: "No contacts provided", errors: parsedPhone.error.flatten() });
-    const { contacts, tagIds } = parsedPhone.data;
+  const agentId = req.user!.claims.sub;
+  const contactSchema = z.object({
+    name: z.string().min(1).max(200),
+    email: z.string().email().optional().or(z.literal("")),
+    phone: z.string().optional(),
+    company: z.string().optional(),
+    notes: z.string().optional(),
+  });
+  const parsed = z.object({
+    contacts: z.array(contactSchema).min(1).max(500),
+    skipDuplicates: z.boolean().default(true),
+  }).safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: "Invalid request", errors: parsed.error.flatten() });
+  }
 
-    const toInsert = contacts.map((c: any) => ({
-      agentId,
-      firstName: c.firstName || c.name?.split(" ")[0] || "Unknown",
-      lastName: c.lastName || c.name?.split(" ").slice(1).join(" ") || null,
-      email: c.email || null,
-      phone: c.phone || null,
-      source: "phone_import" as const,
-    }));
+  return executeWithAudit(
+    {
+      req,
+      event: "contacts_imported",
+      role: "agent",
+      resourceType: "agent_contacts",
+    },
+    async () => {
+      const existing = await storage.getAgentContacts(agentId);
+      const existingEmails = new Set(
+        existing.map(c => c.email?.toLowerCase()).filter(Boolean) as string[]
+      );
+      const existingPhones = new Set(
+        existing
+          .map(c => (c.phone || "").replace(/\D/g, ""))
+          .filter(p => p.length >= 10)
+      );
 
-    const created = await storage.createAgentContactsBulk(toInsert);
+      const toInsert: Array<{
+        agentId: string;
+        firstName: string;
+        lastName: string | null;
+        email: string | null;
+        phone: string | null;
+        notes: string | null;
+        source: "phone_import";
+      }> = [];
+      const duplicates: string[] = [];
 
-    if (tagIds && Array.isArray(tagIds) && tagIds.length > 0) {
-      const ownedTags = await storage.getContactTags(agentId);
-      const ownedIds = new Set(ownedTags.map(t => t.id));
-      const validTagIds = tagIds.filter((id: number) => ownedIds.has(id));
-      for (const tagId of validTagIds) {
-        await storage.assignTagToContacts(created.map(c => c.id), tagId);
+      for (const contact of parsed.data.contacts) {
+        const emailNorm = contact.email?.toLowerCase();
+        const phoneNorm = contact.phone?.replace(/\D/g, "");
+        const isDuplicate =
+          (emailNorm && existingEmails.has(emailNorm)) ||
+          (phoneNorm && phoneNorm.length >= 10 && existingPhones.has(phoneNorm));
+
+        if (isDuplicate && parsed.data.skipDuplicates) {
+          duplicates.push(contact.name);
+          continue;
+        }
+
+        const parts = contact.name.trim().split(/\s+/);
+        const firstName = parts[0] || "Unknown";
+        const lastName = parts.slice(1).join(" ") || null;
+        const noteParts = [contact.notes, contact.company ? `Company: ${contact.company}` : null].filter(Boolean) as string[];
+
+        toInsert.push({
+          agentId,
+          firstName,
+          lastName,
+          email: contact.email || null,
+          phone: contact.phone || null,
+          notes: noteParts.length ? noteParts.join("\n") : null,
+          source: "phone_import",
+        });
+
+        if (emailNorm) existingEmails.add(emailNorm);
+        if (phoneNorm && phoneNorm.length >= 10) existingPhones.add(phoneNorm);
       }
-    }
 
-    res.status(201).json({ imported: created.length });
-  } catch (err: any) {
-    res.status(500).json({ message: "Internal server error" });
+      const created = toInsert.length > 0 ? await storage.createAgentContactsBulk(toInsert) : [];
+      const skipped = duplicates.length;
+      const imported = created.length;
+      const message = `${imported} contact${imported !== 1 ? "s" : ""} imported${skipped > 0 ? `, ${skipped} skipped (already exist)` : ""}.`;
+
+      res.json({ success: true, imported, skipped, duplicates, message });
+
+      return {
+        data: undefined,
+        auditOverrides: {
+          metadata: { imported, skipped, total: parsed.data.contacts.length, source: "phone" },
+        },
+      };
+    }
+  ).catch(() => {
+    if (!res.headersSent) res.status(500).json({ message: "Internal server error" });
+  });
+});
+
+router.post("/api/agent/contacts/preview-vcard", isAuthenticated, async (req: any, res) => {
+  const parsed = z.object({
+    vcard: z.string().min(1).max(5 * 1024 * 1024),
+  }).safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: "Invalid request", errors: parsed.error.flatten() });
+  }
+  try {
+    const VCard = (await import("vcf")).default;
+    const cards = VCard.parse(parsed.data.vcard);
+    const contacts = cards.map(card => {
+      const nameField = card.get("fn") ?? card.get("n");
+      const name = nameField
+        ? (Array.isArray(nameField) ? nameField[0].valueOf() : nameField.valueOf())
+        : "";
+      const emailField = card.get("email");
+      const email = emailField
+        ? (Array.isArray(emailField) ? emailField[0].valueOf() : emailField.valueOf())
+        : undefined;
+      const telField = card.get("tel");
+      const phone = telField
+        ? (Array.isArray(telField) ? telField[0].valueOf() : telField.valueOf())
+        : undefined;
+      const orgField = card.get("org");
+      const company = orgField
+        ? (Array.isArray(orgField) ? orgField[0].valueOf() : orgField.valueOf())
+        : undefined;
+      return {
+        name: (name ?? "").replace(/;+/g, " ").trim(),
+        email,
+        phone,
+        company,
+      };
+    }).filter(c => c.name.length > 0);
+    res.json({ contacts, total: contacts.length });
+  } catch {
+    res.status(400).json({ message: "Could not parse vCard file. Please check the format and try again." });
   }
 });
 

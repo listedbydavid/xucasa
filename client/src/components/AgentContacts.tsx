@@ -7,6 +7,7 @@ import {
   Plus, Search, Upload, Phone, Tag, X, Edit3, Trash2, Mail, User,
   MapPin, FileText, ChevronDown, Users, Filter, ArrowUpDown
 } from "lucide-react";
+import { ImportContactsModal } from "./ImportContactsModal";
 
 type ContactWithTags = AgentContact & { tags: ContactTag[] };
 
@@ -33,6 +34,7 @@ export function AgentContactsSection() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingContact, setEditingContact] = useState<ContactWithTags | null>(null);
   const [showCsvImport, setShowCsvImport] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [showTagManager, setShowTagManager] = useState(false);
 
   const filtered = useMemo(() => {
@@ -67,13 +69,12 @@ export function AgentContactsSection() {
             <Tag className="w-4 h-4" /> Tags
           </button>
           <button
-            onClick={() => setShowCsvImport(true)}
+            onClick={() => setShowImport(true)}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-border text-sm font-semibold hover:bg-muted transition-colors"
-            data-testid="button-import-csv"
+            data-testid="button-import-contacts"
           >
-            <Upload className="w-4 h-4" /> Import CSV
+            <Upload className="w-4 h-4" /> Import Contacts
           </button>
-          <PhoneImportButton tags={tags} />
           <button
             onClick={() => { setEditingContact(null); setShowAddModal(true); }}
             className="flex items-center gap-1.5 bg-foreground text-background px-5 py-2 rounded-xl text-sm font-bold hover:bg-primary hover:text-white transition-all shadow-sm active:scale-95"
@@ -211,6 +212,11 @@ export function AgentContactsSection() {
           onClose={() => setShowCsvImport(false)}
         />
       )}
+
+      <ImportContactsModal
+        isOpen={showImport}
+        onClose={() => setShowImport(false)}
+      />
 
       {showTagManager && (
         <TagManager
