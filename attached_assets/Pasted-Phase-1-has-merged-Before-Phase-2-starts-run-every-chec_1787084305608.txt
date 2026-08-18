@@ -1,0 +1,79 @@
+Phase 1 has merged. Before Phase 2 starts, run every check below and show me the complete unedited output of each one. Do not start Phase 2 until I confirm these pass.
+
+1. TypeScript — must be 0 errors:
+
+bash
+npx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+
+2. Full test suite — all tests must pass:
+
+bash
+for f in server/__tests__/*.test.ts; do echo "--- $f ---"; npx tsx "$f" 2>&1 | tail -5; done
+
+3. Smoke test all critical endpoints:
+
+bash
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/properties?limit=1"
+curl -s -o /dev/null -w "%{http_code} " -X POST "http://localhost:5000/api/buyer-interest"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/admin/stats"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/vendors"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/changelog"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/tours/overrides/swipe"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/beacon/match-buyers"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/concessions/active"
+
+Expected: 200 401 401 200 200 200 403 200
+
+4. Confirm file structure — all critical files still exist:
+
+bash
+ls server/index.ts \
+   server/storage.ts \
+   server/routes/index.ts \
+   shared/schema.ts \
+   shared/routing.ts \
+   client/src/App.tsx \
+   client/src/pages/Swipe.tsx \
+   client/src/pages/AgentDashboard.tsx \
+   client/src/pages/Admin.tsx \
+   scripts/post-merge.sh \
+   scripts/apply-safe-constraints.mjs \
+   VISION.md 2>&1
+
+5. Database connectivity:
+
+bash
+node -e "
+  import('pg').then(async ({ default: pg }) => {
+    const client = new pg.Client(process.env.DATABASE_URL);
+    await client.connect();
+    const res = await client.query('SELECT count(*) FROM properties');
+    console.log('Properties in DB: ' + res.rows[0].count);
+    const res2 = await client.query('SELECT count(*) FROM users');
+    console.log('Users in DB: ' + res2.rows[0].count);
+    await client.end();
+  }).catch(e => { console.error('DB check failed:', e.message); process.exit(1); });
+"
+
+6. Confirm import paths resolved correctly after restructure:
+
+bash
+grep -rn "from '@shared" server/ --include="*.ts" | head -5
+grep -rn "from '@/'" client/src/ --include="*.tsx" | head -5
+grep -rn "from '../storage'" server/routes/ --include="*.ts" | head -5
+
+All three should return results — if any return empty, import paths broke during restructure.
+
+7. Confirm the new mobile folder exists:
+
+bash
+ls artifacts/xucasa-mobile/ 2>&1
+ls artifacts/xucasa/ 2>&1
+ls artifacts/api-server/ 2>&1
+
+8. Migration script still works:
+
+bash
+node scripts/apply-safe-constraints.mjs 2>&1 | tail -5
+
+Show me the complete output of all 8 checks. I will review and confirm before Phase 2 starts.
