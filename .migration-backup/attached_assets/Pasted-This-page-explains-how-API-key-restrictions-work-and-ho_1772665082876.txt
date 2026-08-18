@@ -1,0 +1,175 @@
+This page explains how API key restrictions work and how clients can configure them.
+
+If there is no need to restrict access and your API credentials are not exposed publicly, it is not necessary to set allowed origins or IP addresses.
+
+Accessing the Settings Page
+The following image shows the path to reach the API Key Settings page:
+
+setting-1.png
+setting-2.png
+setting-3.png
+ 
+
+setting-4.png
+ 
+
+Overview
+An API key (or token) can be restricted by origin (domain) and/or IP address to enhance security.
+
+If no restrictions are set, the key is valid from any origin or IP.
+
+If restrictions are defined, every request must comply with the configured rules.
+
+❌ If a request does not follow the configured origin/IP settings:
+
+The API will return 403 Forbidden.
+
+The token used in the request will be blocked for one hour.
+
+While blocked, the token cannot be used for any requests.
+
+⚠️ If a token is blocked repeatedly, you may need to request a new token using the authentication endpoint.
+
+Supported Restrictions
+Allowed Origins
+
+Defines which domains are permitted to use the API key.
+
+Example: https://sub.example.com , https://my-app.com 
+
+Allowed IPs:
+
+Defines which IP addresses are permitted to use the API key.
+
+Example: 52.9.112.69
+
+setting-4.png
+Behavior of Restrictions
+If only allowed_origins is set → Requests are valid only from those domains.
+
+If only ips is set → Requests are valid only from those IP addresses.
+
+If both are set → Requests must match both conditions.
+
+If neither is set → The API key is valid from anywhere.
+
+❌ Non-compliant requests (origin or IP mismatch):
+
+The API returns 403 Forbidden
+
+The token itself is blocked for one hour (other tokens remain unaffected).
+
+After the block period, the token becomes valid again — but if the request conditions are still invalid, it will be blocked again.
+
+⚠️ Important: If a token is blocked due to repeated 403 responses, you may need to rotate or replace it with a new token. However, generating a new token has limitations and should only be done when absolutely necessary.
+
+Example Configuration
+
+
+{
+  "allowed_origins": [
+    "https://my-app.com"
+  ],
+  "ips": [
+    "52.9.112.69"
+  ]
+}
+✅ In this example:
+
+The request must come from https://my-app.com.
+
+The request must also originate from 52.9.112.69.
+
+API Token Management
+1. Getting a Token (Default)
+This is the standard way to obtain an access token.
+
+If a valid token already exists, this call will reuse the existing token until it expires.
+
+This should be your default approach in most cases.
+
+
+
+curl --location 'https://api.realtyfeed.com/v1/auth/token' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--data-urlencode 'client_id=<client_id>' \
+--data-urlencode 'client_secret=<client_secret>'
+Example Response
+
+
+{
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "expires_in": 83486,
+    "token_type": "Bearer"
+}
+Response Field Details
+access_token – The token to use in the Authorization header (Bearer <token>).
+
+expires_in – Time left before the token expires (in seconds).
+
+token_type – Always "Bearer".
+
+✅ Use this endpoint whenever you need to fetch a token normally.
+
+2. Generating a New Token (Force)
+If your token is blocked (403) or compromised, you may request a brand-new token.
+⚠️ Generating new tokens is limited (max 50 per day) and should only be used when necessary.
+
+
+
+curl --location 'https://api.realtyfeed.com/v1/auth/token?force_new_token=true' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--data-urlencode 'client_id=<client_id>' \
+--data-urlencode 'client_secret=<client_secret>'
+Example Response
+
+
+{
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "expires_in": 86400,
+    "token_type": "Bearer",
+    "force_new_token_info": {
+        "force_new_token_count": 2,
+        "force_new_token_count_limit": 50,
+        "force_new_token_count_reset_info": "force_new_token_count will be reset daily at 00:00 UTC"
+    }
+}
+Response Field Details
+access_token – The newly generated token.
+
+expires_in – Validity in seconds (e.g., 24 hours).
+
+force_new_token_info – Details about how many new tokens you’ve generated today and the daily limit.
+
+🚨 Best Practice:
+
+Always use the default token endpoint (/auth/token).
+
+Only use force_new_token=true if:
+
+Your token is blocked (403).
+
+Your token is compromised.
+
+Example Request with cURL
+Below is an example of calling the API with an Authorization token and an Origin header:
+
+
+
+curl --location 'https://api.realtyfeed.com/reso/odata/Property' \
+--header 'Authorization: <your_api_key_or_token>' \
+--header 'Origin: https://my-app.com.'
+Replace <your_api_key_or_token> with your valid API key or token.
+
+Make sure the Origin and/or IP address match your configured restrictions.
+
+Troubleshooting
+If you receive 403 Forbidden:
+
+Confirm your request matches the configured allowed origins and/or allowed IPs.
+
+If the token is blocked, wait for the 1-hour block to expire, or generate a new token if urgent.
+
+Always replace the old token in your application with the new one.
+
+Avoid generating unnecessary tokens, since usage may be limited.

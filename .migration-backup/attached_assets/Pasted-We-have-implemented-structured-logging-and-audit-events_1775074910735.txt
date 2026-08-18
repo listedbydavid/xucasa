@@ -1,0 +1,116 @@
+We have implemented structured logging and audit events, but the system is still “best effort”.
+
+Now we need to harden observability so it is reliable, consistent, and enforced.
+
+This is a production-grade requirement.
+
+OBJECTIVE
+
+Guarantee that all critical workflow actions:
+- always log
+- always produce an audit event
+- always capture success or failure
+- never silently fail without visibility
+
+REQUIREMENTS
+
+1. Create a unified execution wrapper for critical actions
+
+Implement a helper such as:
+
+executeWithAudit(context, handler)
+
+Where:
+- context includes:
+  - event name
+  - user id
+  - resource ids
+- handler is the actual business logic
+
+The wrapper must:
+- generate requestId if missing
+- log start
+- execute handler
+- on success:
+  - log success
+  - create audit event
+- on failure:
+  - log failure
+  - create audit event with error
+  - rethrow or return standardized error
+
+This must replace manual logging in critical routes.
+
+2. Refactor at least these flows to use the wrapper:
+
+- login
+- register
+- onboarding completion
+- mode switch
+- swipe interest
+- conversation creation
+- message sending
+- showing request creation
+- showing status change
+- buyer offer response
+
+3. Enforce success/failure symmetry
+
+Guarantee:
+- every wrapped action logs BOTH success and failure paths
+- no early returns bypass logging
+- no silent catches
+
+4. Prevent duplicate audit events
+
+Ensure:
+- one event per action execution
+- no double writes in success/failure overlap
+
+5. Standardize audit event shape
+
+Ensure all audit events have:
+- eventType
+- actorUserId
+- requestId
+- resourceIds (propertyId, conversationId, etc.)
+- metadata JSON
+- outcome (success | failure)
+- errorMessage (if failure)
+- createdAt
+
+6. Add tests
+
+Add tests for:
+- success path creates 1 audit event
+- failure path creates 1 audit event
+- duplicate prevention
+- wrapper correctly logs both paths
+- requestId is always present
+
+7. Do not expand scope
+
+Do NOT:
+- redesign the whole backend
+- change business logic
+- add new features
+
+This is strictly reliability hardening.
+
+OUTPUT FORMAT
+
+1. Objective completed
+2. Changes made
+3. Files modified
+4. Tests added
+5. Commands run
+6. Results
+7. Known gaps
+8. Next recommended step
+
+EXECUTION RULES
+
+- Do real refactoring now
+- Do not just describe
+- Replace manual logging in key routes
+- Keep implementation clean and minimal

@@ -1,0 +1,160 @@
+Overview
+The Public School Districts Inside Bounding Box API retrieves information about public school districts within a specified geographical bounding box. This API lets developers obtain details about multiple public school districts in a region.
+
+Base URL
+The base URL for the API is https://api.realtyfeed.com.
+
+Endpoint
+Public School Districts Inside the Bounding Box
+Endpoint
+POST /geo/school/publiclea/boundingbox
+
+Request Body
+bounding_box (object): The bounding box that defines the geographical area. It should include the top_left and bottom_right coordinates.
+
+Example:
+
+
+
+{
+  "top_left": {
+    "lat": 40,
+    "lon": -100
+  },
+  "bottom_right": {
+    "lat": 37,
+    "lon": -98
+  }
+}
+Response
+200 OK: Returns a JSON response containing information about Public School Districts within the specified bounding box.
+
+Example:
+
+
+
+{
+  "data": [
+    {
+      "LEAID": "0100006",
+      "NAME": "Marshall County",
+      "OPSTFIPS": "01",
+      "STREET": "12380 US Highway 431 S",
+      "CITY": "Guntersville",
+      "STATE": "AL",
+      "ZIP": "35976",
+      "STFIP": "01",
+      "CNTY": "01095",
+      "NMCNTY": "Marshall County",
+      "LAT": 34.30577,
+      "LON": -86.286958,
+      "CBSA": "10700",
+      "NMCBSA": "Albertville, AL",
+      "CBSATYPE": "2",
+      "CSA": "N",
+      "NMCSA": "N",
+      "NECTA": "N",
+      "NMNECTA": "N",
+      "CD": "0104",
+      "SLDL": "01034",
+      "SLDU": "01009",
+      "SCHOOLYEAR": "2022-2023",
+      "LOCALE": "42",
+      "PCT_CITY11": 0,
+      "PCT_CITY12": 0,
+      "PCT_CITY13": 0,
+      "PCT_SUB21": 0,
+      "PCT_SUB22": 0,
+      "PCT_SUB23": 0,
+      "PCT_TOWN31": 0,
+      "PCT_TOWN32": 0,
+      "PCT_TOWN33": 0,
+      "PCTRURAL41": 17.11,
+      "PCTRURAL42": 82.89,
+      "PCTRURAL43": 0,
+      "geometry": [
+        -86.286958,
+        34.30577
+      ]
+    }
+  ],
+  "total": 19714
+}
+400 Bad Request: If an invalid bounding box is provided.
+
+404 Not Found: If no Public School is found within the specified bounding box.
+
+Example
+Request:
+
+
+
+POST /geo/school/publiclea/boundingbox
+{
+  "top_left": {
+    "lat": 40,
+    "lon": -100
+  },
+  "bottom_right": {
+    "lat": 37,
+    "lon": -98
+  }
+}
+Response:
+
+
+
+{
+  "data": [
+    {
+      "LEAID": "0100006",
+      "NAME": "Marshall County",
+      "OPSTFIPS": "01",
+      "STREET": "12380 US Highway 431 S",
+      "CITY": "Guntersville",
+      "STATE": "AL",
+      "ZIP": "35976",
+      "STFIP": "01",
+      "CNTY": "01095",
+      "NMCNTY": "Marshall County",
+      "LAT": 34.30577,
+      "LON": -86.286958,
+      "CBSA": "10700",
+      "NMCBSA": "Albertville, AL",
+      "CBSATYPE": "2",
+      "CSA": "N",
+      "NMCSA": "N",
+      "NECTA": "N",
+      "NMNECTA": "N",
+      "CD": "0104",
+      "SLDL": "01034",
+      "SLDU": "01009",
+      "SCHOOLYEAR": "2022-2023",
+      "LOCALE": "42",
+      "PCT_CITY11": 0,
+      "PCT_CITY12": 0,
+      "PCT_CITY13": 0,
+      "PCT_SUB21": 0,
+      "PCT_SUB22": 0,
+      "PCT_SUB23": 0,
+      "PCT_TOWN31": 0,
+      "PCT_TOWN32": 0,
+      "PCT_TOWN33": 0,
+      "PCTRURAL41": 17.11,
+      "PCTRURAL42": 82.89,
+      "PCTRURAL43": 0,
+      "geometry": [
+        -86.286958,
+        34.30577
+      ]
+    }
+  ],
+  "total": 19714
+}
+Usage
+To use the Public School Districts Inside Bounding Box API, perform a POST request to the specified endpoint with the bounding box coordinates provided in the request body. The API will respond with information about Public School Districts within the specified bounding box.
+
+Error Handling
+400 Bad Request: If an invalid bounding box is provided, the API will respond with a 400 status code and an error message in the response body.
+
+404 Not Found: If no Public School District is found within the specified bounding box, the API will respond with a 404 status code and an error message in the response body.

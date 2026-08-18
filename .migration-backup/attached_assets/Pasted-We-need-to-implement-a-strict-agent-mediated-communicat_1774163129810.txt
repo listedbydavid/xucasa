@@ -1,0 +1,352 @@
+We need to implement a strict agent-mediated communication architecture across xucasa using Option B.
+
+CRITICAL BUSINESS RULE:
+Buyers and homeowners/sellers must NEVER communicate directly with one another inside the platform.
+Buyers must also NEVER communicate directly with the listing agent.
+All communication must flow through licensed agents.
+
+We are choosing Option B:
+
+1. buyer ↔ assigned agent
+2. assigned agent ↔ listing agent
+
+The buyer must never see or access the assigned-agent-to-listing-agent conversation.
+The listing agent must never have a direct conversation with the buyer.
+The seller/homeowner must not have direct messaging access to buyers.
+
+Build this as a platform-level rule enforced in schema, API validation, and UI.
+
+--------------------------------------------------
+GOALS
+--------------------------------------------------
+
+We want the platform to support this communication chain:
+
+Buyer action on property
+→ assigned agent receives it
+→ assigned agent can communicate with listing agent in-platform
+→ listing agent handles seller side externally or in future seller tools
+
+This applies to:
+- swipe right / interest
+- request showing
+- request info
+- ask a question
+- reverse offers
+- buyer follow-up messaging
+
+--------------------------------------------------
+1. AGENT ASSIGNMENT MODEL
+--------------------------------------------------
+
+Every buyer must have an assigned agent before they can take any communication action.
+
+Requirements:
+- Add assignedAgentUserId to the appropriate data model (users or buyer_profiles, recommend the cleanest location)
+- If buyer already linked an agent, use that agent
+- If buyer does not have an agent, automatically assign the platform default agent (admin/platform owner or configured fallback agent)
+- Admin must be able to reassign assigned agents later
+
+Define:
+- where assignedAgentUserId should live
+- how assignment happens
+- how reassignment works
+- how this interacts with existing client_agent_links
+
+Preserve existing agent-linking functionality where possible.
+
+--------------------------------------------------
+2. CONVERSATION ARCHITECTURE
+--------------------------------------------------
+
+Implement two distinct conversation types when needed:
+
+A. Buyer Conversation
+Participants:
+- buyer
+- assigned agent
+
+Purpose:
+- buyer asks questions
+- buyer requests showings
+- buyer requests info
+- buyer responds to updates
+- assigned agent guides buyer
+
+B. Agent Coordination Conversation
+Participants:
+- assigned agent
+- listing agent
+
+Purpose:
+- assigned agent coordinates with listing agent about the property and buyer interest
+- showing coordination
+- follow-up questions
+- offer-related communication
+
+Important:
+- These are separate conversations
+- The buyer must not see the coordination thread
+- The listing agent must not see the buyer-only thread
+- If listing agent and assigned agent are the same person, define the cleanest behavior and avoid duplicate unnecessary threads
+
+Recommend the best architecture for linking these:
+- buyer_interest record as parent object
+- nullable buyerConversationId
+- nullable agentCoordinationConversationId
+
+--------------------------------------------------
+3. BUYER INTEREST MODEL CHANGES
+--------------------------------------------------
+
+Update buyer_interest to reflect this architecture.
+
+buyer_interest should include at minimum:
+- id
+- propertyId
+- buyerUserId
+- assignedAgentUserId
+- listingAgentUserId nullable
+- source (swipe, request_info, ask_question, showing_request, reverse_offer, etc.)
+- stage
+- lastActivityAt
+- buyerConversationId nullable
+- agentCoordinationConversationId nullable
+- createdAt
+- updatedAt
+
+Recommend any additional fields that would help.
+
+Rules:
+- swipe right creates or updates buyer_interest
+- a swipe alone does NOT create conversations
+- request info / ask question / request showing can create the buyer conversation
+- assigned agent can then create or enter an agent coordination conversation with the listing agent
+- buyer_interest is the system of record tying all this together
+
+--------------------------------------------------
+4. CTA / PROPERTY ACTION FLOW
+--------------------------------------------------
+
+Redesign all buyer-facing property CTAs to respect the agent-mediated model.
+
+Buyer should NEVER see:
+- Message Listing Agent
+- Contact Seller
+- Message Seller
+- Direct inquiry to listing agent
+
+Buyer-facing CTAs should become:
+- Message Your Agent
+- Request Showing Through Your Agent
+- Ask Your Agent About This Home
+- Request Info Through Your Agent
+
+Behavior:
+- If buyer has assignedAgentUserId, send actions there
+- If not, auto-assign platform default agent first, then continue
+- Clearly communicate in UI that a licensed agent will assist them
+
+For each action, define:
+- whether it creates/updates buyer_interest
+- whether it creates a buyer conversation
+- whether it triggers a coordination conversation
+- notification behavior
+
+--------------------------------------------------
+5. SWIPE RIGHT BEHAVIOR
+--------------------------------------------------
+
+Revise swipe behavior to fit Option B.
+
+When buyer swipes right:
+- create or update buyer_interest
+- notify assigned agent, NOT listing agent
+- do not create conversation automatically
+
+Then:
+- assigned agent can review interest and choose to:
+  - message buyer
+  - contact listing agent
+  - request showing
+  - send reverse offer if appropriate
+
+If no assigned agent exists:
+- auto-assign platform default agent
+- notify that agent
+
+Define exact flow and implementation details.
+
+--------------------------------------------------
+6. SHOWING REQUEST FLOW
+--------------------------------------------------
+
+Showing requests must also be agent-mediated.
+
+Required flow:
+- buyer submits showing request from property page
+- this creates/updates buyer_interest
+- this creates buyer ↔ assigned agent conversation if none exists
+- assigned agent reviews request
+- assigned agent can coordinate with listing agent through a separate agent coordination conversation
+- buyer sees status updates through their buyer conversation and showing status UI
+
+Do NOT create direct buyer ↔ listing agent showing workflow.
+
+Define statuses and ownership:
+- requested
+- under review
+- sent to listing agent
+- confirmed
+- alternate proposed
+- declined
+- cancelled
+- completed
+
+Recommend the cleanest status model and which user can update which statuses.
+
+--------------------------------------------------
+7. REQUEST INFO / ASK QUESTION FLOW
+--------------------------------------------------
+
+Both request types should route only to assigned agent.
+
+Request Info:
+- structured prompts + free text
+- creates/updates buyer_interest
+- creates buyer conversation if needed
+- assigned agent can answer directly or coordinate with listing agent in separate thread
+
+Ask Question:
+- free text
+- same routing
+
+Define how assigned agent can optionally forward or relay relevant info through the coordination conversation while keeping buyer separated.
+
+--------------------------------------------------
+8. REVERSE OFFER / OFFER COMMUNICATION
+--------------------------------------------------
+
+Update offer-related communication to respect Option B.
+
+Rules:
+- buyer should receive offer-related updates through their assigned agent pathway
+- listing agent communicates offer-related information to assigned agent, not directly to buyer
+- any buyer response should route back through assigned agent
+
+Recommend the cleanest implementation for V1 using the existing property_offers structure:
+- how offers attach to buyer_interest
+- how they appear in buyer conversation
+- how they appear in agent coordination conversation
+- how accept / decline / counter should work under this architecture
+
+Keep this simple and realistic for Phase 1.
+
+--------------------------------------------------
+9. API VALIDATION / ENFORCEMENT
+--------------------------------------------------
+
+This rule must be enforced server-side, not just in UI.
+
+At the API level:
+- block any attempt to create a conversation between buyer and listing agent directly
+- block any attempt to create a conversation between buyer and homeowner/seller directly
+- block any attempt to expose agent coordination conversation to buyer
+- validate allowed participant role combinations
+- ensure all buyer property actions route through assignedAgentUserId
+
+Return clear errors if violated.
+
+Please define:
+- validation logic
+- role checks
+- participant relationship rules
+- authorization model for viewing threads
+
+--------------------------------------------------
+10. DASHBOARD CHANGES
+--------------------------------------------------
+
+Buyer Dashboard:
+- Messages section should show only buyer ↔ assigned agent conversations
+- Showings section should show statuses in buyer-friendly language
+- Interested homes should show status like:
+  - Agent notified
+  - Agent responded
+  - Coordinating with listing side
+  - Showing confirmed
+- Buyer must never see listing-agent-only thread
+
+Assigned Agent Dashboard:
+- See buyer interests for assigned clients
+- See buyer conversations
+- See coordination conversations with listing agents
+- Be able to move between client context and property context cleanly
+
+Listing Agent Dashboard:
+- See coordination conversations from buyer agents
+- Never receive direct buyer messages
+- Never see buyer-only thread
+
+Admin Dashboard:
+- View all threads read-only
+- Reassign assignedAgentUserId if needed
+- Override and inspect interest routing
+
+--------------------------------------------------
+11. NOTIFICATIONS
+--------------------------------------------------
+
+Update notifications to respect Option B.
+
+Examples:
+- buyer swipe right → notify assigned agent
+- buyer sends message → notify assigned agent
+- assigned agent messages buyer → notify buyer
+- assigned agent messages listing agent → notify listing agent
+- listing agent replies → notify assigned agent
+- showing confirmed → notify assigned agent and buyer appropriately
+
+All notifications should deep link to the correct thread or status view.
+No notification should create a direct buyer-to-listing-agent path.
+
+--------------------------------------------------
+12. SPECIAL CASE: ASSIGNED AGENT = LISTING AGENT
+--------------------------------------------------
+
+Handle the case where the buyer’s assigned agent is also the listing agent.
+
+Recommend the cleanest V1 behavior.
+
+Possibilities:
+- only create one buyer ↔ agent conversation
+- no separate coordination thread needed
+- buyer_interest still records both roles appropriately
+
+Please choose the simplest correct behavior and document it clearly.
+
+--------------------------------------------------
+13. DELIVERABLES
+--------------------------------------------------
+
+I want the following output:
+
+1. Recommended architecture for Option B
+2. Schema updates
+3. API and validation updates
+4. Conversation model and thread visibility rules
+5. Property CTA flow updates
+6. Showing request flow updates
+7. Offer communication flow updates
+8. Dashboard changes by role
+9. Notification updates
+10. Edge case handling
+11. Step-by-step implementation plan
+12. Exact files likely to be modified
+
+Important constraints:
+- Reuse existing architecture and patterns where possible
+- Keep this Phase 1 practical and not overengineered
+- Preserve current MLS/IDX and agent tooling
+- Do not allow any loophole for direct buyer ↔ seller or buyer ↔ listing agent communication
+- Be explicit, opinionated, and implementation-focused

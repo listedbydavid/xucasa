@@ -1,0 +1,52 @@
+Before we continue the hardening task, I need to know exactly what was and wasn't completed. Please run these checks and show me the full output of each:
+1. Zod sweep — is Section 2 fully done?
+bashgrep -rn "req\.body" server/routes/ --include="*.ts" | grep -v "safeParse\|\.parse\|Schema\|schema\|zod\|Zod" | grep -v node_modules | wc -l
+Must be 0.
+2. SEO — is Section 3 done?
+bash# Check use-page-meta hook exists
+ls client/src/hooks/use-page-meta.ts 2>&1
+
+# Check og tags in index.html
+grep -n "og:title\|og:description\|og:image\|twitter:card" client/index.html
+
+# Check JSON-LD in PropertyDetail
+grep -n "ld+json\|RealEstateListing" client/src/pages/PropertyDetail.tsx
+3. Swipe empty state — is Section 4 done?
+bashgrep -n "seen all\|check back\|Browse all listings" client/src/pages/Swipe.tsx
+4. Lender role — is Section 5 done?
+bash# Check schema
+grep -n "lenderProfiles\|lender_profiles" shared/schema.ts
+
+# Check onboarding route
+grep -n "onboarding/lender" server/routes/onboarding.ts
+
+# Check onboarding UI
+grep -n "lender\|Lender" client/src/pages/Onboarding.tsx | head -10
+
+# Check routing
+grep -n "lender" shared/routing.ts
+5. Vendor directory — is Section 6 done?
+bash# Check schema
+grep -n "vendorProfiles\|vendor_profiles" shared/schema.ts
+
+# Check routes file
+ls server/routes/vendors.ts 2>&1
+
+# Check frontend page
+ls client/src/pages/Vendors.tsx 2>&1
+
+# Check nav
+grep -n "vendor\|Vendor" client/src/components/layout/Navbar.tsx
+
+# Check app routes
+grep -n "vendor\|Vendor" client/src/App.tsx
+6. Index count
+sqlSELECT count(*) as index_count FROM pg_indexes
+WHERE schemaname = 'public' AND indexname LIKE '%_idx';
+7. Current state
+bashnpx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+for f in server/__tests__/*.test.ts; do echo "--- $f ---"; npx tsx "$f" 2>&1 | tail -3; done
+Show me the full output of every check. Based on what's missing, I will write the next prompt to finish only what's incomplete.
+
+
+Paste the results and I'll write a tight prompt that only builds what's actually missing rather than re-doing work that's already done.

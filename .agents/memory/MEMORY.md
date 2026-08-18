@@ -1,0 +1,2 @@
+- [xucasa-port-lessons](xucasa-port-lessons.md) — drizzle-zod@0.8 requires zod v4; pin to 0.6.x when workspace uses zod v3
+- [xucasa-port-lessons](xucasa-port-lessons.md) — pg and zod must be added to esbuild externals in build.mjs for api-server

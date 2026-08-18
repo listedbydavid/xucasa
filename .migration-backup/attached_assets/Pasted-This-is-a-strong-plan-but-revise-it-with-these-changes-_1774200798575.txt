@@ -1,0 +1,47 @@
+This is a strong plan, but revise it with these changes before implementation:
+
+1. Do NOT automatically set role="agent" just because the user selects the agent onboarding path.
+   - Completing agent onboarding should collect agent data and set:
+     - agentProfileCompleted = true
+     - agentVerificationStatus = "pending" (or equivalent)
+   - Actual verified agent permissions must remain gated by existing verification logic.
+   - Do not expose agent-only confidential features until verification is complete.
+
+2. Redefine onboardingCompleted:
+   - onboardingCompleted should mean the user completed the onboarding flow for their chosen primary intent.
+   - It should NOT depend on all possible profile types being completed.
+   - Examples:
+     - buyer onboarding complete → onboardingCompleted = true
+     - homeowner onboarding complete → onboardingCompleted = true
+     - agent intake onboarding complete → onboardingCompleted = true, even if verification is still pending
+     - explorer selection → onboardingCompleted = true immediately
+
+3. Keep onboarding short and activation-focused.
+   - Buyer onboarding should stay minimal:
+     - budget
+     - preferred areas
+     - beds/baths
+     - timeline
+     - already have an agent?
+   - Homeowner onboarding should start with address first and auto-fill property data where possible.
+   - Avoid asking for unnecessary details early.
+
+4. currentMode should be treated as a UI preference, not a permissions field.
+   - Permissions should still come from role + verification state + existing routing rules.
+
+5. Onboarding guard should not be overly rigid.
+   - Propose the cleanest route-guard strategy so users are guided into onboarding without breaking consumer browsing UX.
+   - Consider whether some routes like search/property pages can remain accessible before full onboarding is complete.
+
+6. Preserve one universal account with multiple possible profile states:
+   - buyer profile
+   - homeowner/home record
+   - agent profile / verification intake
+
+Please rewrite the implementation plan with these changes and provide:
+- revised data model
+- revised onboarding logic
+- route guard behavior
+- completion logic
+- any schema changes
+- exact frontend pages/components to build

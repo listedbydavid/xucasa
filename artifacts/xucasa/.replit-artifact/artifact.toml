@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "xucasa"
+description = "Redfin-inspired real estate platform for browsing, searching, saving, and listing properties. Serves buyers, homeowners, and agents with features including property search with map view, saved properties, buyer profiles, agent CRM, showings, messaging, and home reports."
+version = "1.0.0"
+id = "artifacts/xucasa"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19503
+
+[services.development]
+run = "pnpm --filter @workspace/xucasa run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/xucasa", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/xucasa/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19503"
+BASE_PATH = "/"

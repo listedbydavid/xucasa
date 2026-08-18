@@ -1,0 +1,63 @@
+This is a single focused task. Do only this and nothing else.
+Fix these 4 exact locations in server/routes/tours.ts where req.body is destructured without Zod validation:
+Fix 1 — find the handler for POST /api/tours/progress/:pageKey and replace the body destructuring:
+typescript// Replace this pattern:
+const { currentStep, completed, skipped } = req.body || {};
+
+// With this:
+const schema = z.object({
+  currentStep: z.number().int().min(0).optional(),
+  completed: z.boolean().optional(),
+  skipped: z.boolean().optional(),
+});
+const parsed = schema.safeParse(req.body);
+if (!parsed.success) return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+const { currentStep, completed, skipped } = parsed.data;
+Fix 2 — find the handler for POST /api/tours/overrides and replace:
+typescript// Replace this pattern:
+const { pageKey, stepIndex, title, body, targetSelector, placement, sortOrder, isActive } = req.body || {};
+
+// With this:
+const schema = z.object({
+  pageKey: z.string().min(1),
+  stepIndex: z.number().int().min(0),
+  title: z.string().optional(),
+  body: z.string().optional(),
+  targetSelector: z.string().optional(),
+  placement: z.enum(['top', 'bottom', 'left', 'right']).optional(),
+  sortOrder: z.number().int().optional(),
+  isActive: z.boolean().optional(),
+});
+const parsed = schema.safeParse(req.body);
+if (!parsed.success) return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+const { pageKey, stepIndex, title, body, targetSelector, placement, sortOrder, isActive } = parsed.data;
+Fix 3 — find the handler for POST /api/tips/dismiss and replace:
+typescript// Replace this pattern:
+const { tipKey } = req.body || {};
+
+// With this:
+const schema = z.object({
+  tipKey: z.string().min(1).max(200),
+});
+const parsed = schema.safeParse(req.body);
+if (!parsed.success) return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+const { tipKey } = parsed.data;
+Fix 4 — find the handler for POST /api/changelog/viewed and replace:
+typescript// Replace this pattern:
+const { version } = req.body || {};
+
+// With this:
+const schema = z.object({
+  version: z.string().min(1).max(50),
+});
+const parsed = schema.safeParse(req.body);
+if (!parsed.success) return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+const { version } = parsed.data;
+Make sure z is imported at the top of server/routes/tours.ts. It should already be there — if not add: import { z } from 'zod';
+After all 4 fixes, run only these two checks:
+bash# Must be 0
+grep -rn "req\.body" server/routes/ --include="*.ts" | grep -v "safeParse\|\.parse\|Schema\|schema\|zod\|Zod" | grep -v node_modules | wc -l
+
+# Must be 0
+npx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+Show me both numbers. That's all — do not do anything else.

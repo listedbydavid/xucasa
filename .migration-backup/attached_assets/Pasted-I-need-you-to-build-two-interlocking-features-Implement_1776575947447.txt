@@ -1,0 +1,122 @@
+I need you to build two interlocking features. Implement everything below exactly as specified.
+
+Feature 1 — Guest swipe (no auth wall)
+Goal: Anonymous visitors can swipe freely. Swipes are not saved. When they try to save/favorite or swipe right, show an auth prompt instead of redirecting.
+Changes to client/src/pages/Swipe.tsx:
+A. Remove any route guard that redirects unauthenticated users away from /swipe. The page must render for everyone.
+B. Import useAuth and check isAuthenticated. When the user is not authenticated:
+
+Render the swipe card stack exactly as normal (same UI, same cards)
+On swipe right (or any "save" / "favorite" action), instead of calling the API, show the AuthPromptModal with this message:
+
+"Create a free account to save homes, see seller terms, and connect with an agent."
+
+
+On swipe left, just advance the card — no API call needed
+Do not show the shortlist button or any feature that requires persistence
+
+C. Update client/src/components/OnboardingGuard.tsx — remove /swipe from any list of protected routes that require authentication.
+
+Feature 2 — "Make Me Move" seller concessions
+Part A — Database schema (shared/schema.ts)
+Add a new table seller_concessions:
+typescriptexport const sellerConcessions = pgTable("seller_concessions", {
+  id: serial("id").primaryKey(),
+  propertyId: integer("property_id").references(() => properties.id).notNull(),
+  postedByUserId: varchar("posted_by_user_id").references(() => users.id).notNull(),
+  postedByRole: text("posted_by_role").notNull(), // "agent" or "seller"
+
+  // Concession types — all optional, at least one should be present
+  closingCostPercent: decimal("closing_cost_percent"), // e.g. 3.0 = 3%
+  closingCostFixed: integer("closing_cost_fixed"),     // e.g. 10000 = $10,000
+  rateBuydown: text("rate_buydown"),                   // e.g. "2-1 buydown"
+  assumableLoan: boolean("assumable_loan").default(false),
+  assumableLoanRate: decimal("assumable_loan_rate"),   // e.g. 2.75
+  assumableLoanBalance: integer("assumable_loan_balance"),
+  assumableLoanType: text("assumable_loan_type"),      // "FHA" | "VA" | "Conventional"
+  sellerCreditFixed: integer("seller_credit_fixed"),
+  flexibleMoveOut: boolean("flexible_move_out").default(false),
+  moveOutDays: integer("move_out_days"),               // days of flexibility
+  additionalTerms: text("additional_terms"),           // free text for anything else
+
+  // Display
+  headline: text("headline"),  // e.g. "Seller paying 3% closing costs"
+  isActive: boolean("is_active").default(true).notNull(),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+Part B — API endpoints (server/routes.ts)
+Add these endpoints:
+GET /api/properties/:id/concessions — public, no auth required
+
+Returns the active concession for a property or { concession: null } if none
+
+POST /api/properties/:id/concessions — requires auth
+
+Allowed if: caller is a verified agent OR caller is the homeowner (has a user_homes record for this property's address)
+Body: all fields from seller_concessions except id, propertyId, postedByUserId, postedByRole, createdAt, updatedAt
+Sets postedByRole automatically based on whether caller is agentVerified
+Deactivates any existing active concession for this property before inserting the new one (only one active concession per property at a time)
+Audit logs with executeWithAudit
+
+DELETE /api/properties/:id/concessions — requires auth
+
+Only the original poster or an admin can delete
+Sets isActive = false (soft delete)
+
+Part C — Swipe card UI (client/src/pages/Swipe.tsx and client/src/components/PropertyCard.tsx)
+Properties that have an active concession should show a distinct badge on their swipe card:
+
+A gold/amber pill in the top-left corner of the card that says "Seller Offering Terms"
+When a user (authenticated) swipes right on a property with a concession, show a modal BEFORE completing the swipe with:
+
+The concession headline
+A breakdown of what's being offered (closing costs, assumable loan details, rate buydown, etc.) — only show fields that are non-null/non-false
+A "Connect with agent about this home" button
+A "Continue swiping" button to dismiss and record the swipe normally
+
+
+When an unauthenticated user swipes right on a concession property, show the auth prompt with:
+
+"Create an account to see what this seller is offering and connect with an agent."
+
+
+
+Part D — Agent assignment fallback (server/routes.ts)
+Find the existing /api/buyer-interest POST handler (the swipe right upsert). Update the agent assignment logic:
+Currently it assigns an agent somehow — find that logic and add a fallback:
+
+If no agent is assigned through the normal flow, assign assignedAgentUserId = '55534280' (David Hussain's user ID)
+This is the platform default agent for unrepresented buyers
+Add a comment: // Platform default agent — David Hussain (david@xucasa.com)
+
+Part E — Offer gate (client/src/pages/Swipe.tsx or wherever the offer flow is triggered)
+When a buyer tries to submit an offer (clicks "Make Offer" or equivalent):
+
+Check if user.assignedAgentUserId is set
+If not: show a modal saying "You need an agent to make an offer. Would you like to work with [David Hussain] as your agent?" with an "Accept" button that calls POST /api/buyer-interest to trigger the assignment, and a "I have my own agent — invite them" button that opens the existing agent invite flow
+If yes: proceed to offer form normally
+
+Part F — Concession posting UI
+Create a new component client/src/components/ConcessionForm.tsx:
+
+A form with fields for all concession types
+Show/hide sections based on checkboxes: "Offering closing cost help", "Assumable loan available", "Rate buydown", "Flexible move-out", "Other terms"
+A preview section showing how the concession badge will appear on the listing
+On submit: POST to /api/properties/:id/concessions
+
+Wire this form into two places:
+
+Agent dashboard (AgentDashboard.tsx) — in the listings tab, add a "Add Seller Terms" button next to each listing the agent manages
+Homeowner dashboard (HomeReport.tsx or wherever homeowners manage their property) — add a "Post what I'm willing to offer" section
+
+
+Part G — Verification
+After all changes, please:
+
+Run npx drizzle-kit push --force </dev/null and show output
+Run node scripts/apply-safe-constraints.mjs and show output
+Run the TypeScript check: npx tsc --noEmit and show any new errors (pre-existing errors are acceptable, flag only new ones)
+Confirm the /swipe route is accessible without auth by describing what an unauthenticated user would see
+Show me the final schema definition for seller_concessions as it exists in shared/schema.ts

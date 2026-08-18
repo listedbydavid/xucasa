@@ -1,0 +1,110 @@
+I need a stricter, evidence-based audit of the test accounts you found.
+
+Your last answer was helpful, but it was still too high-level. I need you to prove exactly what these accounts are, how they got there, whether they are dangerous, and how to clean them up safely.
+
+Do not guess. Inspect the codebase and the current database state.
+
+I want the following:
+
+## 1. Exact account inventory
+List every suspicious / non-production-looking account currently in the database.
+
+For each account include:
+- user id
+- email
+- role
+- agentVerified
+- emailVerified
+- onboardingCompleted
+- currentMode
+- assignedAgentUserId
+- createdAt
+- updatedAt
+- whether passwordHash exists
+- whether the account appears active
+- whether the account appears to have any listings, messages, buyer_interest records, showings, offers, or saved data attached
+
+## 2. Origin analysis
+For EACH suspicious account, tell me:
+- whether it was likely created by:
+  - seed script
+  - automated test
+  - manual QA
+  - onboarding test
+  - auth flow
+  - unknown
+- what evidence supports that conclusion
+- exact file/function/script if code-created
+- whether it could still be created again in production by current code
+
+## 3. Login risk analysis
+For EACH suspicious account, tell me:
+- can it currently log in with email/password?
+- can it log in with Google SSO?
+- does it have any elevated permissions?
+- could it become admin through ADMIN_EMAIL?
+- could it affect assigned-agent fallback or agent routing?
+- risk severity: low / medium / high
+
+## 4. Production impact analysis
+Tell me whether these accounts can affect:
+- user search / admin user lists
+- messaging
+- agent assignment
+- lead routing
+- analytics
+- onboarding metrics
+- database clutter / performance
+- security exposure
+
+Be explicit.
+
+## 5. Code path audit
+Audit the codebase for any way these kinds of accounts get created.
+
+Specifically check:
+- seedDatabase or any startup seeding
+- test helpers
+- Playwright / Cypress / E2E utilities
+- onboarding tests
+- auth tests
+- scripts folder
+- any bootstrap logic
+- any environment-specific user creation
+- any route that can auto-create users with test-looking emails or IDs
+
+For each path found:
+- file
+- function
+- whether it can run in production
+- how to disable or gate it
+
+## 6. Safe cleanup plan
+I want a SAFE deletion plan, not just “delete them.”
+
+For each suspicious account:
+- whether it is safe to delete
+- whether related records need to be deleted first
+- what foreign-key or referential issues may exist
+- whether it should be disabled instead of deleted
+- whether it should be migrated / anonymized instead
+
+## 7. Exact cleanup deliverables
+Provide:
+- SQL queries to inspect the accounts and related data
+- SQL queries to disable them safely
+- SQL queries to delete them safely if appropriate
+- a recommended order of operations
+- a rollback precaution / backup recommendation before cleanup
+
+## 8. Final verdict
+Answer clearly:
+- are these test accounts a real production security risk?
+- are they mainly a data hygiene problem?
+- should they be removed immediately, disabled first, or left alone pending review?
+
+Important:
+- be specific
+- show evidence
+- do not reassure me without proof
+- if you are uncertain about anything, say exactly what is uncertain

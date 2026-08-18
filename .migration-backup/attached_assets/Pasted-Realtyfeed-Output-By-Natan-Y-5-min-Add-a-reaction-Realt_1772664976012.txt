@@ -1,0 +1,235 @@
+Realtyfeed Output
+
+
+
+By Natan Y.
+
+5 min
+
+Add a reaction
+RealtyFeed output is the default output of MLS Router till March 10, 2025. Clients who subscribed to the MLS Router before this date, can continue using this output format but we highly recommend to migrate to RESO output by writing to our support.
+
+After this date, all new subscriptions will be based on RESO Output.
+The RealtyFeed Output will be deprecated by the end of September 2025.
+
+Authentication
+To access the API, authentication and authorization is required. The API uses the OAuth2 Client Credentials flow for authentication. For more information, Check Authentication section.
+
+ 
+
+Reading the Metadata
+Once you've authenticated, the next step for building a client is finding out what data you can get out of the API. To do this, you query the metadata endpoint.
+
+
+
+GET https://api.realtyfeed.com/realtyfeed/odata/$metadata
+Now that we know what fields are available via the API, it's time to start fetching property data.
+
+Retrieving Data
+To retrieve data from the the API, please include the following headers in each request:
+
+Authorization: Set this header with the value "Bearer <access_token>" (replace <access_token> with the actual access token obtained during authentication).
+
+x-api-key: Include this header with the API key provided by Realtyna. (Optional)
+
+Origin: Include this header with the API key provided by Realtyna. (Optional)
+
+Referer: Include this header with the API key provided by Realtyna. (Optional)
+
+The endpoint structure of all search requests is:
+
+
+
+GET https://api.realtyfeed.com/realtyfeed/odata/{resource}
+Valid resource values include the names of the valid RESO resources: Property, Member, Office, PropertyRooms and OpenHouse.
+
+Sample for Property Search:
+
+
+
+https://api.realtyfeed.com/realtyfeed/odata/Property
+Media list is nested within the Property Resource. All the images are stored on our CDN. You may link directly to the CDN. 
+
+Thumbnail version of the images are available as well.
+
+Realtyfeed Output excludes any fields with null value from the payload to keep that as small as possible. To get all the fields, check Request Parameters section.
+
+ 
+
+By default, the API returns 20 records per query. If this is your first foray into the API, it will be enough for you to learn about the structure of the data that's returned.
+
+Parameter
+
+Description
+
+@odata.nextLink
+
+URI for getting the next set of records. Will only be present when there are more records to retrieve. 
+
+value           
+
+An array of objects. The data you came for.                                                            
+
+page_size
+
+Max number of returned records
+
+page_count
+
+Total number of pages to get all the records
+
+@odata.count
+
+Total number of the records
+
+While you look through the data you have pulled back, there is one field that you should pay special attention to: ListingKey. This field is the unique identifier for the Property record.
+
+ListingKey is the unique identifier for Property records
+
+Request Parameters
+The API supports the following parameters for search requests:
+
+Parameter
+
+Description
+
+$top
+
+To get more records per query, we use the $top parameter. If you want just one record, you can specify $top=1, or if you want one hundred, $top=100. (default is 20 - max value is 200) 
+
+$skip
+
+Use $skip to skip over a number of records. This is most useful in combination with $top to iterate over the results of a query. (default is 0)                                                                                 
+
+$select
+
+You can limit the fields you want with $select. For example, if you want just the ListingKey and the StandardStatus, you would use $select=ListingKey, StandardStatus
+
+API returns only important fields by default. use $select=ALL to get all the available fields.                                              
+
+$filter
+
+You can get specific records you want with the $filter. Check Searchable fields section.                                                                                                
+
+$expand
+
+Pull in data from related resources. For example, $expand=OpenHouse would retrieve associated Openhouses data.
+** Valid resources that can be expanded in the Property payload include: Media, OpenHouse, Member, and Office. **
+
+$apply
+
+to perform data transformation operations. Sample: $apply=groupby((CountyOrParish), (aggregate($count as ListingCount))) will return number of records in each available County
+
+$feature
+
+It’s a RealtyFeed exclusive parameter which will prioritize the response. 
+Sample: /Property?$filter=StandardStatus eq ‘Active'&$feature=ListAgentMlsId eq ‘1234' will return active listings and prioritize listings of agent# 1234 at the beginning of the response.
+
+The supported parameters can be combined as needed
+
+$filter
+The $filter system query option restricts the set of items returned. MLS Router supports a set of built-in filter operations, as described in this section:
+
+Operator
+
+Meaning
+
+Example
+
+eq
+
+Equal To
+
+ListingKey eq '123456'
+
+ne
+
+Not Equal To
+
+PropertyType ne 'Residential'
+
+gt
+
+Greater Than
+
+BedroomsTotal gt 3
+
+ge
+
+Greater Than or Equal To
+
+BathroomsTotalInteger ge 2
+
+lt
+
+Less Than
+
+ListPrice lt 350000
+
+le
+
+Less Than or Equal To
+
+LotSizeArea le 5
+
+and
+
+Both conditions are true
+
+BedroomsTotal eq 3 and BathroomsTotalInteger eq 2
+
+or
+
+Either condition is true
+
+BedroomsTotal ge 3 or BathroomsTotalInteger ge 3
+
+in
+
+Value is in List
+
+StandardStatus in ('Active', 'Pending')
+
+These operators can be combined to form very complex queries, e.g. ((ListPrice lt 300000 and LotSizeAcres lt 3) or (BedroomsTotal gt 4 and StandardStatus eq 'Active'))
+
+Working with strings in $filter:
+Strings are relatively straightforward in the API. They are always enclosed in single quotes (') and if you need a single quote in the string, you simply double it up, e.g. 'O''Brien'.
+
+In addition to all of the basic operators that you can use with strings, there is a function to help out as well:
+
+Function
+
+Description
+
+contains(haystack, 'needle')
+
+Returns response if needle is found in haystack
+
+Working with geo coordinates in $filter:
+Function
+
+Description
+
+geo.distance(Coordinates, POINT(-96.818747 32.928812)) lt 10km
+
+Returns property listings within geo distance of 10km from a specific point
+
+geo.intersects(Coordinates, POLYGON((lon1 lat1,lon2 lat2,lon3 lat3,...,lon1 lat1)))
+
+Returns property listings within a valid boundary
+
+Retrieving Single Record
+Use this endpoint to get details about a specific record:
+
+
+
+GET https://api.realtyfeed.com/realtyfeed/odata/{resource}('resource_id')
+The API returns record within the specified resource having a primary key value matching the provided resource_id. For example:
+
+Request
+
+
+
+GET https://api.realtyfeed.com/realtyfeed/odata/Property('ListingKey')
+or
+GET https://api.realtyfeed.com/realtyfeed/odata/Member('MemberKey')

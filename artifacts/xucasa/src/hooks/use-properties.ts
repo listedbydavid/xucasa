@@ -1,0 +1,174 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api, buildUrl } from "@/shared/routes";
+import queryString from "query-string";
+import type { SearchCriteria, PropertyResponse, CreatePropertyRequest, UpdatePropertyRequest } from "@/shared/schema";
+import { useToast } from "@/hooks/use-toast";
+
+export interface PaginatedProperties {
+  properties: PropertyResponse[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+// GET /api/properties
+export function useProperties(filters?: SearchCriteria & { isOffMarket?: 'true' | 'false'; maxSqft?: number; propertyType?: string; sort?: string; limit?: number; offset?: number }) {
+  return useQuery<PaginatedProperties>({
+    queryKey: [api.properties.list.path, filters],
+    queryFn: async () => {
+      const params = { ...filters, limit: filters?.limit || 50, offset: filters?.offset || 0 };
+      const url = `${api.properties.list.path}?${queryString.stringify(params)}`;
+        
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch properties");
+      return res.json();
+    },
+  });
+}
+
+// GET /api/properties/:id
+export function useProperty(id: number | null) {
+  return useQuery<PropertyResponse | null>({
+    queryKey: [api.properties.get.path, id],
+    queryFn: async () => {
+      if (!id) return null;
+      const url = buildUrl(api.properties.get.path, { id });
+      const res = await fetch(url, { credentials: "include" });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error("Failed to fetch property");
+      return res.json();
+    },
+    enabled: !!id,
+  });
+}
+
+async function throwOnError(res: Response, fallback: string) {
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || fallback);
+  }
+  return res.json();
+}
+
+// POST /api/properties
+export function useCreateProperty() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
+  return useMutation({
+    mutationFn: async (data: CreatePropertyRequest) => {
+      const res = await fetch(api.properties.create.path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      return throwOnError(res, "Failed to create property");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.properties.list.path] });
+      toast({ title: "Property Listed", description: "Your property is now live!" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Could not create listing", description: err.message, variant: "destructive" });
+    }
+  });
+}
+
+// PUT /api/properties/:id
+export function useUpdateProperty() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
+  return useMutation({
+    mutationFn: async ({ id, ...data }: { id: number } & UpdatePropertyRequest) => {
+      const url = buildUrl(api.properties.update.path, { id });
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      return throwOnError(res, "Failed to update property");
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [api.properties.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.properties.get.path, variables.id] });
+      toast({ title: "Property Updated", description: "Changes saved successfully." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Could not update listing", description: err.message, variant: "destructive" });
+    }
+  });
+}
+
+// DELETE /api/properties/:id
+export function useDeleteProperty() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const url = buildUrl(api.properties.delete.path, { id });
+      const res = await fetch(url, { method: "DELETE", credentials: "include" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || "Failed to delete property");
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.properties.list.path] });
+      toast({ title: "Property Deleted", description: "The listing has been removed." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  });
+}
+
+// ── Seller Concessions ────────────────────────────────────────────────
+export interface SellerConcessionData {
+  id: number;
+  propertyId: number;
+  postedByUserId: string;
+  postedByRole: string;
+  closingCostPercent: string | null;
+  closingCostFixed: number | null;
+  rateBuydown: string | null;
+  assumableLoan: boolean | null;
+  assumableLoanRate: string | null;
+  assumableLoanBalance: number | null;
+  assumableLoanType: string | null;
+  sellerCreditFixed: number | null;
+  flexibleMoveOut: boolean | null;
+  moveOutDays: number | null;
+  additionalTerms: string | null;
+  headline: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function useActiveConcessions() {
+  return useQuery<{ concessions: SellerConcessionData[] }>({
+    queryKey: ["/api/concessions/active"],
+    queryFn: async () => {
+      const res = await fetch("/api/concessions/active", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch concessions");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+}
+
+export function usePropertyConcession(propertyId: number | null | undefined) {
+  return useQuery<{ concession: SellerConcessionData | null }>({
+    queryKey: ["/api/properties", propertyId, "concessions"],
+    enabled: !!propertyId,
+    queryFn: async () => {
+      const res = await fetch(`/api/properties/${propertyId}/concessions`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch concession");
+      return res.json();
+    },
+  });
+}

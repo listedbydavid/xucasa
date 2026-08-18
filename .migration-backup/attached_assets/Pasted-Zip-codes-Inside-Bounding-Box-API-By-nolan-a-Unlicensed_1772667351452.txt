@@ -1,0 +1,129 @@
+Zip codes Inside Bounding Box API
+
+
+
+By nolan.a (Unlicensed)
+
+1 min
+
+Add a reaction
+Overview
+The Zipcodes Inside Bounding Box API retrieves information about zip codes that fall within a specified geographical bounding box. This API allows developers to obtain details about multiple zip codes within a given region.
+
+Base URL
+The base URL for the API is https://api.realtyfeed.com.
+
+Endpoint
+Zipcodes Inside the Bounding Box
+Endpoint
+POST /geo/zipcode/boundingbox
+
+Request Body
+bounding_box (object): The bounding box that defines the geographical area. It should include the top_left and bottom_right coordinates.
+
+Example:
+
+
+
+{
+  "top_left": {
+    "lat": 40,
+    "lon": -100
+  },
+  "bottom_right": {
+    "lat": 37,
+    "lon": -98
+  }
+}
+Response
+200 OK: Returns a JSON response containing information about zip codes within the specified bounding box.
+
+Example:
+
+
+
+[
+    {
+        "type": "Feature",
+        "properties": {
+            "OBJECTID": 22533,
+            "ZIP_CODE": "66932",
+            "PO_NAME": "Athol",
+            "STATE": "KS",
+            "POPULATION": 137,
+            "POP_SQMI": 3.51,
+            "SQMI": 39.08,
+            "Shape__Area": 171667477.707031,
+            "Shape__Length": 108413.884937072
+        },
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [-98.99156, 39.73729],
+                    [-98.991524, 39.741921],
+                    ...
+                ]
+            ]
+        }
+    },
+    ...
+]
+400 Bad Request: If an invalid bounding box is provided.
+
+404 Not Found: If no zipcodes are found within the specified bounding box.
+
+Example
+Request:
+
+
+
+POST /geo/zipcode/boundingbox
+{
+  "top_left": {
+    "lat": 40,
+    "lon": -100
+  },
+  "bottom_right": {
+    "lat": 37,
+    "lon": -98
+  }
+}
+Response:
+
+
+
+[
+    {
+        "type": "Feature",
+        "properties": {
+            "OBJECTID": 22533,
+            "ZIP_CODE": "66932",
+            "PO_NAME": "Athol",
+            "STATE": "KS",
+            "POPULATION": 137,
+            "POP_SQMI": 3.51,
+            "SQMI": 39.08,
+            "Shape__Area": 171667477.707031,
+            "Shape__Length": 108413.884937072
+        },
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [-98.99156, 39.73729],
+                    [-98.991524, 39.741921],
+                    ...
+                ]
+            ]
+        }
+    },
+    ...
+]
+Usage
+To use the Zipcodes Inside Bounding Box API, perform a POST request to the specified endpoint with the bounding box coordinates provided in the request body. The API will respond with information about zip codes within the specified bounding box.
+
+Error Handling
+400 Bad Request: If an invalid bounding box is provided, the API will respond with a 400 status code and an error message in the response body.
+
+404 Not Found: If no zipcodes are found within the specified bounding box, the API will respond with a 404 status code and an error message in the response body.

@@ -1,0 +1,156 @@
+RF Autocomplete
+
+
+
+By Andrew N.
+
+2 min
+
+Add a reaction
+RF Autocomplete API
+Overview
+The RF Autocomplete API returns prefix-based suggestions for common real-estate location fields (city, county, state, postal code, subdivision, area, street name, and unparsed address).
+Suggestions are scoped to your permitted MLS IDs, derived from your authentication context.
+
+Auth: Use the standard Realtyna Authentication header (see: 
+Authentication
+ ).
+The gateway validates Authorization: Bearer <access_token> and maps your identity to permitted MLS IDs.
+
+Default limit per field: 10 unique suggestions
+
+Matching: Prefix search on exact field values (deduplicated)
+
+Data source: Elasticsearch listings index (ES6)
+
+Usage & Access
+Usage plan: rf-autocomplete — available on Smart and higher tiers (“Smart and up”).
+
+Access is subject to your plan’s rate limits and MLS permissions.
+
+Base URL
+Production: https://api.realtyfeed.com
+
+Service prefix: /geo
+
+Module prefix: /autocomplete/suggestions
+
+Example path: https://api.realtyfeed.com/geo/autocomplete/suggestions
+
+Endpoint
+Get Autocomplete Suggestions
+GET /geo/autocomplete/suggestions
+
+Headers
+Authorization: Bearer <access_token> (required)
+
+Query Parameters
+q (string, required, min length = 1) — User input matched by prefix (e.g., q=new)
+
+Notes
+
+Results are returned for a fixed set of fields.
+
+Page/size is not configurable; the service returns up to 10 unique items per field.
+
+Supported Fields (buckets)
+StateOrProvince
+
+CountyOrParish
+
+City
+
+SubdivisionName
+
+MLSAreaMajor
+
+PostalCode
+
+StreetName
+
+UnparsedAddress
+
+Response
+200 OK
+
+
+{
+  "query": "new",
+  "results": {
+    "City": { "items": [], "total": 0 },
+    "CountyOrParish": { "items": [], "total": 0 },
+    "StateOrProvince": { "items": [], "total": 0 },
+    "PostalCode": { "items": [], "total": 0 },
+    "MLSAreaMajor": { "items": [], "total": 0 },
+    "UnparsedAddress": { "items": [], "total": 0 },
+    "StreetName": {
+      "items": [
+        { "key": "newburgh" },
+        { "key": "newton" },
+        { "key": "newell" },
+        { "key": "newlin" },
+        { "key": "new Avenue" },
+        { "key": "newland" },
+        { "key": "new york Avenue" },
+        { "key": "newport ave" }
+      ],
+      "total": 8
+    },
+    "SubdivisionName": { "items": [], "total": 0 }
+  }
+}
+Field schema
+
+
+
+{
+  "results": {
+    "<FieldName>": {
+      "items": [ { "key": "<suggested string>" }, ... ],
+      "total": <count>
+    }
+  }
+}
+Error Responses
+401 Unauthorized — Missing/invalid Authorization header
+
+404 Not Found — Authenticated user has no MLS access configured
+
+422 Unprocessable Entity — Validation error (e.g., missing q or too short)
+
+502 Bad Gateway — Downstream Elasticsearch error
+
+Examples
+Basic usage
+
+
+
+curl --location 'https://api.realtyfeed.com/geo/autocomplete/suggestions?q=new' \
+  --header 'Authorization: Bearer <access_token>'
+Numeric prefixes (postal codes)
+
+
+
+curl --location 'https://api.realtyfeed.com/geo/autocomplete/suggestions?q=100' \
+  --header 'Authorization: Bearer <access_token>'
+City prefix search
+
+
+
+curl --location 'https://api.realtyfeed.com/geo/autocomplete/suggestions?q=los' \
+  --header 'Authorization: Bearer <access_token>'
+Notes & Constraints
+Suggestions are filtered to your permitted MLS IDs (per auth context).
+
+Prefix matching is performed on exact (keyword) values as ingested; normalization can vary by MLS feed.
+
+CORS is open for this module.
+
+Operational dependencies (informational):
+
+Elasticsearch (ES6): index listings
+
+User MLS scoping via platform configuration/cache
+
+Change Log
+v1.0.0 — Initial release (8 fields, 10 results per field, MLS-scoped).

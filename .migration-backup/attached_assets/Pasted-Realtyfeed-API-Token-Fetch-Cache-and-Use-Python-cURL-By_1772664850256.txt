@@ -1,0 +1,240 @@
+Realtyfeed API Token: Fetch, Cache, and Use (Python + cURL)
+
+
+
+By abraham.gh
+
+4 min
+
+Add a reaction
+ 
+
+This guide shows a clean, reusable pattern to obtain a token from https://api.realtyfeed.com/v1/auth/token, cache it until it expires, and automatically use/refresh it for subsequent calls. It also includes minimal "one‑off" examples and a safe way to force‑generate a new token when necessary.
+
+Audience: Python developers and API integrators using Realtyfeed.
+
+Prereqs: Your client_id and client_secret.
+
+TL;DR (Python)
+
+
+import time
+import typing as t
+import requests
+AUTH_URL = "https://api.realtyfeed.com/v1/auth/token"
+class TokenAuth:
+    """
+    Handles fetching and refreshing OAuth-style bearer tokens from Realtyfeed.
+    Usage:
+        auth = TokenAuth(client_id="...", client_secret="...")
+        session = RealtyfeedSession(auth, origin="https://my-app.com")
+        r = session.get("https://api.realtyfeed.com/reso/odata/Property", params={"$top": 5})
+        print(r.json())
+    """
+    def __init__(self, client_id: str, client_secret: str, auth_url: str = AUTH_URL, skew: int = 60):
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.auth_url = auth_url
+        self._token: t.Optional[str] = None
+        self._token_type: str = "Bearer"
+        self._expires_at: float = 0.0
+        # Refresh a bit early to be safe
+        self._skew = max(0, skew)
+    def _fetch(self) -> None:
+        payload = {
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+        }
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        resp = requests.post(self.auth_url, headers=headers, data=payload, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+        # Expected payload: {"access_token":"...","expires_in":86400,"token_type":"Bearer"}
+        self._token = data["access_token"]
+        self._token_type = data.get("token_type", "Bearer")
+        expires_in = int(data.get("expires_in", 0))
+        # now + lifetime - skew
+        self._expires_at = time.time() + max(0, expires_in - self._skew)
+    def token(self) -> str:
+        if not self._token or time.time() >= self._expires_at:
+            self._fetch()
+        return self._token  # type: ignore[return-value]
+    def auth_header(self) -> str:
+        return f"{self._token_type} {self.token()}"
+class RealtyfeedSession(requests.Session):
+    """
+    requests.Session that injects Authorization and Origin headers.
+    Auto-refreshes token and retries once on 401/403.
+    """
+    def __init__(self, auth: TokenAuth, origin: t.Optional[str] = None):
+        super().__init__()
+        self.auth = auth
+        self.origin = origin
+    def _headers(self, headers: t.Optional[dict] = None) -> dict:
+        h = {} if headers is None else dict(headers)
+        h.setdefault("Authorization", self.auth.auth_header())
+        if self.origin:
+            h.setdefault("Origin", self.origin)
+        return h
+    def request(self, method, url, **kwargs):
+        # First attempt with current/valid token
+        kwargs["headers"] = self._headers(kwargs.get("headers"))
+        resp = super().request(method, url, **kwargs)
+        # If unauthorized/forbidden, refresh token and retry once
+        if resp.status_code in (401, 403):
+            self.auth._fetch()  # force refresh
+            kwargs["headers"] = self._headers(kwargs.get("headers"))
+            resp = super().request(method, url, **kwargs)
+        return resp
+if __name__ == "__main__":
+    CLIENT_ID = "YOUR_CLIENT_ID"
+    CLIENT_SECRET = "YOUR_CLIENT_SECRET"
+    auth = TokenAuth(client_id=CLIENT_ID, client_secret=CLIENT_SECRET)
+    session = RealtyfeedSession(auth, origin="https://my-app.com")
+    url = "https://api.realtyfeed.com/reso/odata/Property"
+    r = session.get(url, params={"$top": 5}, timeout=30)
+    r.raise_for_status()
+    print(r.json())
+Minimal Token Fetch (One‑Off)
+
+
+import requests
+url = "https://api.realtyfeed.com/v1/auth/token"
+payload = {"client_id": "YOUR_CLIENT_ID", "client_secret": "YOUR_CLIENT_SECRET"}
+headers = {"Content-Type": "application/x-www-form-urlencoded"}
+response = requests.post(url, headers=headers, data=payload, timeout=20)
+response.raise_for_status()
+data = response.json()
+print(data)  # {'access_token': '...', 'expires_in': 86400, 'token_type': 'Bearer'}
+Use the Token Manually in a Follow‑Up Request
+
+
+import requests
+# from previous step
+access_token = data["access_token"]
+token_type = data.get("token_type", "Bearer")
+headers = {
+    "Authorization": f"{token_type} {access_token}",
+    "Origin": "https://my-app.com",
+}
+r = requests.get("https://api.realtyfeed.com/reso/odata/Property", headers=headers, timeout=30)
+r.raise_for_status()
+print(r.json())
+ 
+
+cURL Examples
+Fetch Token
+
+
+
+curl -X POST \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "client_id=YOUR_CLIENT_ID" \
+  -d "client_secret=YOUR_CLIENT_SECRET" \
+  https://api.realtyfeed.com/v1/auth/token
+Call OData with Token
+
+
+
+TOKEN="<paste access_token here>"
+TYPE="Bearer"  # or use the returned token_type
+curl -X GET \
+  -H "Authorization: $TYPE $TOKEN" \
+  -H "Origin: https://my-app.com" \
+  "https://api.realtyfeed.com/reso/odata/Property?$top=5"
+Forcing a New Token (When Necessary)
+A token (or API key) can be restricted by origin (domain) and/or IP address to enhance security. If you configure restrictions in API Key Settings, every request must comply with those rules.
+
+If no restrictions are set, the key is valid from any origin or IP.
+
+If restrictions are defined, every request must match the configured allowed origins and/or allowed IPs.
+
+❌ Non‑compliant requests (origin/IP mismatch):
+
+The API returns 403 Forbidden.
+
+The token used in that request is blocked for one hour.
+
+While blocked, that token cannot be used for any requests. After one hour, it becomes valid again, but will be blocked again if requests are still non‑compliant.
+
+⚠️ If a token is blocked repeatedly, rotate it or request a new token via the authentication endpoint.
+
+See: API Key Settings (internal Confluence) for configuring allowed origins and IPs.
+
+If your token is blocked (403) or compromised, you may request a brand‑new token by passing the query parameter force_new_token=true to the token endpoint. This is rate‑limited (max 50 per day) and resets daily at 00:00 UTC.
+
+Python
+
+
+
+import requests
+url = "https://api.realtyfeed.com/v1/auth/token"
+params = {"force_new_token": "true"}  # query param
+payload = {
+    "client_id": "YOUR_CLIENT_ID",
+    "client_secret": "YOUR_CLIENT_SECRET",
+}
+headers = {"Content-Type": "application/x-www-form-urlencoded"}
+resp = requests.post(url, params=params, headers=headers, data=payload, timeout=20)
+resp.raise_for_status()
+print(resp.json())
+# {
+#   "access_token": "...",
+#   "expires_in": 86400,
+#   "token_type": "Bearer",
+#   "force_new_token_info": {
+#       "force_new_token_count": 2,
+#       "force_new_token_count_limit": 50,
+#       "force_new_token_count_reset_info": "force_new_token_count will be reset daily at 00:00 UTC"
+#   }
+# }
+cURL
+
+
+
+curl -X POST \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "client_id=YOUR_CLIENT_ID" \
+  -d "client_secret=YOUR_CLIENT_SECRET" \
+  "https://api.realtyfeed.com/v1/auth/token?force_new_token=true"
+Best Practice: Prefer the default /auth/token flow. Only use force_new_token=true (as a query parameter) for 403‑blocked or compromised tokens.
+
+Behavior & Defaults
+Token lifetime: expires_in is usually 86400 (24 hours).
+
+Auto‑refresh window: In the TokenAuth sample, refresh is attempted ~60 seconds before expiry (configurable via skew).
+
+Auto‑retry: The custom RealtyfeedSession retries once on 401/403 after a forced refresh.
+
+Required headers: Authorization: Bearer <token> and, where applicable, Origin: https://your-site.example.
+
+Security Notes
+Do not commit client_id/client_secret to source control.
+
+Load secrets with environment variables or a secrets manager (e.g., AWS Secrets Manager, Vault, Doppler).
+
+Prefer short timeouts and fail‑fast retry policies at the call‑site.
+
+Log token metadata only (never the raw token).
+
+Troubleshooting
+401 Unauthorized: Token missing/invalid. Ensure Authorization is Bearer <token> and the token hasn’t expired.
+
+403 Forbidden: Token blocked or insufficient scope. If revived attempts fail, consider force_new_token=true (respect the daily limit).
+
+Clock skew: If servers’ time is off, use a larger skew (e.g., 120–300 seconds) or sync time (NTP).
+
+CORS/Origin: Provide a valid Origin header when required by the endpoint.
+
+Timeouts: Increase client timeouts slightly or check network egress/firewall rules.
+
+Appendix: Packaging Tips
+Wrap TokenAuth and RealtyfeedSession in a small internal package (e.g., realtyfeed_auth) and reuse across services.
+
+Add unit tests that:
+
+mock the token endpoint,
+
+assert early refresh behavior,
+
+verify retry‑on‑401/403 logic.

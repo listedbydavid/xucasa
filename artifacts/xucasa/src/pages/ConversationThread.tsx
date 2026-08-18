@@ -1,0 +1,690 @@
+import { useState, useRef, useEffect, Fragment } from "react";
+import { useRoute, Link } from "wouter";
+import { usePageMeta } from "@/hooks/use-page-meta";
+import { useAuth } from "@/hooks/use-auth";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import {
+  ArrowLeft, Send, Loader2, MapPin, Calendar, Home,
+  MessageSquare, Eye, Clock, Check, X, Shield, DollarSign, AlertCircle,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+
+export default function ConversationThread({ adminMode = false, adminConversationId }: { adminMode?: boolean; adminConversationId?: number } = {}) {
+  usePageMeta({ title: 'Messages', noIndex: true });
+  const [, params] = useRoute("/conversations/:id");
+  const conversationId = adminConversationId || (params?.id ? parseInt(params.id) : null);
+  const { user, isAuthenticated } = useAuth();
+  const { toast } = useToast();
+  const [newMessage, setNewMessage] = useState("");
+  const [counterOfferId, setCounterOfferId] = useState<number | null>(null);
+  const [counterText, setCounterText] = useState("");
+  const [respondingOfferId, setRespondingOfferId] = useState<number | null>(null);
+  const [alternateShowingId, setAlternateShowingId] = useState<number | null>(null);
+  const [alternateDate, setAlternateDate] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const { data: adminData, isLoading: adminLoading } = useQuery<any>({
+    queryKey: ["/api/admin/conversations", conversationId],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/conversations/${conversationId}`);
+      if (!res.ok) throw new Error("Failed to fetch conversation");
+      return res.json();
+    },
+    enabled: adminMode && !!conversationId,
+  });
+
+  const { data: conversationData, isLoading: convoLoading } = useQuery<any>({
+    queryKey: ["/api/conversations", conversationId],
+    enabled: !adminMode && !!conversationId,
+  });
+
+  const { data: regularMessages = [], isLoading: msgsLoading } = useQuery<any[]>({
+    queryKey: ["/api/conversations", conversationId, "messages"],
+    queryFn: async () => {
+      const res = await fetch(`/api/conversations/${conversationId}/messages`);
+      if (!res.ok) throw new Error("Failed to fetch messages");
+      return res.json();
+    },
+    enabled: !adminMode && !!conversationId,
+    refetchInterval: 10000,
+  });
+
+  const conversation = adminMode ? adminData?.conversation : conversationData;
+  const messages = adminMode ? (adminData?.messages || []) : regularMessages;
+  const isLoadingConvo = adminMode ? adminLoading : convoLoading;
+  const isLoadingMsgs = adminMode ? adminLoading : msgsLoading;
+
+  const { data: showingRequests = [] } = useQuery<any[]>({
+    queryKey: ["/api/showing-requests"],
+    enabled: !adminMode && !!conversationId && isAuthenticated,
+  });
+
+  const offerIdsInMessages = messages
+    .filter((m: any) => m.type === "reverse_offer" && m.metadata?.offerId)
+    .map((m: any) => m.metadata.offerId as number);
+  const offerIdsKey = offerIdsInMessages.sort().join(",");
+
+  const { data: offerStatuses = {} } = useQuery<Record<number, string>>({
+    queryKey: ["/api/property-offers/statuses", offerIdsKey],
+    queryFn: async () => {
+      if (!offerIdsKey) return {};
+      const res = await fetch(`/api/property-offers/statuses?ids=${offerIdsKey}`);
+      if (!res.ok) return {};
+      return res.json();
+    },
+    enabled: !adminMode && !!offerIdsKey && isAuthenticated,
+    refetchInterval: 10000,
+  });
+
+  const showingMutation = useMutation({
+    mutationFn: async ({ id, status, confirmedDate }: { id: number; status: string; confirmedDate?: string }) => {
+      return apiRequest("PATCH", `/api/showing-requests/${id}`, { status, confirmedDate });
+    },
+    onSuccess: (_data, variables) => {
+      const labels: Record<string, string> = {
+        under_review: "Marked as under review",
+        sent_to_listing_agent: "Forwarded to listing agent",
+        confirmed: "Showing confirmed",
+        declined: "Showing declined",
+        alternate_proposed: "Alternate time proposed",
+        cancelled: "Showing cancelled",
+        completed: "Showing marked complete",
+      };
+      toast({ title: labels[variables.status] || "Status updated", description: "All parties have been notified." });
+      setAlternateShowingId(null);
+      setAlternateDate("");
+      queryClient.invalidateQueries({ queryKey: ["/api/showing-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversationId, "messages"] });
+    },
+    onError: () => {
+      toast({ title: "Action failed", description: "Could not update showing status. Please try again.", variant: "destructive" });
+    },
+  });
+
+  const offerResponseMutation = useMutation({
+    mutationFn: async ({ offerId, action, counterMessage }: { offerId: number; action: string; counterMessage?: string }) => {
+      setRespondingOfferId(offerId);
+      return apiRequest("POST", `/api/property-offers/${offerId}/buyer-response`, { action, counterMessage });
+    },
+    onSuccess: (_data, variables) => {
+      setCounterOfferId(null);
+      setCounterText("");
+      setRespondingOfferId(null);
+      const actionLabels: Record<string, string> = { counter: "Counter-offer sent", accept: "Offer accepted", decline: "Offer declined" };
+      toast({ title: actionLabels[variables.action] || "Response submitted", description: "All parties have been notified." });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversationId, "messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/property-offers/statuses", offerIdsKey] });
+    },
+    onError: (error: any) => {
+      setRespondingOfferId(null);
+      const msg = error?.message || "Failed to submit response. Please try again.";
+      toast({ title: "Action failed", description: msg, variant: "destructive" });
+      queryClient.invalidateQueries({ queryKey: ["/api/property-offers/statuses", offerIdsKey] });
+    },
+  });
+
+  const sendMutation = useMutation({
+    mutationFn: async (content: string) => {
+      return apiRequest("POST", `/api/conversations/${conversationId}/messages`, { content, type: "text" });
+    },
+    onSuccess: () => {
+      setNewMessage("");
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversationId, "messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+    },
+  });
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  useEffect(() => {
+    if (!adminMode && conversationId && isAuthenticated) {
+      apiRequest("PATCH", `/api/conversations/${conversationId}/read`).then(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversationId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/conversations/unread-count"] });
+      }).catch(() => {});
+    }
+  }, [conversationId, isAuthenticated, adminMode]);
+
+  if (!adminMode && !isAuthenticated) {
+    return (
+      <div className="min-h-[80vh] flex items-center justify-center">
+        <p className="text-muted-foreground">Please log in to view conversations.</p>
+      </div>
+    );
+  }
+
+  if (isLoadingConvo || isLoadingMsgs) {
+    return (
+      <div className="min-h-[80vh] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!conversation) {
+    return (
+      <div className="min-h-[80vh] flex flex-col items-center justify-center gap-4">
+        <p className="text-muted-foreground">Conversation not found.</p>
+        {!adminMode && (
+          <Link href="/dashboard?section=messages" className="text-primary font-bold">
+            Back to Messages
+          </Link>
+        )}
+      </div>
+    );
+  }
+
+  const isAdminMode = adminMode || (user?.role === "admin" && conversation.buyerUserId !== user?.id && conversation.agentUserId !== user?.id);
+  const isAgentCoordination = conversation.type === "agent_coordination";
+  const isBuyerSlot = conversation.buyerUserId === user?.id;
+  const isBuyer = isBuyerSlot && !isAgentCoordination && !isAdminMode;
+
+  const otherParty = isAgentCoordination 
+    ? (isBuyerSlot ? conversation.agent : conversation.buyer)
+    : (isBuyer ? conversation.agent : conversation.buyer);
+
+  const otherName = isAdminMode
+    ? `${conversation.buyer?.firstName || "Buyer"} & ${conversation.agent?.firstName || "Agent"}`
+    : otherParty?.firstName
+      ? `${otherParty.firstName} ${otherParty.lastName || ""}`.trim()
+      : otherParty?.email || "Unknown";
+
+  const property = conversation.property;
+
+  const threadLabel = isAdminMode
+    ? `Admin View · ${otherName}`
+    : isAgentCoordination
+      ? `Agent Coordination · ${otherName}`
+      : isBuyer ? `Your Agent · ${otherName}` : `Buyer · ${otherName}`;
+
+  const backHref = isAdminMode
+    ? "/admin"
+    : isBuyer
+      ? "/dashboard?section=messages"
+      : "/agent?tab=messages";
+
+  const handleSend = () => {
+    const trimmed = newMessage.trim();
+    if (!trimmed) return;
+    sendMutation.mutate(trimmed);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const lastReadAt = isBuyerSlot ? conversation.buyerLastReadAt : conversation.agentLastReadAt;
+  const lastReadTime = lastReadAt ? new Date(lastReadAt).getTime() : null;
+  let unreadSeparatorShown = false;
+
+  function renderMessage(msg: any) {
+    const isMe = !isAdminMode && msg.senderUserId === user?.id;
+    const senderName = msg.sender?.firstName || msg.sender?.email?.split("@")[0] || "User";
+    const isSystem = msg.type === "system";
+    const isShowingRequest = msg.type === "showing_request";
+    const isReverseOffer = msg.type === "reverse_offer";
+    if (isSystem) {
+      return (
+        <div key={msg.id} className="text-center">
+          <span className="inline-block bg-muted text-muted-foreground text-xs px-3 py-1 rounded-full">
+            {msg.content}
+          </span>
+        </div>
+      );
+    }
+
+    if (isShowingRequest) {
+      const showingReqId = msg.metadata?.showingRequestId;
+      const matchedShowing = showingReqId ? showingRequests.find((s: any) => s.id === showingReqId) : null;
+      const showingStatus = matchedShowing?.status || "requested";
+      const isAgentViewer = !isBuyer && !isAdminMode;
+      const isCoordinationThread = conversation?.type === "agent_coordination";
+
+      const assignedAgentCanAct = isAgentViewer && !isCoordinationThread && ["requested"].includes(showingStatus);
+      const listingAgentCanAct = isAgentViewer && isCoordinationThread && ["sent_to_listing_agent"].includes(showingStatus);
+      const assignedAgentCanForward = isAgentViewer && !isCoordinationThread && showingStatus === "under_review";
+      const isDualRoleCanConfirm = isAgentViewer && !isCoordinationThread && showingStatus === "sent_to_listing_agent" && conversation?.property?.agentId === user?.id;
+
+      const statusColors: Record<string, string> = {
+        requested: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+        under_review: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+        sent_to_listing_agent: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+        confirmed: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+        alternate_proposed: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+        declined: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+        completed: "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400",
+        cancelled: "bg-gray-100 text-gray-500 dark:bg-gray-900/30 dark:text-gray-400",
+      };
+
+      const statusLabels: Record<string, string> = {
+        requested: "Requested",
+        under_review: "Under Review",
+        sent_to_listing_agent: "Sent to Listing Agent",
+        confirmed: "Confirmed",
+        alternate_proposed: "Alternate Proposed",
+        declined: "Declined",
+        completed: "Completed",
+        cancelled: "Cancelled",
+      };
+
+      const buyerCanCancel = isBuyer && !isAdminMode && ["requested", "under_review", "sent_to_listing_agent"].includes(showingStatus);
+      const isAlternating = alternateShowingId === showingReqId;
+
+      return (
+        <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+          <div className={`max-w-[80%] rounded-2xl px-4 py-3 border-2 border-blue-400/30 ${isMe ? "bg-primary text-primary-foreground" : "bg-blue-50 dark:bg-blue-900/20 text-foreground"}`} data-testid={`message-${msg.id}`}>
+            <div className="flex items-center gap-1.5 mb-1">
+              <Calendar className="w-3.5 h-3.5" />
+              <span className="text-xs font-bold">Showing Request</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ml-1 ${statusColors[showingStatus] || "bg-gray-100 text-gray-700"}`}>
+                {statusLabels[showingStatus] || showingStatus.replace(/_/g, " ")}
+              </span>
+            </div>
+            <p className="text-sm">{msg.content}</p>
+            {assignedAgentCanAct && (
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={() => showingMutation.mutate({ id: showingReqId, status: "under_review" })}
+                  disabled={showingMutation.isPending}
+                  className="flex items-center gap-1 bg-blue-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                  data-testid={`button-review-showing-${showingReqId}`}
+                >
+                  {showingMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                  Review
+                </button>
+              </div>
+            )}
+            {assignedAgentCanForward && (
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={() => showingMutation.mutate({ id: showingReqId, status: "sent_to_listing_agent" })}
+                  disabled={showingMutation.isPending}
+                  className="flex items-center gap-1 bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                  data-testid={`button-forward-showing-${showingReqId}`}
+                >
+                  {showingMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                  Forward to Listing Agent
+                </button>
+              </div>
+            )}
+            {isDualRoleCanConfirm && (
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={() => showingMutation.mutate({ id: showingReqId, status: "confirmed", confirmedDate: msg.metadata?.requestedDates?.[0] })}
+                  disabled={showingMutation.isPending}
+                  className="flex items-center gap-1 bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                  data-testid={`button-confirm-showing-dual-${showingReqId}`}
+                >
+                  {showingMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                  Confirm Showing
+                </button>
+                <button
+                  onClick={() => showingMutation.mutate({ id: showingReqId, status: "declined" })}
+                  disabled={showingMutation.isPending}
+                  className="flex items-center gap-1 bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                  data-testid={`button-decline-showing-dual-${showingReqId}`}
+                >
+                  <X className="w-3 h-3" />
+                  Decline
+                </button>
+              </div>
+            )}
+            {listingAgentCanAct && !isAlternating && (
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={() => showingMutation.mutate({ id: showingReqId, status: "confirmed", confirmedDate: msg.metadata?.requestedDates?.[0] })}
+                  disabled={showingMutation.isPending}
+                  className="flex items-center gap-1 bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                  data-testid={`button-confirm-showing-${showingReqId}`}
+                >
+                  {showingMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                  Confirm
+                </button>
+                <button
+                  onClick={() => setAlternateShowingId(showingReqId)}
+                  disabled={showingMutation.isPending}
+                  className="flex items-center gap-1 bg-orange-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                  data-testid={`button-alternate-showing-${showingReqId}`}
+                >
+                  <Clock className="w-3 h-3" />
+                  Propose Alternate
+                </button>
+                <button
+                  onClick={() => showingMutation.mutate({ id: showingReqId, status: "declined" })}
+                  disabled={showingMutation.isPending}
+                  className="flex items-center gap-1 bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                  data-testid={`button-decline-showing-${showingReqId}`}
+                >
+                  <X className="w-3 h-3" />
+                  Decline
+                </button>
+              </div>
+            )}
+            {isAlternating && (
+              <div className="mt-2 space-y-2">
+                <label className="text-xs font-bold">Propose a different date:</label>
+                <input
+                  type="date"
+                  value={alternateDate}
+                  onChange={e => setAlternateDate(e.target.value)}
+                  className="w-full bg-white dark:bg-gray-800 border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/50 text-foreground"
+                  data-testid={`input-alternate-date-${showingReqId}`}
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (alternateDate) {
+                        showingMutation.mutate({ id: showingReqId, status: "alternate_proposed", confirmedDate: alternateDate });
+                      }
+                    }}
+                    disabled={!alternateDate || showingMutation.isPending}
+                    className="flex items-center gap-1 bg-orange-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-40"
+                    data-testid={`button-submit-alternate-${showingReqId}`}
+                  >
+                    {showingMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                    Send Alternate
+                  </button>
+                  <button
+                    onClick={() => { setAlternateShowingId(null); setAlternateDate(""); }}
+                    className="text-xs text-muted-foreground hover:text-foreground px-2 py-1.5"
+                    data-testid={`button-cancel-alternate-${showingReqId}`}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {buyerCanCancel && (
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={() => showingMutation.mutate({ id: showingReqId, status: "cancelled" })}
+                  disabled={showingMutation.isPending}
+                  className="flex items-center gap-1 text-muted-foreground hover:text-destructive text-xs font-semibold px-3 py-1.5 rounded-lg border border-border hover:border-destructive/30 transition-all active:scale-95 disabled:opacity-50"
+                  data-testid={`button-cancel-showing-${showingReqId}`}
+                >
+                  <X className="w-3 h-3" />
+                  Cancel Request
+                </button>
+              </div>
+            )}
+            <p className={`text-xs mt-1 ${isMe ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
+              {new Date(msg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (isReverseOffer) {
+      const offerId = msg.metadata?.offerId;
+      const offerStatus = offerId ? (offerStatuses as Record<number, string>)[offerId] : null;
+      const isActionable = offerStatus === "sent_to_buyer" || offerStatus === "viewed";
+      const isRespondingToThis = respondingOfferId === offerId && offerResponseMutation.isPending;
+      const canBuyerRespond = isBuyer && !isMe && offerId && isActionable && !isRespondingToThis;
+      const isCounteringThis = counterOfferId === offerId;
+
+      const offerStatusColors: Record<string, string> = {
+        pending_agent_review: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+        sent_to_buyer: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+        viewed: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+        accepted: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+        declined: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+        countered: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+        rejected: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+        expired: "bg-gray-100 text-gray-500 dark:bg-gray-900/30 dark:text-gray-400",
+        pending_admin: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+      };
+
+      const offerStatusLabels: Record<string, string> = {
+        pending_agent_review: "Pending Review",
+        sent_to_buyer: "Awaiting Response",
+        viewed: "Awaiting Response",
+        accepted: "Accepted",
+        declined: "Declined",
+        countered: "Countered",
+        rejected: "Rejected",
+        expired: "Expired",
+        pending_admin: "Pending Admin",
+      };
+
+      return (
+        <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+          <div className={`max-w-[80%] rounded-2xl px-4 py-3 border-2 border-amber-400/40 ${isMe ? "bg-amber-600 text-white" : "bg-amber-50 dark:bg-amber-900/20 text-foreground"}`} data-testid={`message-${msg.id}`}>
+            <div className="flex items-center gap-1.5 mb-1">
+              <DollarSign className="w-3.5 h-3.5" />
+              <span className="text-xs font-bold">Reverse Offer</span>
+              {offerStatus && (
+                <span
+                  className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ml-1 ${offerStatusColors[offerStatus] || "bg-gray-100 text-gray-700"}`}
+                  data-testid={`badge-offer-status-${offerId}`}
+                >
+                  {offerStatusLabels[offerStatus] || offerStatus.replace(/_/g, " ")}
+                </span>
+              )}
+            </div>
+            <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+            {isRespondingToThis && (
+              <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground" data-testid={`offer-responding-${offerId}`}>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Submitting your response...</span>
+              </div>
+            )}
+            {canBuyerRespond && !isCounteringThis && (
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={() => offerResponseMutation.mutate({ offerId, action: "accept" })}
+                  disabled={offerResponseMutation.isPending}
+                  className="flex items-center gap-1 bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                  data-testid={`button-accept-offer-${offerId}`}
+                >
+                  <Check className="w-3 h-3" />
+                  Accept
+                </button>
+                <button
+                  onClick={() => offerResponseMutation.mutate({ offerId, action: "decline" })}
+                  disabled={offerResponseMutation.isPending}
+                  className="flex items-center gap-1 bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                  data-testid={`button-decline-offer-${offerId}`}
+                >
+                  <X className="w-3 h-3" />
+                  Decline
+                </button>
+                <button
+                  onClick={() => setCounterOfferId(offerId)}
+                  disabled={offerResponseMutation.isPending}
+                  className="flex items-center gap-1 bg-amber-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                  data-testid={`button-counter-offer-${offerId}`}
+                >
+                  <MessageSquare className="w-3 h-3" />
+                  Counter
+                </button>
+              </div>
+            )}
+            {offerStatus && !isActionable && !isCounteringThis && offerId && (
+              <div className="mt-2" data-testid={`offer-resolved-${offerId}`}>
+                {offerStatus === "accepted" && (
+                  <p className="text-xs font-semibold text-green-700 dark:text-green-400 flex items-center gap-1">
+                    <Check className="w-3 h-3" /> You accepted this offer
+                  </p>
+                )}
+                {offerStatus === "declined" && (
+                  <p className="text-xs font-semibold text-red-700 dark:text-red-400 flex items-center gap-1">
+                    <X className="w-3 h-3" /> You declined this offer
+                  </p>
+                )}
+                {offerStatus === "countered" && (
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                    <MessageSquare className="w-3 h-3" /> You counter-offered
+                  </p>
+                )}
+              </div>
+            )}
+            {isCounteringThis && (
+              <div className="mt-2 space-y-2">
+                <textarea
+                  value={counterText}
+                  onChange={e => setCounterText(e.target.value)}
+                  placeholder="Describe your counter-offer..."
+                  rows={2}
+                  className="w-full bg-white dark:bg-gray-800 border border-amber-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-amber-400/50 text-foreground"
+                  data-testid={`input-counter-offer-${offerId}`}
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (counterText.trim()) {
+                        offerResponseMutation.mutate({ offerId, action: "counter", counterMessage: counterText.trim() });
+                      }
+                    }}
+                    disabled={!counterText.trim() || offerResponseMutation.isPending}
+                    className="flex items-center gap-1 bg-amber-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-40"
+                    data-testid={`button-submit-counter-${offerId}`}
+                  >
+                    {offerResponseMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                    Send Counter
+                  </button>
+                  <button
+                    onClick={() => { setCounterOfferId(null); setCounterText(""); }}
+                    className="text-xs text-muted-foreground hover:text-foreground px-2 py-1.5"
+                    data-testid={`button-cancel-counter-${offerId}`}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            <p className={`text-xs mt-1 ${isMe ? "text-white/60" : "text-muted-foreground"}`}>
+              {new Date(msg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+        <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${isMe ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`} data-testid={`message-${msg.id}`}>
+          {!isMe && (
+            <p className="text-xs font-bold mb-0.5 text-foreground">{senderName}</p>
+          )}
+          <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+          <p className={`text-xs mt-1 ${isMe ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
+            {new Date(msg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex flex-col ${isAdminMode ? "h-[70vh]" : "h-[calc(100vh-64px)]"} max-w-4xl mx-auto`} data-testid="conversation-thread">
+      {isAdminMode && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center gap-2" data-testid="admin-view-banner">
+          <Shield className="w-4 h-4 text-amber-700" />
+          <span className="text-sm font-bold text-amber-800">Admin View — Read Only</span>
+        </div>
+      )}
+
+      <div className="bg-card border-b border-border px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
+        <Link href={backHref} className="p-2 hover:bg-muted rounded-lg transition-colors" data-testid="button-back">
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-foreground truncate" data-testid="text-other-party">{threadLabel}</p>
+          <div className="flex items-center gap-1 text-xs text-muted-foreground truncate">
+            <Home className="w-3 h-3 flex-shrink-0" />
+            <span className="truncate">{property?.title || "Property"}</span>
+            {isAgentCoordination && (
+              <span className="ml-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-[10px] px-1.5 py-0.5 rounded-full font-bold">Agent-to-Agent</span>
+            )}
+          </div>
+        </div>
+        {property?.id && (
+          <Link
+            href={`/property/${property.id}`}
+            className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-primary hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors"
+            data-testid="link-view-property"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            View Listing
+          </Link>
+        )}
+      </div>
+
+      {property && (
+        <div className="bg-muted/50 border-b border-border px-4 py-2 flex items-center gap-3">
+          {property.imageUrl && (
+            <img src={property.imageUrl} alt={property.title} className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+          )}
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-foreground truncate">${property.price?.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+              <MapPin className="w-3 h-3 flex-shrink-0" />
+              {property.location || property.title}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3" data-testid="messages-container">
+        {messages.length === 0 && (
+          <div className="text-center py-12 text-muted-foreground">
+            <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-30" />
+            <p className="text-sm">No messages yet. {!isAdminMode && "Start the conversation!"}</p>
+          </div>
+        )}
+        {messages.map((msg: any) => {
+          const msgTime = new Date(msg.createdAt).getTime();
+          const showUnreadSep = !isAdminMode && !unreadSeparatorShown && lastReadTime && msgTime > lastReadTime && msg.senderUserId !== user?.id;
+          if (showUnreadSep) unreadSeparatorShown = true;
+          return (
+            <Fragment key={msg.id}>
+              {showUnreadSep && (
+                <div className="flex items-center gap-3 py-1" data-testid="unread-separator">
+                  <div className="flex-1 h-px bg-destructive/40" />
+                  <span className="text-xs font-bold text-destructive/70">New messages</span>
+                  <div className="flex-1 h-px bg-destructive/40" />
+                </div>
+              )}
+              {renderMessage(msg)}
+            </Fragment>
+          );
+        })}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {!isAdminMode && (
+        <div className="bg-card border-t border-border px-4 py-3 safe-bottom" data-testid="message-input-area">
+          <div className="flex items-end gap-2 max-w-3xl mx-auto">
+            <textarea
+              ref={inputRef}
+              value={newMessage}
+              onChange={e => setNewMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type a message..."
+              rows={1}
+              className="flex-1 bg-muted border border-border rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 max-h-32"
+              data-testid="input-message"
+            />
+            <button
+              onClick={handleSend}
+              disabled={!newMessage.trim() || sendMutation.isPending}
+              className="flex items-center justify-center w-10 h-10 bg-primary text-primary-foreground rounded-xl transition-all active:scale-95 disabled:opacity-40"
+              data-testid="button-send-message"
+            >
+              {sendMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

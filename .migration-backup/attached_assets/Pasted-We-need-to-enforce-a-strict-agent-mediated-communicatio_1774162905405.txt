@@ -1,0 +1,187 @@
+We need to enforce a strict agent-mediated communication model across the entire platform.
+
+CRITICAL RULE:
+Buyers and homeowners/sellers must NEVER communicate directly with each other inside the platform.
+
+All communication must be routed through a licensed real estate agent.
+
+---
+
+## 1. Communication Rules
+
+Define the only allowed communication pathways:
+
+- buyer ↔ buyer's agent
+- buyer's agent ↔ listing agent
+- listing agent ↔ seller (outside platform or future extension)
+
+Disallowed:
+- buyer ↔ homeowner direct messaging
+- buyer ↔ seller pitch direct messaging
+- any direct buyer-to-buyer or seller-to-seller communication
+
+---
+
+## 2. Agent Assignment Logic
+
+Every buyer must have an assigned agent before they can:
+
+- send messages
+- request showings
+- request info
+- ask questions
+
+If a buyer does NOT have an agent:
+
+- automatically assign them to the platform default agent (the platform owner)
+- store this as assignedAgentUserId on the user or buyer profile
+
+If a buyer invites or links an agent:
+- assignedAgentUserId updates to that agent
+
+---
+
+## 3. Conversation Routing
+
+When a buyer takes an action:
+
+- do NOT create a conversation between buyer and listing agent
+- instead create:
+
+buyer ↔ assignedAgent
+
+Then:
+
+assignedAgent ↔ listingAgent
+
+This can be implemented in two ways (choose the cleanest approach):
+
+Option A (simpler V1):
+- buyer messages go to assigned agent only
+- assigned agent is responsible for contacting listing agent outside platform
+
+Option B (preferred structured approach):
+- create two linked conversations:
+  1. buyer ↔ assigned agent
+  2. assigned agent ↔ listing agent
+- do NOT expose listing agent conversation to buyer directly
+
+---
+
+## 4. Property Actions Flow
+
+For all CTAs:
+
+### Request Showing
+- buyer submits request
+- request goes to assigned agent
+- assigned agent handles coordination with listing agent
+
+### Request Info / Ask Question
+- goes to assigned agent
+- assigned agent can forward or respond
+
+### Swipe Right
+- creates buyer_interest
+- NOTIFIES assigned agent (not listing agent directly)
+- assigned agent decides next step
+
+---
+
+## 5. Buyer Interest Model Update
+
+Update buyer_interest to include:
+
+- assignedAgentUserId (required)
+- listingAgentUserId (if known)
+
+All workflows should respect this structure.
+
+---
+
+## 6. UI / UX Enforcement
+
+Buyers should NEVER see:
+
+- "Message Listing Agent"
+- "Contact Seller"
+
+Instead show:
+
+- "Message Your Agent"
+- "Request Showing Through Your Agent"
+
+If buyer has no agent:
+
+- show:
+  "You’ll be connected with an agent to move forward"
+- then auto-assign platform agent
+
+---
+
+## 7. Agent Dashboard Adjustments
+
+Assigned agents should see:
+
+- all buyer_interest records for their clients
+- all messages from their assigned buyers
+- all showing requests initiated by their buyers
+
+Listing agents should ONLY see:
+
+- communication from other agents (not direct buyers)
+
+---
+
+## 8. API Enforcement
+
+At the API level:
+
+- block any attempt to create a conversation between:
+  buyer ↔ listing agent
+  buyer ↔ seller
+
+- enforce that:
+  conversation participants must follow allowed roles
+
+Return error if violated.
+
+---
+
+## 9. Data Model Adjustments
+
+Ensure:
+
+users table or buyer_profiles includes:
+- assignedAgentUserId
+
+buyer_interest includes:
+- assignedAgentUserId
+- listingAgentUserId
+
+conversations include:
+- participant roles validated before creation
+
+---
+
+## 10. Admin Override
+
+Admin (platform owner) should be able to:
+
+- act as assigned agent for unrepresented buyers
+- view all communication
+- reassign buyers to different agents if needed
+
+---
+
+## Deliverables
+
+1. Updated schema
+2. Updated API validation logic
+3. Updated conversation creation rules
+4. Updated UI flows for buyer actions
+5. Clear explanation of how routing works end-to-end
+
+Important:
+This is a strict rule and must be enforced across all layers of the system.
+Do not allow edge cases that bypass agent mediation.

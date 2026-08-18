@@ -1,0 +1,208 @@
+We need to finish and harden the onboarding routing behavior in xucasa.
+
+Important context:
+- We already have a post-signup onboarding router concept
+- We use one universal account, not separate account systems
+- Users should be routed by intent:
+  - buyer
+  - homeowner
+  - agent
+  - explorer
+- Permissions must remain separate from intent
+- Agent intent must NOT automatically grant verified agent-only access
+- The app should feel simple for buyers and powerful for agents
+
+Build this with the mindset of a top-tier consumer real estate web app:
+- fast activation
+- minimal confusion
+- role-appropriate routing
+- no broken loops
+- no unnecessary friction
+
+--------------------------------------------------
+GOALS
+--------------------------------------------------
+
+1. New users should be routed into the correct onboarding flow immediately after signup/login if onboarding is not complete
+
+2. Returning users should land in the correct destination based on:
+- onboardingCompleted
+- primaryIntent
+- currentMode
+- verification state where relevant
+
+3. Buyers should get into the app fast
+4. Homeowners should get into My Home / Home Report fast
+5. Agent-intent users should start agent setup without prematurely getting verified-agent permissions
+6. Explorers should be able to browse with minimal friction
+
+--------------------------------------------------
+REQUIREMENTS
+--------------------------------------------------
+
+## 1. Audit current onboarding behavior first
+Before changing anything, inspect the current codebase and tell me:
+
+- what onboarding fields currently exist on the user model
+- how onboardingCompleted is currently set
+- what routes/pages currently participate in onboarding
+- what happens today after:
+  - Google signup
+  - email/password signup
+  - login for an incomplete user
+  - login for a completed user
+- whether onboarding guard logic already exists
+- whether current redirects are happening in:
+  - AuthPage
+  - use-auth hook
+  - App routing
+  - dashboard page
+  - any route wrappers / guards
+
+Then recommend the smallest cleanest set of changes needed to make routing behavior correct and predictable.
+
+## 2. Define final onboarding routing rules
+I want explicit routing rules for these cases:
+
+### New user after signup
+- no onboarding completed
+- route to /onboarding
+
+### Buyer-intent user
+- after buyer onboarding complete → route to /swipe or /search (recommend best default)
+- currentMode should become buyer
+
+### Homeowner-intent user
+- after homeowner onboarding complete → route to /home-report or My Home (recommend best default)
+- currentMode should become homeowner
+
+### Agent-intent user
+- after agent onboarding intake complete → onboardingCompleted = true
+- route to /agent
+- but DO NOT grant confidential/verified-agent-only features unless verification state allows it
+- if verification is pending, the UI should explain what is available now vs after verification
+- currentMode should become agent
+
+### Explorer-intent user
+- onboardingCompleted = true immediately
+- route to /swipe or /search (recommend best default)
+- currentMode should become explorer
+
+### Returning users
+Define where they should land based on:
+- onboardingCompleted
+- primaryIntent
+- currentMode
+- whether they manually switched modes later
+- whether they are agent-intent but still unverified
+
+## 3. Keep intent separate from permissions
+This is critical.
+
+Do NOT conflate:
+- buyer/homeowner/agent/explorer intent
+with
+- user/verified agent/admin permissions
+
+I want you to explicitly preserve:
+- role-based access control
+- verified agent gating for confidential agent-only information
+- admin access
+
+Agent onboarding should only:
+- collect agent profile data
+- mark agentProfileCompleted
+- set agentVerificationStatus appropriately
+- set currentMode = "agent"
+It should NOT automatically expose protected agent-only features if the user is not verified.
+
+## 4. Route guard behavior
+Design and implement the correct guard behavior.
+
+I want a clean answer to:
+- which routes require onboardingCompleted = true
+- which routes can remain accessible before full onboarding
+- how incomplete users are redirected without making the app feel broken
+
+Recommend a clean route policy for:
+- /auth
+- /onboarding
+- /search
+- /swipe
+- /property/:id
+- /dashboard
+- /agent
+- /admin
+- /home-report
+
+I want a practical, consumer-friendly policy.
+Do not over-restrict browsing if it hurts UX.
+
+## 5. Onboarding completion logic
+Redefine and enforce:
+- onboardingCompleted means the user completed the onboarding flow for their chosen primary intent
+- it does NOT mean all profile types are completed
+
+Examples:
+- buyer onboarding finished → onboardingCompleted = true
+- homeowner onboarding finished → onboardingCompleted = true
+- agent intake onboarding finished → onboardingCompleted = true, even if verification is pending
+- explorer selected → onboardingCompleted = true immediately
+
+Make sure this logic is implemented consistently across all onboarding endpoints.
+
+## 6. Re-entry and mode switching
+We need a clean way for users to activate additional intents later.
+
+Examples:
+- buyer adds homeowner mode
+- homeowner adds buyer mode
+- agent also uses buyer tools
+
+I want:
+- a clear "Add another mode" or "Activate another experience" entry point
+- currentMode switcher behavior defined
+- no forced re-onboarding for already completed flows
+- prefill existing data where possible
+
+Design and implement the cleanest version that fits current architecture.
+
+## 7. UX polish and state handling
+Make sure the onboarding flow:
+- feels short
+- routes correctly on refresh
+- works after logout/login
+- does not trap the user in loops
+- shows sensible loading states
+- handles partially completed onboarding gracefully
+
+If a user abandons onboarding mid-flow and logs back in:
+- route them back into onboarding
+- preserve entered data where possible
+
+## 8. Deliverables
+I want:
+
+1. current onboarding audit
+2. final routing rule set
+3. route guard policy
+4. completion logic
+5. mode switching design
+6. list of files to change
+7. step-by-step implementation plan
+8. then implement it
+
+--------------------------------------------------
+IMPORTANT IMPLEMENTATION NOTES
+--------------------------------------------------
+
+- Reuse existing code patterns where possible
+- Prefer the smallest high-quality changes over a broad rewrite
+- Be explicit about files modified
+- Do not break existing auth
+- Do not break agent-mediated communication rules
+- Do not accidentally grant agent-only access just because someone selected agent intent
+- Keep the consumer experience smooth and low-friction
+
+Most important:
+Do not just describe the plan. Inspect the current codebase first, identify what already exists, then propose the smallest high-quality implementation that fits the current architecture. Reuse existing patterns where possible. Avoid breaking current functionality. Be explicit about files to modify, schema changes, route guards, redirect logic, and edge cases.

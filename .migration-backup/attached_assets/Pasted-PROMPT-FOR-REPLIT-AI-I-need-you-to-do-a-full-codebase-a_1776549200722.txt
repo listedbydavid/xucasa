@@ -1,0 +1,18 @@
+PROMPT FOR REPLIT AI:
+
+I need you to do a full codebase audit of this project and generate a comprehensive technical handoff document. Another AI assistant will be reading this output to get fully up to speed on the app. Please be exhaustive and specific — use actual file names, function names, route paths, variable names, and schema fields from the real code. Cover all of the following:
+
+Full File & Folder Structure — List every file and folder in the project and describe what each one does.
+Tech Stack — Every language, framework, library, and package in use (pull from package.json, requirements.txt, or equivalent).
+Database Schema — Every table, model, or collection with all field names, types, and relationships. Include any migration files or ORM models.
+All API Routes & Endpoints — Every route with its HTTP method, file location, what it does, what parameters/body it expects, and what it returns.
+Authentication System — How auth is implemented, what library handles it, how sessions/tokens work, and what user roles/permissions exist.
+Frontend Pages & Components — Every page and component file, what it renders, what data/props it uses, and how it connects to the backend.
+Environment Variables — List every .env variable name (not the values) and what each one is used for.
+Third-Party Integrations — Every external API, SDK, or data feed wired into the app and where in the code it's used.
+Current State of Each Feature — For every feature, tell me if it is fully working, partially built, or broken, based on what you can see in the code.
+Any Dead Code, TODOs, or Commented-Out Sections — Flag anything that looks incomplete, abandoned, or flagged for future work.
+Known Issues Visible in the Code — Any obvious bugs, missing error handling, hardcoded values, or logic gaps you can spot.
+Entry Points — What file starts the server? What is the main frontend entry point? How does the app boot up?
+
+Please output this as a structured document I can copy and paste in full. Do not skip files or summarize vaguely. The goal is a complete snapshot of this codebase.

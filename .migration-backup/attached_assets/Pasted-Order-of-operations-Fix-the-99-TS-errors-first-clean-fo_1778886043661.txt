@@ -1,0 +1,109 @@
+Order of operations:
+
+Fix the 99 TS errors first — clean foundation before anything else
+Pre-launch checklist (all three: buyer journey, agent journey, security audit)
+Tooltip/tour system from repor — once xucasa is clean and launch-ready, we layer this on top
+
+
+For the TS errors, here's your prompt:
+
+PROMPT FOR REPLIT:
+
+I need you to fix the 99 TypeScript baseline errors. Attack them in order from largest cluster to smallest. Zero behavior changes — types only.
+The known breakdown is:
+CountCodeIssue15TS2353AuditParams type doesn't declare errorMessage15TS2769No overload matches this call14TS2345string | string[] not assignable to string12TS2339User type missing claims property10TS18048data is possibly undefined6TS2345string | null not assignable to string | undefined4TS2322BuyerProfile shape mismatch3TS2339Property status does not exist on type {}5TS2802Map/Set iteration (downlevel)2TS7006Parameter implicitly any1TS2353Insert schema userId omitted1TS2345string | null not assignable to string
+
+Fix each cluster as follows:
+Cluster 1 — AuditParams.errorMessage (15 × TS2353)
+Find the AuditParams type definition (likely in server/auditLog.ts). Add errorMessage?: string to the type. Do not change any call sites — they already pass it, the type just doesn't declare it.
+Cluster 2 — TS2769 overload mismatches (15 sites)
+Run:
+bashnpx tsc --noEmit 2>&1 | grep "TS2769" | head -20
+Show me the output first, then fix each one. Most are likely Drizzle query builder calls where the argument type is slightly wrong. Fix at the call site with a type assertion or by narrowing the type correctly — do not change the Drizzle schema.
+Cluster 3 — string | string[] not assignable to string (14 × TS2345)
+These are almost certainly Express req.query parameters being passed directly to functions that expect string. Fix with a narrowing helper at the top of each affected router file:
+typescriptconst qs = (v: unknown): string => Array.isArray(v) ? v[0] ?? '' : (v as string) ?? '';
+Then replace req.query.someParam as string with qs(req.query.someParam) at each affected site.
+Cluster 4 — User.claims missing (12 × TS2339)
+Find where req.user?.claims is accessed across the route files. The Replit Auth blueprint augments req.user at runtime but the TypeScript type doesn't reflect this. Fix by adding a type augmentation in server/replit_integrations/auth/replitAuth.ts or a new file server/types/express.d.ts:
+typescriptdeclare global {
+  namespace Express {
+    interface User {
+      claims?: {
+        sub: string;
+        email?: string;
+        name?: string;
+        picture?: string;
+      };
+      id?: string;
+      email?: string;
+    }
+  }
+}
+export {};
+This is the correct Express pattern for augmenting req.user.
+Cluster 5 — data possibly undefined (10 × TS18048)
+Run:
+bashnpx tsc --noEmit 2>&1 | grep "TS18048"
+For each site, add a null check or non-null assertion (!) only where the value is guaranteed to exist by the query logic. Where it's genuinely nullable, add a proper guard.
+Cluster 6 — string | null not assignable to string | undefined (6 × TS2345)
+Fix with ?? undefined at each call site:
+typescript// Before
+someField: user.someNullableField,
+// After
+someField: user.someNullableField ?? undefined,
+Cluster 7 — BuyerProfile shape mismatch (4 × TS2322)
+Run:
+bashnpx tsc --noEmit 2>&1 | grep "TS2322" | grep -i buyer
+Show the output then fix each mismatch. These are likely places where the extended type returned by matchBuyersForListing (which adds matchScore, matchTier, scoreBreakdown) is being assigned to the base BuyerProfile type. Fix by widening the type at the variable declaration.
+Cluster 8 — status missing on {} (3 × TS2339)
+Run:
+bashnpx tsc --noEmit 2>&1 | grep "TS2339" | grep "status"
+Show output then fix. Likely an untyped response object — add as { status: number } or use the proper type.
+Cluster 9 — Map/Set downlevel iteration (5 × TS2802)
+Fix in tsconfig.json — add "downlevelIteration": true to compilerOptions. This is safe and has no runtime impact since the actual runtime is Node 20 which supports iteration natively.
+Cluster 10 — Implicit any parameters (2 × TS7006)
+Run:
+bashnpx tsc --noEmit 2>&1 | grep "TS7006"
+Add explicit types to the flagged parameters.
+Cluster 11 — Insert schema userId omitted (1 × TS2353)
+Run:
+bashnpx tsc --noEmit 2>&1 | grep "TS2353" | grep -v "errorMessage"
+Find the insert call missing userId and add it.
+Cluster 12 — string | null not assignable to string (1 × TS2345)
+Same pattern as cluster 6 — fix with ?? '' or ! depending on context.
+
+Do this in stages
+Fix clusters 1, 4, and 9 first (type declarations and tsconfig) — these are global fixes that will likely resolve several downstream errors automatically.
+After each stage run:
+bashnpx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+Show the count after each stage so we can track progress.
+
+Final verification
+
+Show the final error count:
+
+bashnpx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+Target: 0. If not 0, show what remains and why.
+
+Run the full test suite:
+
+bashfor f in server/__tests__/*.test.ts; do echo "--- $f ---"; npx tsx "$f" 2>&1 | tail -5; done
+All 46 tests must still pass.
+
+Server smoke test:
+
+bashcurl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/properties?limit=1"
+curl -s -o /dev/null -w "%{http_code} " -X POST "http://localhost:5000/api/buyer-interest"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/admin/stats"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/beacon/match-buyers"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/concessions/active"
+Expected: 200 401 401 403 200
+
+Show the final TS error breakdown if any remain:
+
+bashnpx tsc --noEmit 2>&1 | grep "error TS" | sed 's/.*error //' | sort | uniq -c | sort -rn
+Paste the full output of all 4 verification steps.
+
+
+While that's running, share the repor agent portal Replit project link or invite me so we can look at the tooltip/tour system. Once I can see what's there I'll write the prompt to replicate it in xucasa.

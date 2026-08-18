@@ -1,0 +1,607 @@
+Build a unified contact import system for agents. This is a single focused task — do only this and nothing else.
+
+Important scope note
+Keep all existing CSV import backend functionality intact. The new ImportContactsModal offers THREE import paths in one modal: phone picker, vCard file, and CSV file. Do not remove or deprecate any existing import routes. Simply replace whatever import buttons currently exist in AgentContacts.tsx with a single "Import Contacts" button that opens the new unified modal.
+
+Step A — Install vCard parser
+bashnpm install vcf
+If vcf has no types, create client/src/types/vcf.d.ts:
+typescriptdeclare module 'vcf' {
+  class VCard {
+    static parse(input: string): VCard[];
+    get(field: string): { valueOf(): string } | Array<{ valueOf(): string }> | null;
+  }
+  export = VCard;
+}
+
+Step B — Add new endpoints to server/routes/agent.ts
+1. Update POST /api/agent/contacts/import-phone to accept a real payload (it currently exists as a stub):
+typescriptrouter.post('/agent/contacts/import-phone', isAuthenticated, async (req: any, res) => {
+  const contactSchema = z.object({
+    name: z.string().min(1).max(200),
+    email: z.string().email().optional().or(z.literal('')),
+    phone: z.string().optional(),
+    company: z.string().optional(),
+    notes: z.string().optional(),
+  });
+  const schema = z.object({
+    contacts: z.array(contactSchema).min(1).max(500),
+    skipDuplicates: z.boolean().default(true),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+  }
+
+  const agentId = req.user.claims.sub;
+  const results = { imported: 0, skipped: 0, duplicates: [] as string[] };
+
+  const existing = await storage.getAgentContacts(agentId);
+  const existingEmails = new Set(existing.map(c => c.email?.toLowerCase()).filter(Boolean));
+  const existingPhones = new Set(existing.map(c => c.phone?.replace(/\D/g, '')).filter(Boolean));
+
+  for (const contact of parsed.data.contacts) {
+    const emailNorm = contact.email?.toLowerCase();
+    const phoneNorm = contact.phone?.replace(/\D/g, '');
+    const isDuplicate =
+      (emailNorm && existingEmails.has(emailNorm)) ||
+      (phoneNorm && phoneNorm.length >= 10 && existingPhones.has(phoneNorm));
+
+    if (isDuplicate && parsed.data.skipDuplicates) {
+      results.skipped++;
+      results.duplicates.push(contact.name);
+      continue;
+    }
+
+    await storage.createAgentContact(agentId, {
+      name: contact.name,
+      email: contact.email || undefined,
+      phone: contact.phone || undefined,
+      company: contact.company || undefined,
+      notes: contact.notes || undefined,
+    });
+    results.imported++;
+  }
+
+  await executeWithAudit({
+    eventType: 'contacts_imported',
+    actorUserId: agentId,
+    actorRole: 'agent',
+    outcome: 'success',
+    metadata: { imported: results.imported, skipped: results.skipped, total: parsed.data.contacts.length, source: 'phone' },
+  }, async () => ({ data: results }));
+
+  res.json({
+    success: true,
+    imported: results.imported,
+    skipped: results.skipped,
+    duplicates: results.duplicates,
+    message: `${results.imported} contact${results.imported !== 1 ? 's' : ''} imported${results.skipped > 0 ? `, ${results.skipped} skipped (already exist)` : ''}.`,
+  });
+});
+2. Add POST /api/agent/contacts/preview-vcard — parses vCard and returns structured contacts for preview without importing:
+typescriptrouter.post('/agent/contacts/preview-vcard', isAuthenticated, async (req: any, res) => {
+  const schema = z.object({
+    vcard: z.string().min(1).max(5 * 1024 * 1024),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+  }
+  try {
+    const VCard = (await import('vcf')).default;
+    const cards = VCard.parse(parsed.data.vcard);
+    const contacts = cards.map(card => {
+      const nameField = card.get('fn') ?? card.get('n');
+      const name = nameField ? nameField.valueOf() : null;
+      const emailField = card.get('email');
+      const email = emailField
+        ? (Array.isArray(emailField) ? emailField[0].valueOf() : emailField.valueOf())
+        : undefined;
+      const telField = card.get('tel');
+      const phone = telField
+        ? (Array.isArray(telField) ? telField[0].valueOf() : telField.valueOf())
+        : undefined;
+      const orgField = card.get('org');
+      const company = orgField ? orgField.valueOf() : undefined;
+      return {
+        name: (name ?? '').replace(/;+/g, ' ').trim(),
+        email,
+        phone,
+        company,
+      };
+    }).filter(c => c.name.length > 0);
+    res.json({ contacts, total: contacts.length });
+  } catch {
+    res.status(400).json({ message: 'Could not parse vCard file. Please check the format and try again.' });
+  }
+});
+
+Step C — Create client/src/components/ImportContactsModal.tsx
+tsximport { useState, useRef } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useToast } from '@/hooks/use-toast';
+import { Smartphone, Upload, Users, Check, AlertCircle, Loader2, X, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { apiRequest } from '@/lib/queryClient';
+
+interface RawContact {
+  name: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+}
+
+interface ImportContactsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+type ImportStep = 'choose' | 'preview' | 'importing' | 'done';
+type ImportSource = 'phone' | 'vcard' | 'csv';
+
+const supportsContactPicker =
+  typeof navigator !== 'undefined' &&
+  'contacts' in navigator &&
+  'ContactsManager' in window;
+
+export function ImportContactsModal({ isOpen, onClose }: ImportContactsModalProps) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const vcfInputRef = useRef<HTMLInputElement>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
+
+  const [step, setStep] = useState<ImportStep>('choose');
+  const [source, setSource] = useState<ImportSource>('phone');
+  const [contacts, setContacts] = useState<RawContact[]>([]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [skipDuplicates, setSkipDuplicates] = useState(true);
+  const [result, setResult] = useState<{ imported: number; skipped: number; message: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [showHowTo, setShowHowTo] = useState(false);
+  const [rawCsvData, setRawCsvData] = useState<FormData | null>(null);
+
+  const reset = () => {
+    setStep('choose');
+    setContacts([]);
+    setSelected(new Set());
+    setResult(null);
+    setError(null);
+    setShowHowTo(false);
+    setRawCsvData(null);
+  };
+
+  const handleClose = () => {
+    reset();
+    onClose();
+  };
+
+  // --- Path 1: Native Contact Picker ---
+  const handlePhonePicker = async (mode: 'one' | 'all') => {
+    setError(null);
+    try {
+      const props = ['name', 'email', 'tel'];
+      const opts = { multiple: mode === 'all' };
+      // @ts-ignore
+      const results = await navigator.contacts.select(props, opts);
+      if (!results || results.length === 0) return;
+      const parsed: RawContact[] = results
+        .map((c: any) => ({
+          name: c.name?.[0] ?? '',
+          email: c.email?.[0] ?? undefined,
+          phone: c.tel?.[0] ?? undefined,
+        }))
+        .filter((c: RawContact) => c.name.length > 0);
+      if (parsed.length === 0) {
+        setError('No valid contacts found. Make sure the contacts have a name.');
+        return;
+      }
+      setContacts(parsed);
+      setSelected(new Set(parsed.map((_, i) => i)));
+      setSource('phone');
+      setStep('preview');
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        setError('Could not access contacts. Please try the file upload option instead.');
+      }
+    }
+  };
+
+  // --- Path 2: vCard File Upload ---
+  const handleVcfFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const count = (text.match(/BEGIN:VCARD/gi) ?? []).length;
+    if (count === 0) {
+      setError('This does not appear to be a valid vCard (.vcf) file.');
+      return;
+    }
+    try {
+      const response = await fetch('/api/agent/contacts/preview-vcard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vcard: text }),
+        credentials: 'include',
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.message ?? 'Could not parse the file.');
+        return;
+      }
+      setContacts(data.contacts);
+      setSelected(new Set(data.contacts.map((_: any, i: number) => i)));
+      setSource('vcard');
+      setStep('preview');
+    } catch {
+      setError('Failed to read file. Please try again.');
+    }
+    e.target.value = '';
+  };
+
+  // --- Path 3: CSV File Upload ---
+  const handleCsvFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // For CSV, we parse a quick preview client-side (first line = headers)
+    const text = await file.text();
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) {
+      setError('The CSV file appears to be empty or has no data rows.');
+      return;
+    }
+    const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim().toLowerCase());
+    const nameIdx = headers.findIndex(h => h.includes('name'));
+    const emailIdx = headers.findIndex(h => h.includes('email'));
+    const phoneIdx = headers.findIndex(h => h.includes('phone') || h.includes('tel') || h.includes('mobile'));
+    const companyIdx = headers.findIndex(h => h.includes('company') || h.includes('organization') || h.includes('employer'));
+
+    if (nameIdx === -1) {
+      setError('CSV must have a "name" column. Please check your file headers.');
+      return;
+    }
+
+    const parsed: RawContact[] = lines.slice(1).map(line => {
+      const cols = line.split(',').map(c => c.replace(/"/g, '').trim());
+      return {
+        name: cols[nameIdx] ?? '',
+        email: emailIdx >= 0 ? cols[emailIdx] : undefined,
+        phone: phoneIdx >= 0 ? cols[phoneIdx] : undefined,
+        company: companyIdx >= 0 ? cols[companyIdx] : undefined,
+      };
+    }).filter(c => c.name.length > 0);
+
+    if (parsed.length === 0) {
+      setError('No valid contacts found in the CSV. Check that the name column has data.');
+      return;
+    }
+
+    // Store the form data for the actual import
+    const formData = new FormData();
+    formData.append('file', file);
+    setRawCsvData(formData);
+    setContacts(parsed);
+    setSelected(new Set(parsed.map((_, i) => i)));
+    setSource('csv');
+    setStep('preview');
+    e.target.value = '';
+  };
+
+  // --- Import mutation ---
+  const importMutation = useMutation({
+    mutationFn: async () => {
+      if (source === 'csv' && rawCsvData) {
+        // Use existing CSV endpoint
+        const response = await fetch('/api/agent/contacts/import-csv', {
+          method: 'POST',
+          body: rawCsvData,
+          credentials: 'include',
+        });
+        return response.json();
+      } else {
+        // Use phone/vcard endpoint
+        const selectedContacts = contacts.filter((_, i) => selected.has(i));
+        const response = await fetch('/api/agent/contacts/import-phone', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contacts: selectedContacts, skipDuplicates }),
+          credentials: 'include',
+        });
+        return response.json();
+      }
+    },
+    onSuccess: (data) => {
+      setResult(data);
+      setStep('done');
+      queryClient.invalidateQueries({ queryKey: ['/api/agent/contacts'] });
+    },
+    onError: () => {
+      setError('Import failed. Please try again.');
+      setStep('preview');
+    },
+  });
+
+  const toggleSelect = (i: number) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    setSelected(prev =>
+      prev.size === contacts.length
+        ? new Set()
+        : new Set(contacts.map((_, i) => i))
+    );
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Import Contacts</DialogTitle>
+          <DialogDescription>
+            {step === 'choose' && 'Add contacts from your phone, a vCard file, or a CSV.'}
+            {step === 'preview' && `Review ${contacts.length} contact${contacts.length !== 1 ? 's' : ''} before importing.`}
+            {step === 'importing' && 'Importing your contacts...'}
+            {step === 'done' && 'Import complete.'}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Error banner */}
+        {error && (
+          <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span className="flex-1">{error}</span>
+            <button onClick={() => setError(null)} className="shrink-0">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Step 1 — Choose import method */}
+        {step === 'choose' && (
+          <div className="flex flex-col gap-3 py-2">
+            {/* Phone picker — mobile only */}
+            {supportsContactPicker ? (
+              <>
+                <button
+                  onClick={() => handlePhonePicker('one')}
+                  className="flex items-center gap-4 p-4 border rounded-xl hover:border-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors text-left"
+                >
+                  <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center shrink-0">
+                    <Smartphone className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <div className="font-medium text-sm">Pick one contact</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Choose a single contact from your phone</div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => handlePhonePicker('all')}
+                  className="flex items-center gap-4 p-4 border rounded-xl hover:border-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors text-left"
+                >
+                  <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center shrink-0">
+                    <Users className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <div className="font-medium text-sm">Select multiple contacts</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Choose as many contacts as you want from your phone</div>
+                  </div>
+                </button>
+                <div className="relative flex items-center gap-3 py-1">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-xs text-muted-foreground">or upload a file</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+              </>
+            ) : (
+              <div className="p-3 bg-muted rounded-lg text-sm text-muted-foreground">
+                Phone contact picker is available on mobile browsers. Use a file upload below on desktop.
+              </div>
+            )}
+
+            {/* vCard upload */}
+            <button
+              onClick={() => vcfInputRef.current?.click()}
+              className="flex items-center gap-4 p-4 border rounded-xl hover:border-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors text-left"
+            >
+              <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                <Upload className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+              </div>
+              <div>
+                <div className="font-medium text-sm">Upload a vCard file (.vcf)</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Export from iPhone Contacts, Google Contacts, or Outlook</div>
+              </div>
+            </button>
+            <input ref={vcfInputRef} type="file" accept=".vcf,text/vcard" className="hidden" onChange={handleVcfFile} />
+
+            {/* CSV upload */}
+            <button
+              onClick={() => csvInputRef.current?.click()}
+              className="flex items-center gap-4 p-4 border rounded-xl hover:border-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-colors text-left"
+            >
+              <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                <FileText className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+              </div>
+              <div>
+                <div className="font-medium text-sm">Upload a CSV file</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Works with exports from most CRMs and spreadsheets</div>
+              </div>
+            </button>
+            <input ref={csvInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleCsvFile} />
+
+            {/* Collapsible how-to section */}
+            <button
+              onClick={() => setShowHowTo(v => !v)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mx-auto mt-1"
+            >
+              {showHowTo ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              How do I export my contacts?
+            </button>
+            {showHowTo && (
+              <div className="text-xs text-muted-foreground bg-muted rounded-lg p-3 space-y-2">
+                <p><strong>iPhone:</strong> Contacts app → tap a contact → Share Contact → save as .vcf. For all contacts: iCloud.com → Contacts → select all → Export vCard.</p>
+                <p><strong>Google Contacts:</strong> contacts.google.com → select contacts → Export → vCard (.vcf).</p>
+                <p><strong>Outlook:</strong> File → Open & Export → Import/Export → Export to a file → vCard or CSV.</p>
+                <p><strong>Other CRM:</strong> Look for an "Export" option and choose CSV with columns: Name, Email, Phone.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step 2 — Preview and select */}
+        {step === 'preview' && (
+          <div className="flex flex-col gap-3 min-h-0">
+            <div className="flex items-center justify-between">
+              <button onClick={toggleAll} className="text-xs text-amber-600 hover:underline">
+                {selected.size === contacts.length ? 'Deselect all' : 'Select all'}
+              </button>
+              <span className="text-xs text-muted-foreground">
+                {selected.size} of {contacts.length} selected
+              </span>
+            </div>
+
+            {source !== 'csv' && (
+              <div className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  id="skip-dupes"
+                  checked={skipDuplicates}
+                  onCheckedChange={v => setSkipDuplicates(!!v)}
+                />
+                <label htmlFor="skip-dupes" className="text-sm cursor-pointer">
+                  Skip contacts that already exist in my CRM
+                </label>
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto border rounded-lg divide-y min-h-0 max-h-64">
+              {contacts.map((contact, i) => (
+                <div
+                  key={i}
+                  onClick={() => toggleSelect(i)}
+                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted/50 transition-colors ${selected.has(i) ? '' : 'opacity-40'}`}
+                >
+                  <Checkbox
+                    checked={selected.has(i)}
+                    onCheckedChange={() => toggleSelect(i)}
+                    onClick={e => e.stopPropagation()}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm truncate">{contact.name}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {[contact.email, contact.phone, contact.company].filter(Boolean).join(' · ')}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" onClick={reset} className="flex-1">Back</Button>
+              <Button
+                onClick={() => { setStep('importing'); importMutation.mutate(); }}
+                disabled={selected.size === 0}
+                className="flex-1 bg-amber-500 hover:bg-amber-600 text-white"
+              >
+                Import {selected.size} contact{selected.size !== 1 ? 's' : ''}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3 — Importing */}
+        {step === 'importing' && (
+          <div className="flex flex-col items-center gap-4 py-8">
+            <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+            <p className="text-sm text-muted-foreground">Importing {selected.size} contacts...</p>
+          </div>
+        )}
+
+        {/* Step 4 — Done */}
+        {step === 'done' && result && (
+          <div className="flex flex-col items-center gap-4 py-6 text-center">
+            <div className="w-14 h-14 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
+              <Check className="w-7 h-7 text-green-600" />
+            </div>
+            <div>
+              <p className="font-medium">{result.message}</p>
+              {result.skipped > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Skipped contacts already exist in your CRM
+                </p>
+              )}
+            </div>
+            <Button onClick={handleClose} className="bg-amber-500 hover:bg-amber-600 text-white">
+              Done
+            </Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+Step D — Wire into client/src/components/AgentContacts.tsx
+Find whatever import button(s) currently exist in AgentContacts.tsx. Replace them all with a single unified button that opens the new modal:
+tsximport { ImportContactsModal } from './ImportContactsModal';
+import { Upload } from 'lucide-react';
+
+// Inside component, add state:
+const [showImport, setShowImport] = useState(false);
+
+// Replace existing import button(s) with:
+<Button
+  onClick={() => setShowImport(true)}
+  variant="outline"
+  size="sm"
+  className="gap-2"
+>
+  <Upload className="w-4 h-4" />
+  Import Contacts
+</Button>
+
+// Add modal at bottom of return:
+<ImportContactsModal
+  isOpen={showImport}
+  onClose={() => setShowImport(false)}
+/>
+Do not remove the existing POST /api/agent/contacts/import-csv backend route. Just remove its button from the UI — the new modal handles CSV through that same route.
+
+Final verification
+bash# New component exists
+ls client/src/components/ImportContactsModal.tsx
+
+# vcf installed
+grep -c '"vcf"' package.json
+
+# New endpoints exist
+grep -c "preview-vcard\|import-phone" server/routes/agent.ts
+
+# Modal wired into AgentContacts
+grep -c "ImportContactsModal" client/src/components/AgentContacts.tsx
+
+# TS clean
+npx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+
+# Tests pass
+for f in server/__tests__/*.test.ts; do echo "--- $f ---"; npx tsx "$f" 2>&1 | tail -3; done
+
+# Smoke — both new endpoints require auth
+curl -s -o /dev/null -w "%{http_code} " -X POST "http://localhost:5000/api/agent/contacts/import-phone"
+curl -s -o /dev/null -w "%{http_code} " -X POST "http://localhost:5000/api/agent/contacts/preview-vcard"
+Expected: 401 401
+Then answer in plain English:
+
+What an agent on their iPhone sees when they tap "Import Contacts"
+What an agent on their desktop Mac sees when they click "Import Contacts"
+What happens when they try to import 50 contacts and 8 already exist in their CRM
+How CSV import still works for agents who have a spreadsheet
+
+Show all outputs. Do not do anything else.

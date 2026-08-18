@@ -1,0 +1,180 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400..800&family=Outfit:wght@300..800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-sans: 'DM Sans', sans-serif;
+    --font-display: 'Outfit', sans-serif;
+
+    /* Redfin-inspired Red for Primary */
+    --primary: 359 73% 45%;
+    --primary-foreground: 0 0% 100%;
+    
+    --background: 0 0% 98%;
+    --foreground: 222 47% 11%;
+    
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --card-border: 214 32% 91%;
+    
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --popover-border: 214 32% 91%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 359 73% 45%;
+
+    --radius: 0.75rem;
+
+    --chart-1: 359 73% 45%;
+    --chart-2: 210 40% 50%;
+    --chart-3: 150 50% 40%;
+    --chart-4: 40 80% 55%;
+    --chart-5: 280 50% 50%;
+
+    --sidebar: 0 0% 98%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 359 73% 45%;
+    --sidebar-primary: 359 73% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+  }
+
+  .dark {
+    --primary: 359 73% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --background: 222 47% 6%;
+    --foreground: 210 40% 92%;
+
+    --card: 222 47% 9%;
+    --card-foreground: 210 40% 92%;
+    --card-border: 215 25% 20%;
+
+    --popover: 222 47% 9%;
+    --popover-foreground: 210 40% 92%;
+    --popover-border: 215 25% 20%;
+
+    --secondary: 215 25% 15%;
+    --secondary-foreground: 210 40% 92%;
+
+    --muted: 215 25% 15%;
+    --muted-foreground: 215 16% 60%;
+
+    --accent: 215 25% 15%;
+    --accent-foreground: 210 40% 92%;
+
+    --destructive: 0 62% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 25% 20%;
+    --input: 215 25% 20%;
+    --ring: 359 73% 55%;
+
+    --chart-1: 359 73% 55%;
+    --chart-2: 210 40% 60%;
+    --chart-3: 150 50% 50%;
+    --chart-4: 40 80% 60%;
+    --chart-5: 280 50% 60%;
+
+    --sidebar: 222 47% 6%;
+    --sidebar-foreground: 210 40% 92%;
+    --sidebar-border: 215 25% 20%;
+    --sidebar-ring: 359 73% 55%;
+    --sidebar-primary: 359 73% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 215 25% 15%;
+    --sidebar-accent-foreground: 210 40% 92%;
+  }
+
+  html {
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+    -webkit-touch-callout: none;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: none;
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    @apply tracking-tight;
+  }
+
+  *:focus-visible {
+    outline: 2px solid hsl(var(--ring)) !important;
+    outline-offset: 2px !important;
+  }
+
+  .skip-to-main {
+    @apply sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-primary focus:text-white focus:px-4 focus:py-2 focus:rounded-lg focus:text-sm focus:font-bold;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .glass-panel {
+    @apply bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border border-white/20 dark:border-gray-700/30 shadow-xl;
+  }
+
+  .hover-card-effect {
+    @apply transition-all duration-300 ease-out hover:shadow-xl hover:-translate-y-1 hover:border-primary/20;
+  }
+
+  /* Fade in animation */
+  .animate-in {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+  
+  .animate-in-delayed {
+    animation: fadeIn 0.5s ease-out 0.2s forwards;
+    opacity: 0;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .standalone-back-btn {
+    display: none;
+  }
+
+  @media all and (display-mode: standalone) {
+    .standalone-back-btn {
+      display: flex;
+    }
+  }
+}

@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /agent
+Disallow: /dashboard
+Disallow: /onboarding
+Disallow: /auth
+Disallow: /reset-password
+Disallow: /sell
+Disallow: /home-report
+Disallow: /buyers
+Disallow: /conversations
+
+Sitemap: https://xucasa.com/sitemap.xml

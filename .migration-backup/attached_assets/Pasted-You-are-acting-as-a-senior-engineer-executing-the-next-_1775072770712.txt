@@ -1,0 +1,113 @@
+You are acting as a senior engineer executing the next architecture hardening task for Xucasa.
+
+Context:
+Task #10 was merged, but post-merge setup exposed a database migration workflow weakness:
+- drizzle-kit push prompted interactively
+- direct SQL had to be used to align constraints
+- schema drift / constraint naming mismatch may still exist as an architectural risk
+
+Your job now is to harden the migration workflow so future merges and deployments are deterministic, non-interactive, and safe.
+
+Do not restate the issue. Implement the fixes.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Make Xucasa’s schema change and deployment workflow production-safe, non-interactive, and repeatable.
+
+==================================================
+REQUIRED WORK
+==================================================
+
+PART 1 — Migration workflow hardening
+1. Audit the current Drizzle migration/push setup and identify why interactive prompts occurred.
+2. Replace any brittle workflow that depends on interactive drizzle push behavior.
+3. Establish a deterministic migration strategy for this repo:
+   - when to use generated migrations
+   - when to use push
+   - what is allowed in dev
+   - what is allowed in production
+4. Ensure post-merge and deploy scripts are fully non-interactive.
+
+PART 2 — Schema drift detection
+1. Add a mechanism to detect schema drift before post-merge/deploy continues.
+2. Verify that current DB schema and Drizzle schema are aligned.
+3. Explicitly check all unique constraints / indexes touched by the recent merge.
+4. If there is naming mismatch between DB constraints and Drizzle expectations, fix it properly and document it.
+
+PART 3 — Safe migration scripts
+1. Update scripts so that:
+   - local/dev setup is predictable
+   - CI/staging/prod do not hang
+   - failures are loud and early
+2. Add separate scripts if needed, for example:
+   - migration generate
+   - migration apply
+   - migration check
+   - schema drift check
+3. Ensure post-merge does not silently mutate the database in an unsafe way.
+
+PART 4 — Deployment safety
+1. Document the proper order of operations for deploys involving schema changes.
+2. Add failure behavior:
+   - if migration fails, app should not continue pretending setup succeeded
+3. Add timeout/error handling where appropriate.
+4. Make sure scripts return non-zero exit codes on failure.
+
+PART 5 — Validation
+1. Confirm whether direct SQL changes applied during the Task #10 merge are now represented correctly in source-controlled migration/state.
+2. Confirm there are no pending interactive prompts left in the current schema workflow.
+3. Confirm a clean run from the current main branch works end to end.
+
+PART 6 — Documentation
+Create or update:
+- MIGRATION_STRATEGY.md
+- DEPLOYMENT_DB_RUNBOOK.md
+- SCHEMA_DRIFT_POLICY.md
+
+These docs must explain:
+- approved migration workflow
+- what not to do
+- how to handle unique constraints safely
+- how to recover from drift
+- how to deploy without hanging or corrupting state
+
+==================================================
+TESTING / VERIFICATION
+==================================================
+
+Add or update checks for:
+- non-interactive script execution
+- drift detection
+- failure on schema mismatch
+- successful clean post-merge run
+- correct exit codes on script failure
+
+==================================================
+OUTPUT REQUIREMENTS
+==================================================
+
+Return your answer in this exact structure:
+- Objective
+- Root cause identified
+- Changes made
+- Files created/modified
+- Migration workflow design
+- Drift detection approach
+- Tests/checks added
+- Commands run
+- Results
+- Known gaps
+- Architecture Summary
+- Next Recommended Step
+
+Proof requirements:
+- show exact script changes
+- show how interactive prompts are prevented
+- show how drift is detected
+- show how direct SQL changes are reconciled with source-controlled schema state
+- confirm current workflow runs cleanly from main
+- confirm build/test/typecheck status if applicable
+
+Do not give a plan. Implement the hardening now.

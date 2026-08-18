@@ -1,0 +1,381 @@
+It looks like Replit got confused and started reviewing the tour system instead of finishing the hardening prompt. The indexes from Section 1 got applied (21 indexes ✅) and Section 2 Zod sweep was started, but Sections 3-6 never completed.
+Give Replit this to pick up where it left off:
+
+PROMPT FOR REPLIT:
+
+The previous hardening task was interrupted after Section 1 (DB indexes — done ✅) and a partial Section 2 (Zod sweep — started but not confirmed complete). Please continue from Section 2 and finish through Section 6. Do not redo Section 1.
+
+First — confirm what's done
+bash# Confirm indexes exist
+SELECT count(*) as index_count FROM pg_indexes WHERE schemaname = 'public' AND indexname LIKE '%_idx';
+
+# Confirm Zod sweep completion
+grep -rn "req\.body" server/routes/ --include="*.ts" | grep -v "safeParse\|\.parse\|Schema\|schema\|zod\|Zod" | grep -v node_modules | wc -l
+Show both outputs. If the Zod count is 0, Section 2 is done. If not, finish it now using this pattern for each unvalidated route:
+typescriptconst schema = z.object({
+  // only fields this endpoint uses
+});
+const parsed = schema.safeParse(req.body);
+if (!parsed.success) {
+  return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+}
+// use parsed.data below, not req.body
+
+Section 3 — SEO quick wins
+A. noindex meta on private pages
+Add this to the <head> of each of these page components using a Helmet-style approach or direct meta injection. If there is no react-helmet in the project, add the meta tag directly in each page's JSX return:
+tsx// Add at top of return() in each private page
+<title>Xucasa</title>
+Pages that need noindex: /admin, /dashboard, /onboarding, /reset-password, /conversations/:id, /agent
+The cleanest approach for a Vite + Wouter app without react-helmet is to update document.title and inject meta via useEffect:
+typescript// Create client/src/hooks/use-page-meta.ts
+import { useEffect } from 'react';
+
+export function usePageMeta({
+  title,
+  description,
+  noIndex = false,
+}: {
+  title: string;
+  description?: string;
+  noIndex?: boolean;
+}) {
+  useEffect(() => {
+    document.title = `${title} | Xucasa`;
+
+    let robotsMeta = document.querySelector('meta[name="robots"]');
+    if (!robotsMeta) {
+      robotsMeta = document.createElement('meta');
+      robotsMeta.setAttribute('name', 'robots');
+      document.head.appendChild(robotsMeta);
+    }
+    robotsMeta.setAttribute('content', noIndex ? 'noindex, nofollow' : 'index, follow');
+
+    if (description) {
+      let descMeta = document.querySelector('meta[name="description"]');
+      if (!descMeta) {
+        descMeta = document.createElement('meta');
+        descMeta.setAttribute('name', 'description');
+        document.head.appendChild(descMeta);
+      }
+      descMeta.setAttribute('content', description);
+    }
+
+    return () => {
+      const rm = document.querySelector('meta[name="robots"]');
+      if (rm) rm.setAttribute('content', 'index, follow');
+    };
+  }, [title, description, noIndex]);
+}
+Then add usePageMeta calls to each page:
+
+Admin.tsx: usePageMeta({ title: 'Admin', noIndex: true })
+Dashboard.tsx: usePageMeta({ title: 'Dashboard', noIndex: true })
+Onboarding.tsx: usePageMeta({ title: 'Get Started', noIndex: true })
+ResetPasswordPage.tsx: usePageMeta({ title: 'Reset Password', noIndex: true })
+ConversationThread.tsx: usePageMeta({ title: 'Messages', noIndex: true })
+AgentDashboard.tsx: usePageMeta({ title: 'Agent Portal', noIndex: true })
+Search.tsx: usePageMeta({ title: 'Search Homes in San Diego', description: 'Browse San Diego homes for sale. Filter by price, beds, baths, and more.' })
+PropertyDetail.tsx: title should be dynamic: usePageMeta({ title: property?.title ?? 'Property', description: property ? \${property.beds} bed, ${property.baths} bath in ${property.addressCity}` : undefined })`
+Home.tsx: usePageMeta({ title: 'Find Your Home in San Diego', description: 'Search San Diego homes for sale. Swipe, save, and connect with an agent — without your data being sold.' })
+
+B. Update client/index.html
+Replace the existing <head> meta block with:
+html<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Xucasa — Find Your Home in San Diego</title>
+<meta name="description" content="Search San Diego homes for sale. Swipe, save, and connect with an agent — without your data being sold to the highest bidder." />
+<meta property="og:title" content="Xucasa — Find Your Home in San Diego" />
+<meta property="og:description" content="Search San Diego homes for sale. No lead selling. No data selling. Just homes." />
+<meta property="og:image" content="https://xucasa.com/icons/icon-512x512.png" />
+<meta property="og:url" content="https://xucasa.com" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Xucasa — Find Your Home in San Diego" />
+<meta name="twitter:description" content="Search San Diego homes for sale. No lead selling. No data selling. Just homes." />
+C. JSON-LD on PropertyDetail
+In client/src/pages/PropertyDetail.tsx, add this inside the JSX return after property data is loaded:
+tsx{property && (
+  <script
+    type="application/ld+json"
+    dangerouslySetInnerHTML={{
+      __html: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "RealEstateListing",
+        "name": property.title,
+        "description": property.description ??
+          `${property.beds} bed, ${property.baths} bath home in ${property.addressCity}, ${property.addressState}`,
+        "url": `https://xucasa.com/property/${property.id}`,
+        "image": property.photos?.[0] ?? property.imageUrl,
+        "offers": {
+          "@type": "Offer",
+          "price": property.price,
+          "priceCurrency": "USD",
+          "availability": "https://schema.org/InStock",
+        },
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": `${property.addressStreetNumber ?? ''} ${property.addressStreetName ?? ''}`.trim(),
+          "addressLocality": property.addressCity,
+          "addressRegion": property.addressState,
+          "postalCode": property.addressZip,
+          "addressCountry": "US",
+        },
+        "numberOfRooms": property.beds,
+        "floorSize": {
+          "@type": "QuantitativeValue",
+          "value": property.sqft,
+          "unitCode": "FTK",
+        },
+      })
+    }}
+  />
+)}
+
+Section 4 — Swipe empty state
+In client/src/pages/Swipe.tsx, find where the swipe stack runs out of cards (when the current index exceeds available properties). Replace whatever is currently shown with:
+tsx<div className="flex flex-col items-center justify-center h-full gap-4 text-center px-6 py-12">
+  <div className="text-6xl">🏡</div>
+  <h2 className="text-xl font-medium text-foreground">You've seen all available homes</h2>
+  <p className="text-muted-foreground text-sm max-w-xs leading-relaxed">
+    New listings are added daily — check back soon. In the meantime, browse your saved homes or search all listings.
+  </p>
+  <div className="flex flex-col sm:flex-row gap-3 mt-2">
+    
+      href="/dashboard"
+      className="px-4 py-2 rounded-lg border border-border text-sm text-foreground hover:bg-muted transition-colors"
+    >
+      View saved homes
+    </a>
+    
+      href="/search"
+      className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium transition-colors"
+    >
+      Browse all listings
+    </a>
+  </div>
+</div>
+
+Section 5 — Lender role foundation
+A. Schema (shared/schema.ts):
+typescriptexport const lenderProfiles = pgTable("lender_profiles", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  companyName: text("company_name").notNull(),
+  nmls: text("nmls"),
+  licenseState: text("license_state"),
+  phone: text("phone"),
+  website: text("website"),
+  bio: text("bio"),
+  specialties: text("specialties").array(),
+  isVerified: boolean("is_verified").default(false).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+B. Onboarding (client/src/pages/Onboarding.tsx):
+Add a "Lender" option to the intent picker with Building2 icon from lucide-react. When selected, show a 3-step lender wizard:
+
+Step 1: Company name + NMLS number
+Step 2: License state (text input) + Specialties (checkbox: FHA, VA, Jumbo, Conventional, USDA, Reverse)
+Step 3: Bio + phone + website (all optional)
+
+On completion, call POST /api/onboarding/lender then route to /dashboard.
+C. API (server/routes/onboarding.ts):
+Add:
+typescriptrouter.post('/onboarding/lender', onboardingRateLimit, isAuthenticated, async (req, res) => {
+  const schema = z.object({
+    companyName: z.string().min(1),
+    nmls: z.string().optional(),
+    licenseState: z.string().optional(),
+    specialties: z.array(z.string()).optional().default([]),
+    bio: z.string().optional(),
+    phone: z.string().optional(),
+    website: z.string().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+
+  // upsert lender_profiles
+  // set onboardingCompleted = true on users record
+  // audit log
+  // return { destination: '/dashboard' }
+});
+D. shared/routing.ts:
+Add lender to resolveUserDestination():
+
+primaryIntent === 'lender' + onboardingCompleted → /dashboard
+primaryIntent === 'lender' + !onboardingCompleted → /onboarding
+
+
+Section 6 — Vendor directory foundation
+A. Schema (shared/schema.ts):
+typescriptexport const vendorProfiles = pgTable("vendor_profiles", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id),
+  businessName: text("business_name").notNull(),
+  category: text("category").notNull(),
+  description: text("description"),
+  phone: text("phone"),
+  email: text("email"),
+  website: text("website"),
+  serviceArea: text("service_area").array(),
+  isVerified: boolean("is_verified").default(false).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  rating: decimal("rating"),
+  reviewCount: integer("review_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+B. API (server/routes/vendors.ts) — new router:
+typescriptimport { Router } from 'express';
+import { z } from 'zod';
+import { isAuthenticated, isAdmin } from '../authMiddleware';
+import { storage } from '../storage';
+
+const router = Router();
+
+// Public — list vendors with category + city filter
+router.get('/vendors', async (req, res) => {
+  const category = typeof req.query.category === 'string' ? req.query.category : undefined;
+  const city = typeof req.query.city === 'string' ? req.query.city : undefined;
+  const vendors = await storage.listVendors({ category, city });
+  res.json({ vendors });
+});
+
+// Public — single vendor
+router.get('/vendors/:id', async (req, res) => {
+  const vendor = await storage.getVendor(Number(req.params.id));
+  if (!vendor) return res.status(404).json({ message: 'Vendor not found' });
+  res.json({ vendor });
+});
+
+// Admin only — create vendor
+router.post('/vendors', isAuthenticated, isAdmin, async (req, res) => {
+  const schema = z.object({
+    businessName: z.string().min(1),
+    category: z.string().min(1),
+    description: z.string().optional(),
+    phone: z.string().optional(),
+    email: z.string().email().optional(),
+    website: z.string().url().optional(),
+    serviceArea: z.array(z.string()).optional().default([]),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+  const vendor = await storage.createVendor(parsed.data);
+  res.status(201).json({ vendor });
+});
+
+// Admin only — update vendor
+router.patch('/vendors/:id', isAuthenticated, isAdmin, async (req, res) => {
+  const schema = z.object({
+    businessName: z.string().min(1).optional(),
+    category: z.string().optional(),
+    description: z.string().optional(),
+    phone: z.string().optional(),
+    email: z.string().email().optional(),
+    website: z.string().url().optional(),
+    serviceArea: z.array(z.string()).optional(),
+    isVerified: z.boolean().optional(),
+    isActive: z.boolean().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+  const vendor = await storage.updateVendor(Number(req.params.id), parsed.data);
+  res.json({ vendor });
+});
+
+// Admin only — soft delete
+router.delete('/vendors/:id', isAuthenticated, isAdmin, async (req, res) => {
+  await storage.updateVendor(Number(req.params.id), { isActive: false });
+  res.json({ success: true });
+});
+
+// Authenticated — request a bid
+router.post('/vendors/:id/request-bid', isAuthenticated, async (req: any, res) => {
+  const schema = z.object({
+    message: z.string().min(1).max(500),
+    propertyAddress: z.string().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+  const vendor = await storage.getVendor(Number(req.params.id));
+  if (!vendor) return res.status(404).json({ message: 'Vendor not found' });
+  // Create notification for admin to follow up
+  await storage.createNotification({
+    userId: '55534280', // David — platform admin
+    type: 'vendor_bid_request',
+    title: `Bid request for ${vendor.businessName}`,
+    message: `${parsed.data.message}${parsed.data.propertyAddress ? ` — Property: ${parsed.data.propertyAddress}` : ''}`,
+    metadata: { vendorId: vendor.id, requestingUserId: req.user?.claims?.sub },
+  });
+  res.json({ success: true, message: 'Bid request sent. We will be in touch shortly.' });
+});
+
+export default router;
+Register in server/routes/index.ts: app.use('/api', vendorsRouter)
+C. Storage methods (server/storage.ts):
+Add to IStorage interface and DatabaseStorage class:
+typescriptlistVendors(filters: { category?: string; city?: string }): Promise<VendorProfile[]>
+getVendor(id: number): Promise<VendorProfile | null>
+createVendor(data: Partial<VendorProfile>): Promise<VendorProfile>
+updateVendor(id: number, data: Partial<VendorProfile>): Promise<VendorProfile>
+D. Frontend (client/src/pages/Vendors.tsx):
+Create a vendors directory page at route /vendors:
+tsx// Category filter pills + vendor card grid
+// Categories: All, Pest Control, Plumbing, HVAC, Landscaping, Gutters,
+//             Renovation, Roofing, Electrical, Home Inspection, Staging, Photography
+// Each card shows: business name, category badge (amber), description,
+//                  phone, "Request a Bid" button
+// "Request a Bid" requires auth — shows AuthPromptModal if not logged in
+// Empty state: "No vendors in this category yet. Check back soon."
+Add route to client/src/App.tsx: <Route path="/vendors" component={Vendors} />
+Add "Vendors" link to client/src/components/layout/Navbar.tsx in the main nav.
+E. Admin vendors tab:
+Add a "Vendors" tab to client/src/pages/Admin.tsx that shows:
+
+A table of all vendors (name, category, verified badge, active toggle, edit/delete)
+"Add Vendor" button that opens a form modal
+"Verify" button per row that sets isVerified = true
+
+
+Final verification
+After all sections complete:
+
+Zod sweep confirmation:
+
+bashgrep -rn "req\.body" server/routes/ --include="*.ts" | grep -v "safeParse\|\.parse\|Schema\|schema\|zod\|Zod" | grep -v node_modules | wc -l
+Must be 0.
+
+TypeScript — must stay at 0 errors:
+
+bashnpx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+
+Schema push:
+
+bashnpx drizzle-kit push --force 2>&1 </dev/null
+
+Full test suite:
+
+bashfor f in server/__tests__/*.test.ts; do echo "--- $f ---"; npx tsx "$f" 2>&1 | tail -5; done
+
+Smoke tests:
+
+bashcurl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/properties?limit=1"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/vendors"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/changelog"
+curl -s -o /dev/null -w "%{http_code} " -X POST "http://localhost:5000/api/buyer-interest"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/admin/stats"
+Expected: 200 200 200 401 401
+
+Index count:
+
+sqlSELECT count(*) as index_count FROM pg_indexes
+WHERE schemaname = 'public' AND indexname LIKE '%_idx';
+Should be 15+.
+
+Summary of everything completed in this pass — one line per item.
+
+Paste the full output of all 7 verification steps.
+Sonnet 4.6Claude is AI and can make mistakes. Please double-check responses.

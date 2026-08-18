@@ -1,0 +1,104 @@
+PROMPT FOR REPLIT:
+
+I need you to split server/routes.ts (currently 4,600+ lines) into domain routers. This is a pure refactor — zero behavior changes, zero new features. Every existing endpoint must work identically after the split.
+
+Goal
+Replace the monolithic server/routes.ts with a set of focused domain router files, each registered in a clean server/routes/index.ts entry point.
+
+Target file structure
+server/
+└── routes/
+    ├── index.ts          ← replaces server/routes.ts, just imports and registers all routers
+    ├── auth.ts           ← all /api/auth/* routes (if any remain outside replitAuth.ts)
+    ├── properties.ts     ← /api/properties/*, /api/locations/*, /api/recently-sold, /api/open-houses
+    ├── saved.ts          ← /api/saved-properties/*, /api/favorite-lists/*, /api/saved-searches/*, /api/search-history
+    ├── onboarding.ts     ← /api/onboarding/*
+    ├── agent.ts          ← /api/agent/*, /api/agent-invite, /api/agent-clients/*
+    ├── homeowner.ts      ← /api/home-report/*, /api/my-homes/*, /api/valuation, /api/sell-leads, /api/property-lookup
+    ├── buyer.ts          ← /api/buyer-interest/*, /api/buyer-profile/*, /api/buyer-profiles/*, /api/swipe-interest, /api/assigned-agent
+    ├── offers.ts         ← /api/property-offers/*, /api/swipe-notifications/*
+    ├── conversations.ts  ← /api/conversations/*, /api/messages/*, /api/showing-requests/*
+    ├── notifications.ts  ← /api/notifications/*, /api/notification-preferences
+    ├── reviews.ts        ← /api/properties/:id/reviews/*, /api/reviews/*
+    ├── concessions.ts    ← /api/concessions/*, /api/properties/:id/concessions
+    ├── beacon.ts         ← /api/beacon/*
+    ├── marketplace.ts    ← /api/buyer-matches/*, /api/seller-pitches/*
+    ├── idx.ts            ← /api/idx/*, /api/email-status, /api/test-email
+    ├── profile.ts        ← /api/profile/*, /api/auth/user PATCH if present
+    ├── errors.ts         ← /api/error-reports/*
+    └── admin.ts          ← /api/admin/*
+
+Rules for the refactor
+Behavior must be identical:
+
+Every route path, HTTP method, middleware chain, and response shape stays exactly the same
+All isAuthenticated, isAdmin, rate limiters, and audit calls stay on the same routes they're on now
+No routes are added, removed, or renamed
+
+Imports:
+
+Each router file imports only what it needs: storage, db, z, isAuthenticated, isAdmin, executeWithAudit, audit, specific schema tables, etc.
+Shared middleware (isAuthenticated, isAdmin, rate limiters) should be imported from a single location — either keep them in server/authMiddleware.ts or create server/middleware/index.ts that re-exports them
+resolveBuyerAgent and DAVID_USER_ID from server/storage.ts must be imported in buyer.ts
+
+Router pattern:
+Each domain file should follow this pattern:
+typescriptimport { Router } from 'express';
+const router = Router();
+
+router.get('/path', middleware, handler);
+// ...
+
+export default router;
+Registration in server/routes/index.ts:
+typescriptimport { Express } from 'express';
+import propertiesRouter from './properties';
+import savedRouter from './saved';
+// ... all imports
+
+export function registerRoutes(app: Express) {
+  app.use('/api', propertiesRouter);
+  app.use('/api', savedRouter);
+  // ... all registrations
+}
+server/index.ts must not change — it already calls registerRoutes(app), so as long as registerRoutes is exported from the new server/routes/index.ts with the same signature, nothing else needs to touch it.
+
+Do this in stages, not all at once
+To avoid a massive broken state, split in this order and verify the server starts cleanly after each stage:
+Stage 1: Create server/routes/index.ts that just re-exports the existing registerRoutes from the old server/routes.ts. Verify server starts. No behavior change yet.
+Stage 2: Extract admin.ts first (it's self-contained and easy to verify). Move all /api/admin/* routes. Verify server starts and /api/admin/stats responds.
+Stage 3: Extract properties.ts, saved.ts, onboarding.ts in parallel. Verify server starts and a property search returns results.
+Stage 4: Extract buyer.ts, offers.ts, conversations.ts in parallel. Verify server starts and /api/buyer-interest returns 401 for unauthenticated requests.
+Stage 5: Extract all remaining routers. Verify server starts cleanly.
+Stage 6: Delete the old server/routes.ts. Verify server starts and all routes still work.
+
+Verification after all stages complete
+
+npx tsc --noEmit — show only errors that are new vs the 102 pre-existing baseline
+Run the full test suite and show all results:
+
+bashfor f in server/__tests__/*.test.ts; do echo "--- $f ---"; npx tsx "$f" 2>&1 | tail -5; done
+
+Hit these endpoints and confirm each returns the expected status:
+
+bash# Properties (public)
+curl -s -o /dev/null -w "%{http_code}" "http://localhost:5000/api/properties?limit=1"
+# Auth gate
+curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:5000/api/buyer-interest"
+# Admin gate
+curl -s -o /dev/null -w "%{http_code}" "http://localhost:5000/api/admin/stats"
+# Beacon gate
+curl -s -o /dev/null -w "%{http_code}" "http://localhost:5000/api/beacon/match-buyers"
+# Concessions (public)
+curl -s -o /dev/null -w "%{http_code}" "http://localhost:5000/api/concessions/active"
+Expected: 200, 401, 401, 403, 200
+
+Show the final file list and line counts:
+
+bashwc -l server/routes/*.ts
+No single file should exceed 400 lines.
+
+Confirm the old server/routes.ts no longer exists:
+
+bashls server/routes.ts 2>&1
+Paste the full output of all 5 verification steps back to me.

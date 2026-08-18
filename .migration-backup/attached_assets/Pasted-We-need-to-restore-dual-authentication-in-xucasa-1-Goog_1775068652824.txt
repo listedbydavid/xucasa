@@ -1,0 +1,158 @@
+We need to restore dual authentication in xucasa:
+
+1. Google SSO
+2. Email + password login
+
+Important context:
+- Email/password auth existed before and was removed or superseded by Google SSO only
+- We now want BOTH methods available
+- We need this for two reasons:
+  1. end users should not be forced to use Google
+  2. we need a reliable admin test account using email/password so full end-to-end feature testing can be performed without depending on Google OAuth flows
+
+Build this with the mindset of a top-tier consumer real estate web app:
+- frictionless signup/login UX
+- secure account handling
+- scalable auth architecture
+- clean account linking behavior
+- no regressions to current Google SSO flows
+
+--------------------------------------------------
+GOALS
+--------------------------------------------------
+
+1. Users can sign up with:
+- Google SSO
+- email + password
+
+2. Users can log in with:
+- Google SSO
+- email + password
+
+3. Existing Google-auth users must continue working without disruption
+
+4. We need a clear strategy for account identity and account linking:
+- if a user signs up with Google using an email that already exists in the system from email/password auth, define the safest and cleanest linking behavior
+- do NOT create duplicate accounts for the same email unless there is a strong reason
+- recommend the best production-safe behavior
+
+5. We need an email/password admin login path for internal QA/testing
+
+--------------------------------------------------
+REQUIREMENTS
+--------------------------------------------------
+
+## 1. Audit current auth architecture first
+Before implementing, inspect the current codebase and explain:
+- how Google SSO currently works
+- what legacy email/password code still exists, if any
+- what tables / fields currently store auth data
+- whether password hash fields already exist or need to be restored
+- what session logic currently exists
+- how user records are created and identified today
+
+Then propose the cleanest implementation path that reuses as much existing architecture as possible.
+
+## 2. Support both auth methods
+Implement both:
+- Continue with Google
+- Continue with Email
+
+Email auth must include:
+- sign up with email + password
+- log in with email + password
+- hashed passwords only
+- secure validation
+- session creation identical to Google-authenticated users once logged in
+
+## 3. Account model / linking
+We need a clean identity model.
+
+Please recommend and implement the safest practical behavior for this scenario:
+- user previously signed up with email/password
+- later clicks Google SSO with the same email
+
+And also:
+- user previously signed up with Google
+- later wants to use email/password with the same email
+
+I want a production-grade approach, not a hack.
+
+At minimum, explain and implement:
+- how accounts are matched by email
+- when to link providers
+- when to reject or prompt for verification
+- how to avoid duplicate user records
+
+## 4. Admin testing account
+We need support for an email/password admin login for QA/testing.
+
+Requirements:
+- support creation/use of a test admin account using email/password
+- preserve existing admin logic if it depends on ADMIN_EMAIL or equivalent
+- ensure admin session works through the same auth/session stack
+- allow reliable full end-to-end testing without Google
+
+Do NOT hardcode insecure shortcuts.
+If seed/setup logic is needed, propose the cleanest approach.
+
+## 5. UX requirements
+Update the auth page so users clearly see both options.
+
+Desired UX:
+- Continue with Google
+- OR divider
+- Email input + password input
+- toggle between Sign In and Create Account
+- clean error messages
+- mobile-friendly
+- professional, polished, consumer-grade UX
+
+Optional but recommended:
+- confirm password on signup
+- show/hide password toggle
+- forgot password can be stubbed or deferred if not already built, but explain status clearly
+
+## 6. Security requirements
+Implement securely:
+- bcrypt or equivalent password hashing
+- never store plain text passwords
+- validate password strength reasonably
+- rate-limit or at least note where rate limiting should exist
+- avoid user enumeration where practical
+- ensure sessions/cookies behave consistently across auth methods
+
+## 7. Do not break existing flows
+Must preserve:
+- current Google SSO functionality
+- onboarding routing
+- agent-mediated communication permissions
+- admin identification logic
+- existing user profile data
+
+## 8. Deliverables
+I want:
+
+1. Current auth audit
+2. Recommended auth architecture
+3. Schema changes needed
+4. Backend route changes
+5. Frontend auth page changes
+6. Account-linking behavior
+7. Admin QA/test account strategy
+8. Step-by-step implementation plan
+9. Then implement it
+
+--------------------------------------------------
+IMPORTANT IMPLEMENTATION NOTES
+--------------------------------------------------
+
+- Reuse existing code patterns where possible
+- Prefer minimal, high-quality changes over broad rewrites
+- Be explicit about files modified
+- Call out any migrations needed
+- If legacy email/password code still exists, restore and modernize it rather than rebuilding blindly
+- Keep the final experience polished and production-ready
+
+Most important:
+Do not just describe the plan. Inspect the existing codebase first, identify what already exists, then propose the smallest high-quality implementation that fits the current architecture. Reuse existing patterns where possible. Avoid breaking current functionality. Be explicit about files to modify, schema changes, migration steps, and account-linking rules.

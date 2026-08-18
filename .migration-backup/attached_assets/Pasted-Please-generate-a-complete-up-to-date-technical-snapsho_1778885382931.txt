@@ -1,0 +1,121 @@
+Please generate a complete, up-to-date technical snapshot of the xucasa codebase as it exists right now. This will be handed to an AI assistant to fully re-orient it after a long session. Be exhaustive and specific — use actual file names, function names, route paths, table names, and line counts from the real code. Cover everything below:
+
+1. Current file & folder structure
+bashfind . -type f -name "*.ts" -o -name "*.tsx" | grep -v node_modules | grep -v dist | grep -v ".git" | sort
+Show the full output. Then give a one-line description of every file under:
+
+server/routes/ (all 17 domain routers)
+server/lib/
+server/__tests__/
+client/src/pages/
+client/src/components/
+scripts/
+
+
+2. Line counts on key files
+bashwc -l server/routes/*.ts server/storage.ts server/index.ts server/__tests__/*.ts shared/schema.ts shared/routing.ts scripts/apply-safe-constraints.mjs
+
+3. Database schema — full table inventory
+Run:
+sqlSELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+ORDER BY table_name;
+Then for each table, show column names and types:
+sqlSELECT table_name, column_name, data_type, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_schema = 'public'
+ORDER BY table_name, ordinal_position;
+
+4. All API endpoints — current manifest
+For every router file in server/routes/, list every endpoint with:
+
+HTTP method
+Full path
+Auth requirement (public / isAuthenticated / isAdmin / agent-verified)
+One-line description
+
+
+5. Full test suite status
+bashfor f in server/__tests__/*.test.ts; do echo "--- $f ---"; npx tsx "$f" 2>&1 | tail -8; done
+Show total test count and pass/fail for each file.
+
+6. TypeScript error baseline
+bashecho "Total TS errors:"
+npx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+echo "Error breakdown:"
+npx tsc --noEmit 2>&1 | grep "error TS" | sed 's/.*error //' | sort | uniq -c | sort -rn | head -20
+
+7. Environment variables — full list
+List every environment variable name in use across the codebase (not values):
+bashgrep -rh "process\.env\." server/ shared/ scripts/ --include="*.ts" --include="*.mjs" | grep -o 'process\.env\.[A-Z_]*' | sort -u
+And separately list what's configured in .replit:
+bashgrep -A 1 "ADMIN_EMAIL\|GOOGLE\|IDX\|SESSION\|DATABASE\|REPLIT\|VITE" .replit | grep -v "^--$"
+
+8. Third-party integrations — current status
+For each integration, confirm whether it is:
+
+Fully working
+Partially working
+Planned but not implemented
+
+Cover: Google OAuth, Gmail API, Google Maps JS API, Google Places Autocomplete, RealtyFeed (RESO OData), IDX Broker, US Census APIs, FEMA NFHL, OpenStreetMap Overpass, GreatSchools.
+
+9. Feature inventory — current status
+For every major feature, mark as ✅ fully working, ⚠️ partially built, or ❌ not started. Cover:
+
+Guest swipe (no auth wall)
+Auth — Google SSO
+Auth — email/password
+Forgot/reset password
+Buyer onboarding 5-step wizard
+Intent-based routing (resolveUserDestination)
+Swipe-to-interest core loop
+Seller concessions / Make Me Move
+Reverse offers
+Agent-mediated messaging
+Showing requests
+Agent CRM
+Agent verification
+Confidential MLS fields
+Beacon scoring engine
+Buyer profile completeness nudge
+Home report
+Sell wizard
+Buyer marketplace
+In-app notifications
+Email notifications
+Admin dashboard
+Audit logging
+Error tracking
+PWA
+Open house route planner
+Multi-market MLS support
+
+
+10. Known issues & tech debt
+List every known issue, pre-existing bug, incomplete area, or tech debt item you can identify from the code, including:
+
+The 2 req/_req bugs (state whether they were fixed or still open)
+Any TODOs or FIXMEs in the code:
+
+bashgrep -rn "TODO\|FIXME\|HACK\|XXX" server/ client/src/ shared/ --include="*.ts" --include="*.tsx" | grep -v node_modules
+
+Any routes that return hardcoded/mock data instead of real DB queries
+Any features that exist in the UI but have no backend implementation
+
+
+11. Migration & schema state
+bashnode scripts/apply-safe-constraints.mjs
+Show full output. Then:
+bashnpx drizzle-kit push --force 2>&1 </dev/null
+Show full output. Both should be clean.
+
+12. What was most recently shipped
+List the last 5 things merged into main in chronological order, with a one-paragraph description of what each one did and why.
+
+13. Condensed mental model for the AI
+Write a 10-15 sentence paragraph that gives a new AI assistant a complete mental model of xucasa — what it is, who it serves, how it works technically, what's been built, what's left, and what the north star is. This paragraph will be the first thing the AI reads.
+
+Do not truncate any command output. Do not summarize file lists. Show everything.
+Sonnet 4.6Claude is AI and can make mistakes. Please double-check responses.

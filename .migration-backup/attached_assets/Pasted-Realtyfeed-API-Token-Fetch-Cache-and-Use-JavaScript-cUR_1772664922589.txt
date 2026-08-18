@@ -1,0 +1,287 @@
+Realtyfeed API Token: Fetch, Cache, and Use (JavaScript + cURL)
+
+
+
+By abraham.gh
+
+5 min
+
+Add a reaction
+This guide shows a clean, reusable pattern to obtain a token from https://api.realtyfeed.com/v1/auth/token, cache it until it expires, and automatically use/refresh it for subsequent calls. It also includes minimal "one‑off" examples and a safe way to force‑generate a new token when necessary.
+
+Audience: JavaScript developers and API integrators using Realtyfeed.
+
+Prereqs: Your client_id and client_secret.
+
+TL;DR (JavaScript)
+
+
+// auth.js
+const AUTH_URL = "https://api.realtyfeed.com/v1/auth/token";
+class TokenAuth {
+  /**
+   * Handles fetching and refreshing OAuth-style bearer tokens from Realtyfeed.
+   * Usage:
+   *   const auth = new TokenAuth({ clientId: "...", clientSecret: "..." });
+   *   const client = new RealtyfeedClient(auth, { origin: "https://my-app.com" });
+   *   const r = await client.get("https://api.realtyfeed.com/reso/odata/Property", { params: { $top: 5 } });
+   *   console.log(await r.json());
+   */
+  constructor({ clientId, clientSecret, authUrl = AUTH_URL, skew = 60 }) {
+    this.clientId = clientId;
+    this.clientSecret = clientSecret;
+    this.authUrl = authUrl;
+    this._token = null;
+    this._tokenType = "Bearer";
+    this._expiresAt = 0;
+    this._skew = Math.max(0, skew);
+  }
+  async _fetch({ signal } = {}) {
+    const form = new URLSearchParams({
+      client_id: this.clientId,
+      client_secret: this.clientSecret,
+    });
+    const resp = await fetch(this.authUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: form,
+      signal
+    });
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => "");
+      throw new Error(`Auth failed (${resp.status}): ${text}`);
+    }
+    const data = await resp.json();
+    // Expected: {"access_token":"...","expires_in":86400,"token_type":"Bearer"}
+    this._token = data.access_token;
+    this._tokenType = data.token_type || "Bearer";
+    const expiresIn = Number.parseInt(data.expires_in ?? 0, 10);
+    this._expiresAt = Date.now() / 1000 + Math.max(0, expiresIn - this._skew);
+  }
+  async token({ signal } = {}) {
+    if (!this._token || Date.now() / 1000 >= this._expiresAt) {
+      await this._fetch({ signal });
+    }
+    return this._token;
+  }
+  async authHeader({ signal } = {}) {
+    const tok = await this.token({ signal });
+    return `${this._tokenType} ${tok}`;
+  }
+  // Force a fresh token now (e.g., after a 403 block)
+  async forceRefresh({ signal } = {}) {
+    await this._fetch({ signal });
+  }
+}
+class RealtyfeedClient {
+  /**
+   * Minimal client that injects Authorization and Origin, auto-refreshes tokens,
+   * and retries once on 401/403 with a forced refresh.
+   */
+  constructor(auth, { origin } = {}) {
+    this.auth = auth;
+    this.origin = origin;
+  }
+  _makeUrl(url, params) {
+    if (!params) return url;
+    const u = new URL(url);
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) u.searchParams.set(k, String(v));
+    });
+    return u.toString();
+  }
+  _withTimeout(ms) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), ms);
+    return { signal: controller.signal, done: () => clearTimeout(id) };
+  }
+  async request(method, url, { headers = {}, params, body, timeoutMs = 30_000 } = {}) {
+    const { signal, done } = this._withTimeout(timeoutMs);
+    try {
+      const hdrs = new Headers(headers);
+      hdrs.set("Authorization", await this.auth.authHeader({ signal }));
+      if (this.origin) hdrs.set("Origin", this.origin);
+      const first = await fetch(this._makeUrl(url, params), {
+        method,
+        headers: hdrs,
+        body: body instanceof URLSearchParams || typeof body === "string" ? body : undefined,
+        signal
+      });
+      if (first.status === 401 || first.status === 403) {
+        // force refresh & retry once
+        await this.auth.forceRefresh({ signal });
+        const hdrs2 = new Headers(headers);
+        hdrs2.set("Authorization", await this.auth.authHeader({ signal }));
+        if (this.origin) hdrs2.set("Origin", this.origin);
+        return await fetch(this._makeUrl(url, params), {
+          method,
+          headers: hdrs2,
+          body: body instanceof URLSearchParams || typeof body === "string" ? body : undefined,
+          signal
+        });
+      }
+      return first;
+    } finally {
+      done();
+    }
+  }
+  get(url, opts) { return this.request("GET", url, opts); }
+  post(url, opts) { return this.request("POST", url, opts); }
+}
+// -------- Example usage --------
+(async () => {
+  const CLIENT_ID = process.env.REALTYFEED_CLIENT_ID || "YOUR_CLIENT_ID";
+  const CLIENT_SECRET = process.env.REALTYFEED_CLIENT_SECRET || "YOUR_CLIENT_SECRET";
+  const auth = new TokenAuth({ clientId: CLIENT_ID, clientSecret: CLIENT_SECRET });
+  const client = new RealtyfeedClient(auth, { origin: "https://my-app.com" });
+  const url = "https://api.realtyfeed.com/reso/odata/Property";
+  const res = await client.get(url, { params: { $top: 5 }, timeoutMs: 30_000 });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  console.log(await res.json());
+})();
+Minimal Token Fetch (One-Off, JavaScript)
+
+
+const url = "https://api.realtyfeed.com/v1/auth/token";
+const form = new URLSearchParams({
+  client_id: "YOUR_CLIENT_ID",
+  client_secret: "YOUR_CLIENT_SECRET",
+});
+const resp = await fetch(url, {
+  method: "POST",
+  headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  body: form
+});
+if (!resp.ok) throw new Error(`${resp.status} ${await resp.text()}`);
+const data = await resp.json();
+console.log(data); // { access_token: '...', expires_in: 86400, token_type: 'Bearer' }
+Use the Token Manually in a Follow-Up Request
+
+
+const accessToken = data.access_token;
+const tokenType = data.token_type || "Bearer";
+const r = await fetch("https://api.realtyfeed.com/reso/odata/Property?$top=5", {
+  headers: {
+    Authorization: `${tokenType} ${accessToken}`,
+    Origin: "https://my-app.com"
+  },
+  method: "GET"
+});
+if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+console.log(await r.json());
+ 
+
+cURL Examples
+Fetch Token
+
+
+curl -X POST \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "client_id=YOUR_CLIENT_ID" \
+  -d "client_secret=YOUR_CLIENT_SECRET" \
+  https://api.realtyfeed.com/v1/auth/token
+Call OData with Token
+
+
+TOKEN="<paste access_token here>"
+TYPE="Bearer"  # or use the returned token_type
+curl -X GET \
+  -H "Authorization: $TYPE $TOKEN" \
+  -H "Origin: https://my-app.com" \
+  "https://api.realtyfeed.com/reso/odata/Property?$top=5"
+Forcing a New Token (When Necessary)
+A token (or API key) can be restricted by origin (domain) and/or IP address to enhance security. If you configure restrictions in API Key Settings, every request must comply with those rules.
+
+If no restrictions are set, the key is valid from any origin or IP.
+
+If restrictions are defined, every request must match the configured allowed origins and/or allowed IPs.
+
+Non-compliant requests (origin/IP mismatch):
+
+The API returns 403 Forbidden.
+
+The token used in that request is blocked for one hour.
+
+While blocked, that token cannot be used. After one hour it becomes valid again, but will be blocked again if requests are still non-compliant.
+
+If a token is blocked repeatedly, rotate it or request a new token via the authentication endpoint.
+
+See: API Key Settings (internal Confluence) for configuring allowed origins and IPs.
+
+If your token is blocked (403) or compromised, you may request a brand-new token by passing the query parameter force_new_token=true to the token endpoint. This is rate-limited (max 50/day) and resets daily at 00:00 UTC.
+
+JavaScript
+
+
+const url = "https://api.realtyfeed.com/v1/auth/token?force_new_token=true";
+const form = new URLSearchParams({
+  client_id: "YOUR_CLIENT_ID",
+  client_secret: "YOUR_CLIENT_SECRET",
+});
+const resp = await fetch(url, {
+  method: "POST",
+  headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  body: form,
+  // optional: timeout with AbortController
+});
+if (!resp.ok) throw new Error(`${resp.status} ${await resp.text()}`);
+console.log(await resp.json());
+// {
+//   "access_token": "...",
+//   "expires_in": 86400,
+//   "token_type": "Bearer",
+//   "force_new_token_info": {
+//     "force_new_token_count": 2,
+//     "force_new_token_count_limit": 50,
+//     "force_new_token_count_reset_info": "force_new_token_count will be reset daily at 00:00 UTC"
+//   }
+// }
+cURL
+
+
+curl -X POST \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "client_id=YOUR_CLIENT_ID" \
+  -d "client_secret=YOUR_CLIENT_SECRET" \
+  "https://api.realtyfeed.com/v1/auth/token?force_new_token=true"
+Best Practice: Prefer the default /auth/token flow. Only use force_new_token=true (as a query parameter) for 403-blocked or compromised tokens.
+
+Behavior & Defaults
+Token lifetime: expires_in is usually 86400 (24 hours).
+
+Auto-refresh window: samples refresh ~60s before expiry (tune via skew).
+
+Auto-retry: RealtyfeedClient retries once on 401/403 after a forced refresh.
+
+Required headers: Authorization: Bearer <token> and, where applicable, Origin: https://your-site.example.
+
+Security Notes
+Do not commit client_id/client_secret to source control.
+
+Load secrets via env vars or a secrets manager (AWS Secrets Manager, Vault, Doppler).
+
+Prefer short timeouts and fail-fast retry logic at the call-site.
+
+Log token metadata only (never the raw token).
+
+Troubleshooting
+401 Unauthorized: Token missing/invalid. Ensure Authorization: Bearer <token> and that the token hasn’t expired.
+
+403 Forbidden: Token blocked or insufficient scope. Check origin/IP restrictions; if needed, use force_new_token=true (respect the daily limit).
+
+Clock skew: Increase skew to 120–300 seconds or sync your server time (NTP).
+
+CORS/Origin: Provide a valid Origin header when required by the endpoint.
+
+Timeouts: Slightly increase client timeouts or check egress/firewall rules.
+
+Appendix: Packaging Tips
+Put TokenAuth and RealtyfeedClient in a small internal package (e.g., realtyfeed-auth-js) and reuse across services.
+
+Add tests that:
+
+mock the token endpoint,
+
+assert early refresh behavior,
+
+verify retry-on-401/403 logic.

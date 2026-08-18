@@ -1,0 +1,327 @@
+We have completed the executeWithAudit refactor and the platform now has real auth, onboarding, messaging, showing, and offer workflows.
+
+Now I need two things implemented together as the next production-grade phase:
+
+1. HARDEN the audit / observability system so it is reliable and enforceable
+2. BUILD a secure forgot-password / password reset flow for email-password users
+
+This is not a planning exercise.
+Make real code changes, add tests, run verification, and provide proof of work.
+
+Build this like a top-tier consumer real estate web app engineering team:
+- secure by default
+- production-grade
+- minimal but robust
+- no vague “should work” statements
+- no partial completion
+
+==================================================
+PART A — HARDEN AUDIT / OBSERVABILITY
+==================================================
+
+OBJECTIVE
+
+Guarantee that all critical workflow actions:
+- are audited
+- cannot silently bypass audit
+- produce success/failure audit records consistently
+- are detectable if audit persistence fails
+
+REQUIREMENTS
+
+## A1. Enforce audit usage
+Scan the codebase and identify any route or mutation that performs:
+- database writes
+- state changes
+- message sends
+- interest updates
+- showing updates
+- offer updates
+- onboarding state changes
+- auth state changes where applicable
+
+For each:
+- confirm it is wrapped in executeWithAudit
+- if not, refactor it
+
+Then add an enforcement mechanism.
+
+Preferred options:
+- a lightweight codebase scan script
+- a lint-like safeguard
+- a runtime assertion pattern if appropriate
+
+At minimum, create a script that can detect likely unaudited mutations and fail CI or clearly report them.
+
+## A2. Guarantee audit persistence
+Strengthen executeWithAudit so audit persistence cannot fail silently.
+
+Requirements:
+- if audit write fails:
+  - retry at least 2 times
+  - log structured retry attempts
+  - on final failure, emit a critical structured error
+- classify these failure events explicitly:
+  - audit_retry_attempt
+  - audit_persist_failed
+  - audit_final_failure
+
+Do not swallow audit persistence failures without visibility.
+
+## A3. Standardize audit event shape
+Ensure all audit events consistently include:
+- eventType
+- actorUserId if available
+- requestId
+- outcome (success | failure)
+- resourceType if applicable
+- resourceId if applicable
+- metadata JSON
+- errorMessage on failure
+- createdAt
+
+Validate event payloads before persistence so malformed events are caught.
+
+## A4. Add audit integrity verification
+Create:
+
+scripts/verify-audit-integrity.ts
+
+It should:
+- exercise representative successful and failed actions
+- query audit_events afterward
+- verify each action produced the expected audit event
+- verify failures include errorMessage
+- print PASS / FAIL with concrete details
+
+## A5. Add unaudited mutation detection
+Create:
+
+scripts/find-unaudited-mutations.ts
+
+It should scan for likely mutation patterns such as:
+- storage.*
+- db.insert
+- db.update
+- db.delete
+
+and flag code that appears to mutate state without executeWithAudit.
+
+Output:
+- file
+- line
+- code snippet or function if possible
+
+## A6. Add tests
+Add tests for:
+- executeWithAudit success path writes exactly one success audit event
+- executeWithAudit failure path writes exactly one failure audit event
+- duplicate event prevention
+- requestId always present
+- malformed event rejection
+- authorization_denied logging remains consistent
+- audit retry behavior on persistence failure
+
+==================================================
+PART B — FORGOT PASSWORD / RESET FLOW
+==================================================
+
+OBJECTIVE
+
+Implement a secure, production-grade forgot password flow for email/password accounts.
+
+This must work for users who already have a passwordHash.
+Do NOT break Google SSO.
+Do NOT introduce account enumeration or insecure shortcuts.
+
+REQUIREMENTS
+
+## B1. Audit current auth model first
+Inspect the current auth implementation and confirm:
+- where users are stored
+- where passwordHash lives
+- current email sending capability
+- current auth routes
+- how sessions are created
+- whether any password-related flow already exists
+
+Then implement the smallest robust flow that fits the current architecture.
+
+## B2. Forgot password request flow
+Implement a route for users to request a password reset.
+
+Requirements:
+- endpoint example: POST /api/auth/forgot-password
+- input: email
+- response must be generic whether account exists or not
+  Example:
+  "If an account with that email exists, we’ve sent reset instructions."
+- do NOT reveal whether the email exists
+- only create reset tokens for accounts that can use email/password or are allowed to add email login according to current model
+- rate-limit this endpoint or add a clear production-hardening note if no rate limiting framework exists yet
+
+## B3. Password reset token model
+Implement a secure token flow.
+
+Requirements:
+- create a password reset token table or equivalent secure storage
+- token must be:
+  - random
+  - high entropy
+  - hashed before storing if possible
+  - single-use
+  - expiring (recommend 30–60 minutes)
+- include:
+  - userId
+  - token hash or secure token representation
+  - expiresAt
+  - usedAt
+  - createdAt
+- old tokens should be invalidated or ignored once a new valid token is created, depending on your design
+
+## B4. Reset password completion flow
+Implement route(s) such as:
+- POST /api/auth/reset-password
+
+Requirements:
+- input:
+  - reset token
+  - new password
+  - confirm password
+- validate:
+  - token exists
+  - token not expired
+  - token unused
+  - password meets minimum rules
+  - confirm password matches
+- on success:
+  - update passwordHash with bcrypt hash
+  - mark token used
+  - optionally invalidate other outstanding reset tokens for that user
+- decide and implement whether reset should:
+  - create a fresh session automatically
+  - or require the user to log in again
+Choose the safer/cleaner production behavior and explain it.
+
+## B5. Email delivery
+Use the current email infrastructure already present in the app.
+
+Requirements:
+- send a password reset email with a reset link
+- link should route to a frontend reset-password page
+- email copy should be clean and minimal
+- include expiration warning
+- do not expose sensitive details
+
+## B6. Frontend UI
+Implement:
+- “Forgot password?” link on the auth page in sign-in mode
+- forgot password request page/form
+- reset password page/form
+- success and error states
+- loading states
+- mobile-friendly UX
+- clean messaging
+
+## B7. Security requirements
+This is critical.
+
+Implement securely:
+- no user enumeration
+- secure token generation
+- token expiration
+- single-use tokens
+- password hashing with bcrypt
+- password reset should be auditable
+- invalid/expired token responses should be safe and clear
+- do not allow reset tokens to be reused
+- do not allow reset flow to interfere with Google SSO users incorrectly
+
+If a user is Google-only and cannot currently use email/password:
+- choose the safest behavior
+- likely still return the same generic forgot-password response
+- but do not create an insecure reset path unless the account model explicitly supports it
+Explain your chosen behavior clearly.
+
+## B8. Audit integration for reset flow
+Forgot password / reset password must be integrated into the audit system.
+
+At minimum, add events for:
+- forgot_password_requested
+- forgot_password_email_sent
+- password_reset_completed
+- password_reset_failed
+- password_reset_token_invalid
+- password_reset_token_expired
+
+These should use executeWithAudit where appropriate and follow the standardized audit event shape.
+
+## B9. Tests
+Add tests for:
+- forgot-password request returns generic response
+- reset token is created correctly
+- reset token expires correctly
+- token cannot be reused
+- password is updated correctly
+- invalid token is rejected
+- expired token is rejected
+- Google-only / unsupported account behavior is safe
+- audit events are written for reset flow
+
+==================================================
+PART C — MANUAL VERIFICATION + DOCUMENTATION
+==================================================
+
+## C1. Manual verification steps
+Provide a short manual QA checklist for:
+- forgot password request
+- reset email generation
+- valid reset
+- invalid token
+- expired token
+- reused token
+- login with new password
+- old password no longer working
+- audit visibility for reset events
+
+## C2. Documentation
+Update replit.md with:
+- audit hardening changes
+- executeWithAudit guarantees
+- audit retry behavior
+- forgot-password flow
+- reset token lifecycle
+- security caveats / production notes
+
+==================================================
+OUTPUT FORMAT
+==================================================
+
+When done, respond with exactly these sections:
+
+1. Objective completed
+2. Changes made
+3. Files modified
+4. Schema changes
+5. Tests added
+6. Commands run
+7. Results
+8. Known gaps
+9. Manual QA checklist
+10. Next recommended step
+
+==================================================
+EXECUTION RULES
+==================================================
+
+- Do real code changes now
+- Do not stop at a plan
+- Do not skip tests
+- Do not give generic reassurance
+- If something fails, fix it and continue
+- Reuse existing architecture and email infrastructure where possible
+- Keep implementation production-grade, minimal, and maintainable
+- Preserve current Google SSO functionality
+- Preserve current email/password login
+- Preserve admin login behavior via ADMIN_EMAIL
+- Do not break onboarding, routing, or agent-mediated architecture

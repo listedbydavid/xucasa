@@ -1,0 +1,84 @@
+Overview
+The Neighbourhood Details API retrieves detailed information about a specific Neighbourhood. This information includes geographical and demographic data, providing developers with insights into the specified area.
+
+Base URL
+The base URL for the API is https://api.realtyfeed.com.
+
+Endpoint
+Get Neighbourhood Details
+Endpoint
+GET /geo/neighbourhood/{neighborhood}
+
+Path Parameters
+neighbourhood (string): The target Neighbourhood for which details will be retrieved.
+
+Response
+200 OK: Returns a JSON response containing detailed information about the specified Neighbourhood.
+
+Example:
+
+
+
+{
+    "type": "Feature",
+    "properties" : {
+            "State" : "AK",
+            "County" : "Anchorage",
+            "City" : "Anchorage",
+            "Name" : "Northeast",
+            "RegionID" : "267847",
+            "Shape_Length" : 0.22560480535327349,
+            "Shape_Area" : 0.0021261330917689125
+          },
+    "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+            [
+                [-79.444644, 35.040765],
+                [-79.444517, 35.041009],
+                [-79.444392, 35.041246],
+                ...
+            ]
+        ]
+    }
+}
+404 Not Found: If no details are found for the given Neighbourhood.
+
+Example
+Request:
+
+
+
+GET /geo/neighbourhood/Northeast
+Response:
+
+
+
+{
+    "type": "Feature",
+    "properties" : {
+            "State" : "AK",
+            "County" : "Anchorage",
+            "City" : "Anchorage",
+            "Name" : "Northeast",
+            "RegionID" : "267847",
+            "Shape_Length" : 0.22560480535327349,
+            "Shape_Area" : 0.0021261330917689125
+          },
+    "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+            [
+                [-79.444644, 35.040765],
+                [-79.444517, 35.041009],
+                [-79.444392, 35.041246],
+                ...
+            ]
+        ]
+    }
+}
+Usage
+To use the Get Neighbourhood Details API, perform a GET request to the specified endpoint with the target Neighbourhood as a path parameter. The API will respond with detailed information about the specified Neighbourhood.
+
+Error Handling
+404 Not Found: If no details are found for the given Neighbourhood, the API will respond with a 404 status code and an error message in the response body.

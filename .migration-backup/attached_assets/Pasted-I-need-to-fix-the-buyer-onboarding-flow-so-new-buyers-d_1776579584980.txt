@@ -1,0 +1,116 @@
+I need to fix the buyer onboarding flow so new buyers don't start at 0% profile completeness. Right now the onboarding wizard collects primaryIntent but never asks for preferredCities, homeTypes, mustHaves, or moveInTimeline — the exact fields that power Beacon matching and recommendations. Fix that.
+
+Context
+
+Onboarding entry point: client/src/pages/Onboarding.tsx
+Onboarding API: POST /api/onboarding/buyer in server/routes.ts
+Profile completeness scoring: buyerProfileCompleteness() in server/storage.ts
+Target: a buyer who completes onboarding should exit with a completeness score of at least 60
+
+The 7 scored fields and their weights are:
+FieldPointsminBeds or maxBeds15minBaths10preferredCities20homeTypes15mustHaves20moveInTimeline10minSqft or maxSqft10
+We want onboarding to collect at minimum: preferredCities (20pts), homeTypes (15pts), moveInTimeline (10pts), and minBeds (15pts) = 60pts guaranteed if completed.
+
+Part 1 — Update the buyer onboarding wizard (client/src/pages/Onboarding.tsx)
+The buyer wizard should have these steps in order. Do not change the existing first step (intent selection). Add new steps after intent = buyer is selected:
+Step 1 — already exists: Intent picker (Buyer / Sell-Track / Agent / Explorer)
+Step 2 — Where are you looking?
+
+Heading: "Where are you looking to buy?"
+City tag input — type a city name, press Enter or comma to add as a tag, click × to remove
+Pre-populated suggestions shown as clickable chips below the input: San Diego, La Jolla, Chula Vista, Encinitas, Carlsbad, Oceanside, El Cajon, Santee, Escondido, Coronado
+Minimum 1 city required to proceed
+Skip link: "I'm flexible on location →" (sets preferredCities = [] and advances)
+
+Step 3 — What type of home?
+
+Heading: "What type of home are you looking for?"
+Checkbox grid (2 columns): Single Family, Condo, Townhouse, Multi-Family, Mobile, Land
+At least 1 selection required to proceed
+Skip link: "Open to anything →" (sets homeTypes = [] and advances)
+
+Step 4 — Bedrooms & budget
+
+Heading: "How many bedrooms and what's your budget?"
+Beds: a row of pill buttons: 1, 2, 3, 4, 5+ (selecting one sets minBeds, selecting a second higher value sets maxBeds)
+Budget: a single text input for preApprovalAmount with a $ prefix, numeric only, formatted with commas
+Both fields optional — skip link: "Not sure yet →"
+
+Step 5 — Timeline
+
+Heading: "When are you looking to move?"
+Large pill button selection (single select): ASAP, 1–3 months, 3–6 months, 6–12 months, Just browsing
+Required — no skip (it's a single tap, low friction)
+Map "Just browsing" → moveInTimeline = "just looking" before saving
+All other values save as lowercase with ASCII hyphens (normalize en-dash → hyphen)
+
+Step 6 — Must-haves (optional)
+
+Heading: "Any must-haves?" with subheading "These help us find your perfect match"
+Chip grid of suggestions (multi-select toggle): pool, garage, ocean view, single story, large lot, updated kitchen, solar, ADU, no HOA, good schools, mountain view, new construction
+Also allow free-text tag input for anything not in the list
+Skip link: "Skip for now →"
+This is the last step — after this, submit
+
+Progress indicator: Show a step progress bar at the top (e.g. Step 2 of 6) that only appears during the buyer wizard steps, not on the intent picker.
+
+Part 2 — Update POST /api/onboarding/buyer in server/routes.ts
+Update the Zod validation schema and handler to accept and save all new fields:
+typescriptconst buyerOnboardingSchema = z.object({
+  preferredCities: z.array(z.string()).optional().default([]),
+  homeTypes: z.array(z.string()).optional().default([]),
+  minBeds: z.number().int().min(0).optional(),
+  maxBeds: z.number().int().min(0).optional(),
+  preApprovalAmount: z.number().int().min(0).optional(),
+  moveInTimeline: z.string().optional(),
+  mustHaves: z.array(z.string()).optional().default([]),
+});
+Handler logic:
+
+Normalize moveInTimeline: replace en-dash with hyphen, trim, lowercase before saving
+Find existing buyer_profiles row for this user or create one if it doesn't exist
+Update only the fields that were provided (do not overwrite existing data with empty defaults)
+Set onboardingCompleted = true on the users record
+Set buyerProfileCompleted = true on the users record if completeness score ≥ 60 after saving
+Return { destination: resolveUserDestination(user), completenessScore, profile }
+Audit log with executeWithAudit
+
+
+Part 3 — Update resolveUserDestination if needed
+Check shared/routing.ts — if buyerProfileCompleted is used in destination resolution, make sure a buyer who completes onboarding with score ≥ 60 still routes to /swipe and not back to /onboarding.
+
+Part 4 — Hide the nudge banner during onboarding
+In client/src/components/BuyerProfileNudge.tsx, add a check: if the current route is /onboarding, render nothing. No point showing the nudge while the user is actively filling in their profile.
+
+Part 5 — Update existing buyer profiles (backfill)
+Add to scripts/apply-safe-constraints.mjs:
+javascript{
+  type: 'sql',
+  description: 'Normalize existing buyer move_in_timeline values to lowercase ASCII',
+  sql: `
+    UPDATE buyer_profiles
+    SET move_in_timeline = LOWER(REPLACE(move_in_timeline, '–', '-'))
+    WHERE move_in_timeline IS NOT NULL
+      AND move_in_timeline != LOWER(REPLACE(move_in_timeline, '–', '-'))
+  `,
+},
+
+Part 6 — Tests
+Add to server/__tests__/buyerProfile.test.ts:
+
+Buyer who completes all 5 required onboarding steps scores ≥ 60
+Buyer who skips everything scores 0
+Buyer who skips only must-haves scores ≥ 60 (mustHaves is optional)
+moveInTimeline "Just browsing" maps to "just looking" correctly
+moveInTimeline with en-dash normalizes before saving
+Existing profile data is not overwritten by empty onboarding defaults
+
+
+Part 7 — Verification
+After all changes:
+
+node scripts/apply-safe-constraints.mjs — show full output
+npx tsx server/__tests__/buyerProfile.test.ts — all tests pass, show full output
+npx tsc --noEmit — show only new errors vs the 102 pre-existing baseline
+Walk me through exactly what a brand new buyer sees from the moment they land on xucasa through completing onboarding — step by step
+What is their completeness score immediately after finishing onboarding if they fill in cities, home type, beds, and timeline but skip must-haves?

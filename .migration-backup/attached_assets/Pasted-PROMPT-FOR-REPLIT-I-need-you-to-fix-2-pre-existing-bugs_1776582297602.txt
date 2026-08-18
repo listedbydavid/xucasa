@@ -1,0 +1,61 @@
+PROMPT FOR REPLIT:
+
+I need you to fix 2 pre-existing bugs that were flagged during the routes refactor. These are small, isolated fixes — no new features, no behavior changes beyond correcting the bugs.
+
+Context
+During the routes refactor, the architect flagged two req/_req bugs that were preserved verbatim from the original server/routes.ts. They are part of the 102 baseline TypeScript errors. Find them and fix them.
+
+Step 1 — Find the bugs
+Run this to locate them:
+bashgrep -rn "_req\|req\b" server/routes/ --include="*.ts" | grep -v "node_modules" | grep -i "unused\|declared but"
+Also run:
+bashnpx tsc --noEmit 2>&1 | grep -i "req" | grep -v "node_modules"
+Show me the full output of both so I can see exactly where they are before you fix anything.
+
+Step 2 — Fix them
+The two patterns to look for and fix:
+Pattern A — unused req parameter:
+A route handler declares req as a parameter but never uses it. Fix: rename to _req to signal intentional non-use and silence the TypeScript error.
+typescript// Before
+router.get('/path', (req, res) => { res.json({...}) });
+// After
+router.get('/path', (_req, res) => { res.json({...}) });
+Pattern B — _req used by mistake:
+A route handler names the parameter _req (signaling it won't be used) but then actually accesses _req.user, _req.query, _req.body etc. inside the handler. Fix: rename to req so the usage is correct and intentional.
+typescript// Before
+router.get('/path', (_req, res) => { const data = _req.query.id; ... });
+// After
+router.get('/path', (req, res) => { const data = req.query.id; ... });
+Apply whichever pattern fits each instance. Do not change anything else in the handler — just the parameter name.
+
+Step 3 — Verify the fix reduced the error count
+bashnpx tsc --noEmit 2>&1 | wc -l
+Then show the specific lines that were fixed:
+bashnpx tsc --noEmit 2>&1 | grep -i "req" | grep -v "node_modules"
+The second command should return empty or fewer lines than before the fix.
+
+Step 4 — Full verification
+
+Run the full test suite:
+
+bashfor f in server/__tests__/*.test.ts; do echo "--- $f ---"; npx tsx "$f" 2>&1 | tail -5; done
+
+Hit the same smoke test endpoints as after the refactor:
+
+bashcurl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/properties?limit=1"
+curl -s -o /dev/null -w "%{http_code} " -X POST "http://localhost:5000/api/buyer-interest"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/admin/stats"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/beacon/match-buyers"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/concessions/active"
+Expected: 200 401 401 403 200
+
+Show the new TypeScript error count vs the old baseline:
+
+bashecho "New error count:"
+npx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+echo "Previous baseline was: 102"
+
+Show the final line counts across all route files to confirm nothing was accidentally changed:
+
+bashwc -l server/routes/*.ts
+Paste the full output of all 4 verification steps back to me.
