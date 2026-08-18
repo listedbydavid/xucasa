@@ -1,0 +1,65 @@
+PROMPT FOR REPLIT:
+
+Run the full post-merge verification battery and show me complete unedited output of every check. Do not start Phase 2 (Task #22) until these pass.
+
+bash
+# 1. TypeScript
+npx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+
+# 2. Tests — adjust path if needed
+for f in artifacts/api-server/src/__tests__/*.test.ts; do
+  echo "--- $f ---"
+  npx tsx "$f" 2>&1 | tail -5
+done
+
+# 3. Endpoints
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/properties?limit=1"
+curl -s -o /dev/null -w "%{http_code} " -X POST "http://localhost:5000/api/buyer-interest"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/admin/stats"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/vendors"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/changelog"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/tours/overrides/swipe"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/beacon/match-buyers"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/concessions/active"
+
+Expected: 200 401 401 200 200 200 401 200
+
+bash
+# 4. Critical files in new locations
+ls artifacts/api-server/src/index.ts \
+   artifacts/api-server/src/storage.ts \
+   artifacts/api-server/src/routes/index.ts \
+   artifacts/xucasa/src/App.tsx \
+   artifacts/xucasa/src/pages/Swipe.tsx \
+   artifacts/xucasa/src/pages/Admin.tsx \
+   shared/schema.ts \
+   scripts/apply-safe-constraints.mjs \
+   VISION.md 2>&1
+
+# 5. Database
+node -e "
+  import('pg').then(async ({ default: pg }) => {
+    const client = new pg.Client(process.env.DATABASE_URL);
+    await client.connect();
+    const r1 = await client.query('SELECT count(*) FROM properties');
+    const r2 = await client.query('SELECT count(*) FROM users');
+    console.log('Properties: ' + r1.rows[0].count);
+    console.log('Users: ' + r2.rows[0].count);
+    await client.end();
+  }).catch(e => { console.error('DB FAILED:', e.message); process.exit(1); });
+"
+
+# 6. Import paths
+grep -rn "from \"@shared" artifacts/api-server/src/ --include="*.ts" | head -3
+grep -rn "from \"@/" artifacts/xucasa/src/ --include="*.tsx" | head -3
+grep -rn "from \"../storage\"" artifacts/api-server/src/routes/ --include="*.ts" | head -3
+
+# 7. New structure
+ls artifacts/xucasa/src/pages/ | head -10
+ls artifacts/api-server/src/routes/ | head -10
+ls lib/ 2>&1
+
+# 8. Migration script
+node scripts/apply-safe-constraints.mjs 2>&1 | tail -5
+
+Show me every output in full. I will give go/no-go for Phase 2 based on these results.
