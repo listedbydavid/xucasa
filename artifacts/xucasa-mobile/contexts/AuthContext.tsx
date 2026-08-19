@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { apiGet, apiPost, clearSession, type User } from '@/lib/api';
+import { apiGet, apiPost, clearSession, storeSessionToken, type User } from '@/lib/api';
 import { retryPendingPushUnregistration, unregisterPushDevice } from '@/lib/pushNotifications';
 
 interface AuthContextType {
@@ -13,6 +13,11 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+interface AuthSessionResponse {
+  user: User;
+  sessionToken?: string;
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -36,14 +41,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshUser]);
 
   const login = useCallback(async (email: string, password: string) => {
-    await apiPost('/api/auth/login', { email, password });
-    await refreshUser();
-  }, [refreshUser]);
+    const session = await apiPost<AuthSessionResponse>('/api/auth/login', { email, password });
+    await storeSessionToken(session.sessionToken);
+    const userData = await apiGet<User>('/api/auth/user');
+    setUser(userData);
+  }, []);
 
   const register = useCallback(async (email: string, password: string, firstName: string, lastName = '') => {
-    await apiPost('/api/auth/register', { email, password, firstName, lastName });
-    await refreshUser();
-  }, [refreshUser]);
+    const session = await apiPost<AuthSessionResponse>('/api/auth/register', { email, password, firstName, lastName });
+    await storeSessionToken(session.sessionToken);
+    const userData = await apiGet<User>('/api/auth/user');
+    setUser(userData);
+  }, []);
 
   const logout = useCallback(async () => {
     try { await unregisterPushDevice(); } catch {}

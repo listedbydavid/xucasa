@@ -18,6 +18,59 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * @summary Sign in with email and password
+ */
+export const LoginBody = zod.object({
+  "email": zod.string(),
+  "password": zod.string(),
+  "rememberMe": zod.boolean().optional()
+})
+
+export const LoginResponse = zod.object({
+  "ok": zod.literal(true),
+  "user": zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "firstName": zod.string().nullish(),
+  "lastName": zod.string().nullish(),
+  "onboardingCompleted": zod.boolean().nullish(),
+  "currentMode": zod.string().nullish(),
+  "primaryIntent": zod.string().nullish()
+}),
+  "sessionToken": zod.string().optional().describe('Native-only bearer session credential; omitted from browser responses.')
+})
+
+
+/**
+ * @summary Register with email and password
+ */
+export const registerBodyPasswordMin = 10;
+
+
+
+export const RegisterBody = zod.object({
+  "email": zod.string(),
+  "password": zod.string().min(registerBodyPasswordMin),
+  "firstName": zod.string(),
+  "lastName": zod.string().optional()
+})
+
+export const RegisterResponse = zod.object({
+  "ok": zod.literal(true),
+  "user": zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "firstName": zod.string().nullish(),
+  "lastName": zod.string().nullish(),
+  "onboardingCompleted": zod.boolean().nullish(),
+  "currentMode": zod.string().nullish(),
+  "primaryIntent": zod.string().nullish()
+}),
+  "sessionToken": zod.string().optional().describe('Native-only bearer session credential; omitted from browser responses.')
+})
+
+
+/**
  * @summary Opt a saved property into or out of price-drop alerts
  */
 export const UpdateSavedPropertyPriceDropAlertParams = zod.object({

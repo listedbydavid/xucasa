@@ -2,6 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 const COOKIE_KEY = 'xucasa.session';
+const SESSION_TOKEN_KEY = 'xucasa.session-token';
 
 /**
  * Resolve the API origin in priority order:
@@ -32,6 +33,16 @@ async function getCookie(): Promise<string | null> {
   return SecureStore.getItemAsync(COOKIE_KEY);
 }
 
+async function getSessionToken(): Promise<string | null> {
+  if (Platform.OS === 'web') return null;
+  return SecureStore.getItemAsync(SESSION_TOKEN_KEY);
+}
+
+export async function storeSessionToken(token?: string): Promise<void> {
+  if (Platform.OS === 'web' || !token) return;
+  await SecureStore.setItemAsync(SESSION_TOKEN_KEY, token);
+}
+
 async function storeCookie(setCookieHeader: string): Promise<void> {
   if (Platform.OS === 'web') return;
   const cookiePart = setCookieHeader.split(';')[0];
@@ -41,13 +52,17 @@ async function storeCookie(setCookieHeader: string): Promise<void> {
 
 export async function clearSession(): Promise<void> {
   if (Platform.OS === 'web') return;
-  await SecureStore.deleteItemAsync(COOKIE_KEY);
+  await Promise.all([
+    SecureStore.deleteItemAsync(COOKIE_KEY),
+    SecureStore.deleteItemAsync(SESSION_TOKEN_KEY),
+  ]);
 }
 
 // ─── Core fetch ───────────────────────────────────────────────────────────────
 
 async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
-  const cookie = await getCookie();
+  const sessionToken = await getSessionToken();
+  const cookie = sessionToken ? null : await getCookie();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> ?? {}),
@@ -55,7 +70,14 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
   // Native fetch needs the cookie jar explicitly. On web, Cookie is a
   // forbidden request header; the browser manages the session cookie when
   // credentials are included below.
-  if (cookie && Platform.OS !== 'web') headers['Cookie'] = cookie;
+  if (Platform.OS !== 'web') {
+    headers['X-Xucasa-Client'] = 'native';
+    if (sessionToken) {
+      headers.Authorization = `Bearer ${sessionToken}`;
+    } else if (cookie) {
+      headers.Cookie = cookie;
+    }
+  }
 
   const response = await fetch(`${getBaseUrl()}${path}`, {
     ...options,

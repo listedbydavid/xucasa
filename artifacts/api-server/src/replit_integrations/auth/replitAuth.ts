@@ -1,7 +1,7 @@
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import session from "express-session";
-import type { Express, RequestHandler } from "express";
+import type { Express, Request, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import { randomBytes, createHash } from "crypto";
@@ -24,6 +24,31 @@ import { audit, executeWithAudit } from "../../auditLog";
 import { storage } from "../../storage";
 import { sendPasswordResetEmail } from "../../emailService";
 import { z } from "zod";
+import {
+  getNativeSessionToken,
+  mobileBearerSession,
+  sessionCookieName,
+} from "./nativeSession";
+
+function createAuthSessionResponse(req: Request, user: any) {
+  const response: Record<string, unknown> = {
+    ok: true,
+    user: {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      onboardingCompleted: user.onboardingCompleted,
+      currentMode: user.currentMode,
+      primaryIntent: user.primaryIntent,
+    },
+  };
+
+  const sessionToken = getNativeSessionToken(req);
+  if (sessionToken) response.sessionToken = sessionToken;
+
+  return response;
+}
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
@@ -72,6 +97,7 @@ function getCallbackUrl(req: any): string {
 
 export async function setupAuth(app: Express) {
   app.set("trust proxy", 1);
+  app.use(mobileBearerSession);
   app.use(getSession());
   app.use(passport.initialize());
   app.use(passport.session());
@@ -233,7 +259,7 @@ export async function setupAuth(app: Express) {
         }
         logAuthAttempt("register", "success", req, email);
         audit({ req, event: "auth_register_success", outcome: "success", userId: user.id, metadata: { email } });
-        return res.json({ ok: true, user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, onboardingCompleted: user.onboardingCompleted, currentMode: user.currentMode, primaryIntent: user.primaryIntent } });
+        return res.json(createAuthSessionResponse(req, user));
       });
     } catch (err: any) {
       console.error("[Auth] Registration error:", err);
@@ -297,7 +323,7 @@ export async function setupAuth(app: Express) {
         logAuthAttempt("login", "success", req, email);
         clearFailedAttempts(req);
         audit({ req, event: "auth_login_success", outcome: "success", userId: user.id, metadata: { email } });
-        return res.json({ ok: true, user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, onboardingCompleted: user.onboardingCompleted, currentMode: user.currentMode, primaryIntent: user.primaryIntent } });
+        return res.json(createAuthSessionResponse(req, user));
       });
     } catch (err: any) {
       console.error("[Auth] Login error:", err);
@@ -449,7 +475,7 @@ export async function setupAuth(app: Express) {
     const isBrowserNavigation = req.get("accept")?.includes("text/html");
     req.logout(() => {
       req.session.destroy(() => {
-        res.clearCookie("connect.sid");
+        res.clearCookie(sessionCookieName);
         if (isBrowserNavigation) return res.redirect("/");
         return res.status(204).end();
       });

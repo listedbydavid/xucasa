@@ -6,9 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './authSession';
+export * from './authUser';
 export * from './badRequestResponse';
 export * from './error';
 export * from './healthStatus';
+export * from './loginRequest';
 export * from './notFoundResponse';
 export * from './notificationPreferences';
 export * from './notificationPreferencesUpdate';
@@ -16,5 +19,6 @@ export * from './priceDropAlertUpdate';
 export * from './pushTokenRegistration';
 export * from './pushTokenRegistrationPlatform';
 export * from './registerPushToken200';
+export * from './registerRequest';
 export * from './savedPropertyAlert';
 export * from './unauthorizedResponse';

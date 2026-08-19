@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
   - name: notifications
     description: Notification preferences and push devices
   - name: saved-properties
@@ -28,6 +30,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Sign in with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Signed in successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "200":
+          description: Registered and signed in successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: An account with this email already exists
   /saved-properties/{propertyId}/price-drop-alert:
     patch:
       operationId: updateSavedPropertyPriceDropAlert
@@ -164,6 +210,59 @@ components:
           type: string
       required:
         - status
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+        rememberMe:
+          type: boolean
+      required: [email, password]
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+          minLength: 10
+        firstName:
+          type: string
+        lastName:
+          type: string
+      required: [email, password, firstName]
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        firstName:
+          type: [string, "null"]
+        lastName:
+          type: [string, "null"]
+        onboardingCompleted:
+          type: [boolean, "null"]
+        currentMode:
+          type: [string, "null"]
+        primaryIntent:
+          type: [string, "null"]
+      required: [id, email]
+    AuthSession:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          const: true
+        user:
+          $ref: "#/components/schemas/AuthUser"
+        sessionToken:
+          type: string
+          description: Native-only bearer session credential; omitted from browser responses.
+      required: [ok, user]
     Error:
       type: object
       properties:

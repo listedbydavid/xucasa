@@ -9,6 +9,42 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface LoginRequest {
+  email: string;
+  password: string;
+  rememberMe?: boolean;
+}
+
+export interface RegisterRequest {
+  email: string;
+  /** @minLength 10 */
+  password: string;
+  firstName: string;
+  lastName?: string;
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  /** @nullable */
+  firstName?: string | null;
+  /** @nullable */
+  lastName?: string | null;
+  /** @nullable */
+  onboardingCompleted?: boolean | null;
+  /** @nullable */
+  currentMode?: string | null;
+  /** @nullable */
+  primaryIntent?: string | null;
+}
+
+export interface AuthSession {
+  ok: true;
+  user: AuthUser;
+  /** Native-only bearer session credential; omitted from browser responses. */
+  sessionToken?: string;
+}
+
 export interface Error {
   error?: string;
   message?: string;
