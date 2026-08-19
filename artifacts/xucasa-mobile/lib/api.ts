@@ -28,27 +28,19 @@ export const getBaseUrl = (): string => {
 // ─── Cookie jar ───────────────────────────────────────────────────────────────
 
 async function getCookie(): Promise<string | null> {
-  if (Platform.OS === 'web') {
-    return typeof localStorage === 'undefined' ? null : localStorage.getItem(COOKIE_KEY);
-  }
+  if (Platform.OS === 'web') return null;
   return SecureStore.getItemAsync(COOKIE_KEY);
 }
 
 async function storeCookie(setCookieHeader: string): Promise<void> {
+  if (Platform.OS === 'web') return;
   const cookiePart = setCookieHeader.split(';')[0];
   if (!cookiePart) return;
-  if (Platform.OS === 'web') {
-    if (typeof localStorage !== 'undefined') localStorage.setItem(COOKIE_KEY, cookiePart);
-    return;
-  }
   await SecureStore.setItemAsync(COOKIE_KEY, cookiePart);
 }
 
 export async function clearSession(): Promise<void> {
-  if (Platform.OS === 'web') {
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(COOKIE_KEY);
-    return;
-  }
+  if (Platform.OS === 'web') return;
   await SecureStore.deleteItemAsync(COOKIE_KEY);
 }
 
@@ -60,9 +52,19 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> ?? {}),
   };
-  if (cookie) headers['Cookie'] = cookie;
+  // Native fetch needs the cookie jar explicitly. On web, Cookie is a
+  // forbidden request header; the browser manages the session cookie when
+  // credentials are included below.
+  if (cookie && Platform.OS !== 'web') headers['Cookie'] = cookie;
 
-  const response = await fetch(`${getBaseUrl()}${path}`, { ...options, headers });
+  const response = await fetch(`${getBaseUrl()}${path}`, {
+    ...options,
+    // Avoid browser cache revalidation responses being surfaced as failed
+    // API calls; React Query owns the client-side freshness policy.
+    cache: Platform.OS === 'web' ? 'no-store' : options.cache,
+    credentials: 'include',
+    headers,
+  });
 
   const setCookie = response.headers.get('set-cookie');
   if (setCookie) await storeCookie(setCookie);
@@ -82,6 +84,7 @@ export async function apiGet<T>(path: string): Promise<T> {
   const res = await apiFetch(path);
   if (res.status === 401) throw new ApiError(401, 'Unauthorized');
   if (!res.ok) throw new ApiError(res.status, `API error ${res.status}`);
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 

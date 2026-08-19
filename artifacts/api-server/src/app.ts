@@ -1,5 +1,7 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import { createServer } from "http";
+import cors from "cors";
+import { createCorsOptions, getTrustedCorsOrigins } from "./cors";
 import { requestIdMiddleware } from "./requestId";
 import { logger } from "./logger";
 
@@ -24,6 +26,14 @@ export async function createApp() {
   const httpServer = createServer(app);
 
   app.set("trust proxy", 1);
+
+  // The web Expo preview is a separate origin from the API. Credentialed CORS
+  // is therefore limited to explicit environment-provided origins, never a
+  // domain wildcard.
+  if (getTrustedCorsOrigins().size === 0) {
+    log("No trusted browser origins configured; credentialed browser requests are disabled", "cors");
+  }
+  app.use(cors(createCorsOptions()));
 
   app.use(requestIdMiddleware);
 
