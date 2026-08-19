@@ -1,2 +1,3 @@
 - [xucasa port lessons](xucasa-port-lessons.md) — Zod v3, Orval, and esbuild compatibility gotchas for the xucasa monorepo.
 - [xucasa cross-origin sessions](xucasa-cross-origin-sessions.md) — Browser sessions span sibling development origins and need an explicit trust boundary.
+- [Git history rewrites](git-history-rewrites.md) — Avoid tree-filter operations on `.replit`; sanitize Git objects without historical checkouts.
