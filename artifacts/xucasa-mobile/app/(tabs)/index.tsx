@@ -51,7 +51,7 @@ export default function SearchScreen() {
   const { isAuthenticated } = useAuth();
 
   const [searchText, setSearchText] = useState(params.location as string || '');
-  const [viewMode, setViewMode] = useState<'list' | 'map'>('map');
+  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'map'>('map');
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [selectedPropertyId, setSelectedPropertyId] = useState<number | null>(null);
 
@@ -372,15 +372,15 @@ export default function SearchScreen() {
                   horizontal
                   pagingEnabled
                   showsHorizontalScrollIndicator={false}
-                  snapToInterval={width - 40}
+                  snapToInterval={width - 64}
                   snapToAlignment="center"
                   decelerationRate="fast"
-                  contentContainerStyle={{ paddingHorizontal: 20 }}
+                  contentContainerStyle={{ paddingHorizontal: 16 }}
                   onViewableItemsChanged={onViewableItemsChanged}
                   viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
                   keyExtractor={(p) => String(p.id)}
                   renderItem={({ item }) => (
-                    <View style={{ width: width - 40, paddingRight: 12 }}>
+                    <View style={{ width: width - 64, paddingRight: 10 }}>
                       <PropertyCard
                         property={item}
                         isSaved={savedIds.has(item.id)}
@@ -395,7 +395,7 @@ export default function SearchScreen() {
             )}
           </View>
         ) : (
-          /* List View */
+          /* List and grid views */
           isLoading ? (
             <FlatList
               data={[1, 2, 3]}
@@ -417,14 +417,43 @@ export default function SearchScreen() {
               <Text style={[styles.emptyTitle, { color: colors.foreground, fontFamily: 'Outfit_700Bold' }]}>No listings found</Text>
               <Text style={[styles.emptyBody, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]}>Try a different location or fewer filters.</Text>
             </View>
+          ) : viewMode === 'grid' ? (
+            <FlatList
+              data={properties}
+              key="property-grid"
+              numColumns={2}
+              keyExtractor={(p: Property) => String(p.id)}
+              renderItem={({ item }: { item: Property }) => (
+                <View style={styles.gridItem}>
+                  <PropertyCard
+                    property={item}
+                    isSaved={savedIds.has(item.id)}
+                    grid
+                    onPress={() => router.push(`/property/${item.id}`)}
+                    onSaveToggle={() => handleSaveToggle(item.id)}
+                  />
+                </View>
+              )}
+              ListHeaderComponent={
+                <Text style={[styles.resultCount, { color: colors.foreground, fontFamily: 'DMSans_700Bold' }]}>
+                  {(data?.total ?? properties.length).toLocaleString()} homes
+                </Text>
+              }
+              columnWrapperStyle={styles.gridRow}
+              contentContainerStyle={styles.gridList}
+              showsVerticalScrollIndicator={false}
+              ListFooterComponent={<View style={{ height: Platform.OS === 'web' ? 120 : 110 }} />}
+            />
           ) : (
             <FlatList
               data={properties}
+              key="property-list"
               keyExtractor={(p: Property) => String(p.id)}
               renderItem={({ item }: { item: Property }) => (
                 <PropertyCard
                   property={item}
                   isSaved={savedIds.has(item.id)}
+                  dense
                   onPress={() => router.push(`/property/${item.id}`)}
                   onSaveToggle={() => handleSaveToggle(item.id)}
                 />
@@ -442,21 +471,36 @@ export default function SearchScreen() {
         )}
       </View>
 
-      {/* Floating Toggle Button */}
+      {/* Persistent Map / List / Grid switcher */}
       <View style={[styles.floatingToggleWrap, { bottom: Platform.OS === 'web' ? 100 : insets.bottom + 65 }]}>
-        <TouchableOpacity
-          style={[styles.floatingToggle, { backgroundColor: colors.foreground }]}
-          onPress={() => {
-            Haptics.selectionAsync();
-            setViewMode(viewMode === 'map' ? 'list' : 'map');
-          }}
-          activeOpacity={0.8}
-        >
-          <Ionicons name={viewMode === 'map' ? 'list' : 'map'} size={18} color={colors.background} />
-          <Text style={[styles.floatingToggleText, { color: colors.background, fontFamily: 'DMSans_700Bold' }]}>
-            {viewMode === 'map' ? 'List' : 'Map'}
-          </Text>
-        </TouchableOpacity>
+        <View style={[styles.viewSwitcher, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {([
+            { mode: 'map', label: 'Map', icon: 'map-outline' },
+            { mode: 'list', label: 'List', icon: 'list-outline' },
+            { mode: 'grid', label: 'Grid', icon: 'grid-outline' },
+          ] as const).map(({ mode, label, icon }) => {
+            const selected = viewMode === mode;
+            return (
+              <TouchableOpacity
+                key={mode}
+                style={[styles.viewOption, selected && { backgroundColor: colors.foreground }]}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setViewMode(mode);
+                }}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`Show ${label.toLowerCase()} view`}
+              >
+                <Ionicons name={icon} size={15} color={selected ? colors.background : colors.foreground} />
+                <Text style={[styles.viewOptionText, { color: selected ? colors.background : colors.foreground, fontFamily: 'DMSans_700Bold' }]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
     </View>
   );
@@ -480,7 +524,7 @@ const styles = StyleSheet.create({
     height: 48,
   },
   searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, fontSize: 15, height: '100%' },
+  searchInput: { flex: 1, fontSize: 14, height: '100%' },
   quickFilters: { flexDirection: 'row' },
   filtersScroll: { paddingHorizontal: 16, gap: 8 },
   chip: {
@@ -492,7 +536,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 6,
   },
-  chipText: { fontSize: 14 },
+  chipText: { fontSize: 13 },
   content: { flex: 1 },
   mapContainer: { flex: 1 },
   mapMarker: {
@@ -506,7 +550,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 3,
   },
-  mapMarkerText: { fontSize: 13 },
+  mapMarkerText: { fontSize: 11 },
   webMapFallback: {
     alignItems: 'center',
     justifyContent: 'flex-start',
@@ -530,8 +574,11 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
-  list: { padding: 16, paddingTop: 16 },
-  resultCount: { fontSize: 18, marginBottom: 16 },
+  list: { padding: 14, paddingTop: 12 },
+  gridList: { padding: 12, paddingTop: 12 },
+  gridRow: { gap: 10 },
+  gridItem: { width: '48.5%', flexGrow: 0, minWidth: 0 },
+  resultCount: { fontSize: 15, marginBottom: 10 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
   emptyTitle: { fontSize: 20, textAlign: 'center' },
   emptyBody: { fontSize: 15, textAlign: 'center' },
@@ -542,18 +589,25 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     zIndex: 100,
   },
-  floatingToggle: {
+  viewSwitcher: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    gap: 8,
+    padding: 3,
+    borderRadius: 22,
+    borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
     shadowRadius: 5,
     elevation: 6,
   },
-  floatingToggleText: { fontSize: 15 },
+  viewOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: 18,
+  },
+  viewOptionText: { fontSize: 12 },
 });

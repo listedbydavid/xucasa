@@ -10,6 +10,8 @@ interface PropertyCardProps {
   isSaved?: boolean;
   embedded?: boolean;
   compact?: boolean;
+  dense?: boolean;
+  grid?: boolean;
   onPress: () => void;
   onSaveToggle?: () => void;
 }
@@ -19,6 +21,8 @@ export function PropertyCard({
   isSaved = false,
   embedded = false,
   compact = false,
+  dense = false,
+  grid = false,
   onPress,
   onSaveToggle,
 }: PropertyCardProps) {
@@ -45,12 +49,21 @@ export function PropertyCard({
         { backgroundColor: colors.card, borderColor: colors.border },
         embedded && styles.embeddedCard,
         compact && styles.compactCard,
+        dense && styles.denseCard,
+        grid && styles.gridCard,
       ]}
       onPress={onPress}
       activeOpacity={0.9}
     >
       {/* Photo */}
-      <View style={[styles.imageContainer, compact && styles.compactImageContainer]}>
+      <View
+        style={[
+          styles.imageContainer,
+          compact && styles.compactImageContainer,
+          dense && styles.denseImageContainer,
+          grid && styles.gridImageContainer,
+        ]}
+      >
         {currentPhoto ? (
           <Image
             source={{ uri: currentPhoto }}
@@ -66,7 +79,7 @@ export function PropertyCard({
         )}
 
         {/* Top Badges */}
-        <View style={styles.badgeRow}>
+        <View style={[styles.badgeRow, (dense || grid) && styles.tightBadgeRow]}>
           {isNew && (
             <View style={[styles.badge, { backgroundColor: colors.primary }]}>
               <Text style={[styles.badgeText, { color: colors.primaryForeground }]}>NEW</Text>
@@ -82,14 +95,14 @@ export function PropertyCard({
         {/* Save button */}
         {onSaveToggle && (
           <TouchableOpacity
-            style={styles.saveBtn}
+            style={[styles.saveBtn, (dense || grid) && styles.tightSaveBtn]}
             onPress={onSaveToggle}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            <View style={styles.saveBtnCircle}>
+            <View style={[styles.saveBtnCircle, (dense || grid) && styles.tightSaveBtnCircle]}>
               <Ionicons
                 name={isSaved ? 'heart' : 'heart-outline'}
-                size={22}
+                size={dense || grid ? 18 : 22}
                 color={isSaved ? colors.primary : '#fff'}
               />
             </View>
@@ -98,36 +111,51 @@ export function PropertyCard({
       </View>
 
       {/* Info */}
-      <View style={[styles.info, compact && styles.compactInfo]}>
-        <Text style={[styles.price, compact && styles.compactPrice, { color: colors.foreground, fontFamily: 'Outfit_700Bold' }]}>
+      <View
+        style={[
+          styles.info,
+          compact && styles.compactInfo,
+          dense && styles.denseInfo,
+          grid && styles.gridInfo,
+        ]}
+      >
+        <Text
+          style={[
+            styles.price,
+            compact && styles.compactPrice,
+            dense && styles.densePrice,
+            grid && styles.gridPrice,
+            { color: colors.foreground, fontFamily: 'Outfit_700Bold' },
+          ]}
+        >
           {formatPrice(property.price)}
         </Text>
 
-        <View style={styles.specsRow}>
+        <View style={[styles.specsRow, (dense || grid) && styles.tightSpecsRow]}>
           {property.beds != null && (
-            <Text style={[styles.spec, { color: colors.foreground, fontFamily: 'DMSans_500Medium' }]}>
+            <Text style={[styles.spec, (dense || grid) && styles.tightSpec, { color: colors.foreground, fontFamily: 'DMSans_500Medium' }]}>
               {property.beds} bd
             </Text>
           )}
           {property.baths != null && (
-            <Text style={[styles.specSep, { color: colors.mutedForeground }]}>|</Text>
+            <Text style={[styles.specSep, (dense || grid) && styles.tightSpecSep, { color: colors.mutedForeground }]}>|</Text>
           )}
           {property.baths != null && (
-            <Text style={[styles.spec, { color: colors.foreground, fontFamily: 'DMSans_500Medium' }]}>
+            <Text style={[styles.spec, (dense || grid) && styles.tightSpec, { color: colors.foreground, fontFamily: 'DMSans_500Medium' }]}>
               {property.baths} ba
             </Text>
           )}
           {property.sqft != null && (
             <>
-              <Text style={[styles.specSep, { color: colors.mutedForeground }]}>|</Text>
-              <Text style={[styles.spec, { color: colors.foreground, fontFamily: 'DMSans_500Medium' }]}>
+              <Text style={[styles.specSep, (dense || grid) && styles.tightSpecSep, { color: colors.mutedForeground }]}>|</Text>
+              <Text style={[styles.spec, (dense || grid) && styles.tightSpec, { color: colors.foreground, fontFamily: 'DMSans_500Medium' }]}>
                 {property.sqft.toLocaleString()} sqft
               </Text>
             </>
           )}
         </View>
 
-        <Text style={[styles.address, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]} numberOfLines={1}>
+        <Text style={[styles.address, (dense || grid) && styles.tightAddress, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]} numberOfLines={1}>
           {property.address}{property.city ? `, ${property.city}` : ''}{property.state ? ` ${property.state}` : ''}
         </Text>
       </View>
@@ -152,18 +180,34 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
   },
   compactCard: {
-    height: 136,
+    height: 116,
     flexDirection: 'row',
     marginBottom: 0,
     borderRadius: 14,
+  },
+  denseCard: {
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  gridCard: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 12,
+    marginBottom: 12,
   },
   imageContainer: {
     position: 'relative',
     height: 240,
   },
   compactImageContainer: {
-    width: 128,
+    width: 110,
     height: '100%',
+  },
+  denseImageContainer: {
+    height: 156,
+  },
+  gridImageContainer: {
+    height: 118,
   },
   image: {
     width: '100%',
@@ -177,11 +221,27 @@ const styles = StyleSheet.create({
   },
   compactInfo: {
     flex: 1,
-    padding: 14,
+    padding: 10,
     justifyContent: 'center',
   },
   compactPrice: {
-    fontSize: 21,
+    fontSize: 18,
+  },
+  denseInfo: {
+    padding: 11,
+    paddingTop: 9,
+  },
+  gridInfo: {
+    padding: 9,
+    paddingTop: 8,
+  },
+  densePrice: {
+    fontSize: 18,
+    marginBottom: 3,
+  },
+  gridPrice: {
+    fontSize: 16,
+    marginBottom: 2,
   },
   badgeRow: {
     position: 'absolute',
@@ -189,6 +249,11 @@ const styles = StyleSheet.create({
     left: 12,
     flexDirection: 'row',
     gap: 8,
+  },
+  tightBadgeRow: {
+    top: 8,
+    left: 8,
+    gap: 4,
   },
   badge: {
     paddingHorizontal: 10,
@@ -205,6 +270,10 @@ const styles = StyleSheet.create({
     top: 12,
     right: 12,
   },
+  tightSaveBtn: {
+    top: 8,
+    right: 8,
+  },
   saveBtnCircle: {
     width: 36,
     height: 36,
@@ -212,6 +281,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  tightSaveBtnCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
   },
   info: {
     padding: 16,
@@ -227,13 +301,26 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 4,
   },
+  tightSpecsRow: {
+    gap: 5,
+    marginBottom: 2,
+  },
   spec: {
     fontSize: 15,
+  },
+  tightSpec: {
+    fontSize: 12,
   },
   specSep: {
     fontSize: 14,
   },
+  tightSpecSep: {
+    fontSize: 11,
+  },
   address: {
     fontSize: 14,
+  },
+  tightAddress: {
+    fontSize: 11,
   },
 });
