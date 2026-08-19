@@ -1,0 +1,392 @@
+Build five related features in one pass. Read everything before starting.
+
+The Core Rules (apply to everything below)
+
+Rule 1 — Agent contact display:
+
+Represented buyer (assignedAgentUserId is set) viewing any listing → always shows their assigned agent's contact info
+Unrepresented buyer (assignedAgentUserId is null or set to '55534280') viewing any listing → shows the listing agent's contact info
+Guest (not authenticated) viewing any listing → shows the listing agent's contact info
+If no listing agent info exists → show David Hussain (id: '55534280') as platform agent
+
+Rule 2 — Unrepresented buyer lead assignment:
+
+Every unrepresented buyer who creates an account, swipes, saves, or views a listing is silently assigned to David Hussain (assignedAgentUserId = '55534280') in the background if not already assigned
+David's info does NOT show on listing cards — listing agent still shows there
+David shows as their agent everywhere else: dashboard "Your Agent" card, profile, notifications
+If buyer later manually links their own agent via POST /api/buyer/link-agent → their agent replaces David and they exit David's lead pool
+Log all silent assignments as assignmentType: 'platform_default' in audit trail
+This applies at: account creation, first swipe, first save, first property view (authenticated)
+
+Rule 3 — Representation is protected:
+
+A represented buyer's agent is never replaced by a listing agent, a share link, or any automated logic
+Only the buyer themselves can change their agent via the Find Agent flow
+Feature 1 — Agent contact card on property detail
+New endpoint
+
+Add to the appropriate routes file:
+
+typescript
+GET /api/properties/:id/contact-agent
+// Public — no auth required
+
+// Logic:
+// 1. If caller authenticated AND assignedAgentUserId is set AND != '55534280':
+//    → return their assigned agent info
+//    → agentType: 'buyers_agent'
+// 2. If caller authenticated AND (no assignedAgentUserId OR assignedAgentUserId == '55534280'):
+//    → silently assign David if not already assigned (Rule 2)
+//    → return listing agent from property record
+//    → agentType: 'listing_agent'
+// 3. If not authenticated:
+//    → return listing agent from property record
+//    → agentType: 'listing_agent'
+// 4. If no listing agent on property:
+//    → return David Hussain
+//    → agentType: 'platform_agent'
+// 5. If referringAgentId is in session (from ?agent= share link):
+//    → use referring agent as the listing agent for unrepresented/guest viewers
+
+// Returns:
+{
+  agentType: 'buyers_agent' | 'listing_agent' | 'platform_agent',
+  agent: {
+    id: string,
+    firstName: string,
+    lastName: string,
+    email: string,
+    phone: string | null,
+    profileImageUrl: string | null,
+    brokerageName: string | null,
+    agentMlsId: string | null,
+  }
+}
+Frontend — Property detail page
+
+Replace the existing agent contact section in PropertyDetail.tsx with a component that fetches GET /api/properties/:id/contact-agent and renders:
+
+For buyers_agent:
+
+tsx
+<div className="border rounded-xl p-4">
+  <p className="text-xs font-medium text-amber-600 mb-2">YOUR AGENT</p>
+  <div className="flex items-center gap-3 mb-3">
+    {/* photo or initials avatar */}
+    <div>
+      <div className="font-medium">{firstName} {lastName}</div>
+      <div className="text-sm text-muted-foreground">{brokerageName}</div>
+    </div>
+  </div>
+  <div className="flex gap-2">
+    <Button size="sm" className="flex-1" onClick={() => openConversation()}>
+      Message {firstName}
+    </Button>
+    {phone && <Button size="sm" variant="outline" asChild><a href={`tel:${phone}`}>Call</a></Button>}
+  </div>
+  <p className="text-xs text-muted-foreground mt-2 text-center">
+    Tour requests and questions go directly to your agent
+  </p>
+</div>
+
+For listing_agent or platform_agent:
+
+tsx
+<div className="border rounded-xl p-4">
+  <p className="text-xs font-medium text-muted-foreground mb-2">LISTING AGENT</p>
+  <div className="flex items-center gap-3 mb-3">
+    {/* photo or initials avatar */}
+    <div>
+      <div className="font-medium">{firstName} {lastName}</div>
+      <div className="text-sm text-muted-foreground">{brokerageName}</div>
+    </div>
+  </div>
+  <div className="flex gap-2">
+    <Button size="sm" className="flex-1 bg-amber-500 hover:bg-amber-600 text-white"
+      onClick={() => setShowTourModal(true)}>
+      Schedule a Tour
+    </Button>
+    {phone && <Button size="sm" variant="outline" asChild><a href={`tel:${phone}`}>Call</a></Button>}
+  </div>
+  <p className="text-xs text-muted-foreground mt-2 text-center">
+    No account needed to inquire
+  </p>
+</div>
+
+Tour request modal (for unrepresented/guest viewers):
+
+Fields: name, email, phone, preferred date, message (all optional except name + one contact method)
+On submit: creates a sell_leads record, notifies the listing agent via in-app notification
+Success: "Request sent! {agentFirstName} will be in touch soon."
+Feature 2 — Silent platform default agent assignment
+Create a shared helper (server/lib/assignPlatformAgent.ts)
+typescript
+import { DAVID_USER_ID } from './agentAssignment'; // already exists
+
+/**
+ * Silently assigns David Hussain as platform default agent
+ * to any user who has no assigned agent yet.
+ * Call this on: account creation, first swipe, first save, first authenticated property view.
+ * No-op if user already has an assigned agent.
+ */
+export async function assignPlatformAgentIfNeeded(
+  userId: string,
+  storage: IStorage,
+  audit: typeof executeWithAudit
+): Promise<void> {
+  const user = await storage.getUser(userId);
+  if (!user || user.assignedAgentUserId) return; // already assigned, skip
+
+  await storage.updateUser(userId, { assignedAgentUserId: DAVID_USER_ID });
+
+  await audit({
+    eventType: 'platform_agent_assigned',
+    actorUserId: userId,
+    actorRole: user.primaryIntent ?? 'buyer',
+    outcome: 'success',
+    metadata: {
+      assignmentType: 'platform_default',
+      agentId: DAVID_USER_ID,
+      trigger: 'auto',
+    },
+  }, async () => ({ data: null }));
+}
+Wire this helper into these 4 trigger points:
+Account creation — in server/replit_integrations/auth/replitAuth.ts or wherever new users are created, call assignPlatformAgentIfNeeded after the user record is created
+First swipe — in POST /api/buyer-interest and POST /api/swipe-interest, call it before creating the buyer_interest row (already partially done via resolveBuyerAgent — verify it covers this)
+First save — in POST /api/saved-properties, call assignPlatformAgentIfNeeded for the authenticated user
+First property view — in GET /api/properties/:id/contact-agent, call it for authenticated users with no agent (already in the endpoint logic above)
+Feature 3 — Agent sends a listing to a client
+Backend
+typescript
+POST /api/agent/send-listing
+isAuthenticated + agentVerified required
+
+Body: {
+  clientUserId: string,
+  propertyId: number,
+  note?: string  // max 200 chars
+}
+
+1. Verify caller is agentVerified
+2. Verify clientUserId is linked to this agent (client_agent_links OR users.assignedAgentUserId)
+3. Verify propertyId exists
+4. Upsert into saved_properties — skip if already saved, do not duplicate
+5. Create in-app notification for client:
+   type: 'agent_listing_share'
+   title: '{AgentFirstName} sent you a listing'
+   message: 'Check out {address}{note ? ": " + note : ""}'
+   propertyId: propertyId
+   linkUrl: '/property/{propertyId}'
+6. executeWithAudit({ eventType: 'listing_sent_to_client', ... })
+7. Return { success: true, message: 'Listing sent to {clientFirstName}' }
+Frontend — client/src/components/SendListingModal.tsx
+tsx
+// Props: { clientUserId: string, clientFirstName: string, isOpen: boolean, onClose: () => void }
+
+// Content:
+// - Header: "Send a listing to {clientFirstName}"
+// - Property search input — queries GET /api/properties?location={q}&limit=8 on 300ms debounce
+// - Results: property cards with photo thumbnail, address, price, beds/baths
+// - Selected property: amber border + checkmark
+// - Optional note textarea, max 200 chars, placeholder: "Add a personal note..."
+// - "Send to {clientFirstName}" button → POST /api/agent/send-listing
+// - Loading state on button during submit
+// - Success: "✓ Sent! {clientFirstName} will see this in their saved homes."
+// - Error state if client is not linked to this agent
+
+Wire into AgentDashboard.tsx clients tab — add "Send Listing" button per client row that opens SendListingModal with that client's userId and firstName.
+
+Feature 4 — Listing agent share link
+Backend
+typescript
+GET /api/agent/listing-share-url/:propertyId
+isAuthenticated + agentVerified required
+
+// Returns: { shareUrl: 'https://xucasa.com/property/{propertyId}?agent={agentUserId}' }
+
+When GET /api/properties/:id is called with ?agent={agentUserId} query param:
+
+Store { referringAgentId: agentUserId, referredPropertyId: propertyId } in the session
+This is used by GET /api/properties/:id/contact-agent to show the referring agent for unrepresented visitors
+If an unrepresented visitor signs up after visiting via this link:
+Do NOT override their assignedAgentUserId if they came through the link — the referring agent should become their assigned agent instead of David
+Store the referring agent as their assignedAgentUserId on account creation
+Log as assignmentType: 'referral_link'
+Frontend — Agent dashboard listings tab
+
+Add a "Share" button per listing. Clicking it:
+
+Calls GET /api/agent/listing-share-url/:propertyId
+Opens a share modal:
+Shows the full shareable URL
+"Copy Link" button (copies to clipboard, shows "Copied!" for 2s)
+"Share" button → navigator.share() on mobile, copy fallback on desktop
+Amber info box: "Anyone who views this listing through your link will see your contact info and be connected to you as their agent."
+Feature 5 — Buyer finds and adds their own agent
+Backend
+typescript
+GET /api/agents/search
+isAuthenticated
+Query: { q: string }  // min 2 chars, ILIKE search
+
+// Search verified agents by firstName, lastName, email, brokerageName
+// Only return agentVerified = true AND role = 'agent'
+// Never return passwordHash, adminNotes, accountSource
+// Limit 10 results
+Returns: { agents: SafeAgent[] }
+typescript
+POST /api/buyer/link-agent
+isAuthenticated
+Body: { agentUserId: string }
+
+1. Verify agentUserId is a verified agent
+2. Check if buyer already has an assignedAgentUserId that is NOT David ('55534280')
+   → if so return 409: { message: 'You already have an agent linked. Contact support to update.' }
+   → if assignedAgentUserId IS David → allow the replacement (buyer is upgrading from platform default to real agent)
+3. Update users.assignedAgentUserId = agentUserId
+4. Upsert client_agent_links (status: 'active')
+5. Notify the new agent:
+   type: 'new_client_linked'
+   title: 'A buyer added you as their agent'
+   message: '{buyerFirstName} linked you as their agent on Xucasa.'
+6. Audit log: assignmentType: 'buyer_initiated'
+7. Return { success: true, agent: { firstName, lastName, brokerageName } }
+typescript
+GET /api/buyer/my-agent
+isAuthenticated
+
+// Returns assigned agent public profile or { agent: null }
+// If assignedAgentUserId is David ('55534280'), return David's info normally
+// — buyer should see David as their agent until they replace him
+Frontend — client/src/components/FindAgentModal.tsx
+tsx
+// Search input with 300ms debounce, min 2 chars
+// Queries GET /api/agents/search?q={input}
+// Agent result cards:
+//   - Photo or initials avatar (amber background)
+//   - Full name + brokerage + MLS ID
+//   - "Add as my agent" button per card
+//   → calls POST /api/buyer/link-agent
+//   → success: shows "✓ {firstName} is now your agent!"
+//   → invalidates /api/buyer/my-agent query
+// Below search bar:
+//   "Your agent can also send you a direct invite link — ask them to invite you through Xucasa."
+// Empty state: "No verified agents found for '{query}'"
+Frontend — Dashboard buyer profile tab
+
+When no agent linked or David is assigned:
+
+tsx
+<div className="border rounded-xl p-4 bg-amber-50 dark:bg-amber-950/20 border-amber-200">
+  <h3 className="font-medium text-sm">Working with an agent?</h3>
+  <p className="text-xs text-muted-foreground mt-1 mb-3">
+    Link your agent so they can see your activity, send you listings,
+    and guide you through the process.
+  </p>
+  <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white"
+    onClick={() => setShowFindAgent(true)}>
+    Find My Agent
+  </Button>
+</div>
+
+<FindAgentModal isOpen={showFindAgent} onClose={() => setShowFindAgent(false)} />
+
+When a real agent is linked (not David):
+
+tsx
+<div className="border rounded-xl p-4">
+  <p className="text-xs text-muted-foreground mb-2">YOUR AGENT</p>
+  <div className="flex items-center gap-3">
+    {/* photo or amber initials avatar */}
+    <div>
+      <div className="font-medium text-sm">{firstName} {lastName}</div>
+      <div className="text-xs text-muted-foreground">{brokerageName}</div>
+    </div>
+  </div>
+  <Button size="sm" variant="outline" className="mt-3 w-full"
+    onClick={() => setShowFindAgent(true)}>
+    Change Agent
+  </Button>
+</div>
+Feature 6 — Compelling agent onboarding value prop
+
+In client/src/pages/Onboarding.tsx, when agent intent is selected, show a value prop screen as Step 0 before the license/MLS wizard:
+
+tsx
+<div className="flex flex-col gap-5 py-2">
+  <div className="text-center">
+    <div className="text-4xl mb-3">🏡</div>
+    <h2 className="text-xl font-semibold">Built for agents, not against you</h2>
+    <p className="text-sm text-muted-foreground mt-2 max-w-xs mx-auto">
+      The only platform where your clients stay yours — always.
+    </p>
+  </div>
+  <div className="flex flex-col gap-2">
+    {[
+      { icon: '🔒', title: 'Your clients stay yours', desc: 'We never sell leads or route your buyers to competing agents.' },
+      { icon: '📊', title: 'Prove demand before you list', desc: 'Beacon shows how many active buyers match an upcoming listing.' },
+      { icon: '💬', title: 'Every conversation goes through you', desc: 'Buyers contact their agent. You stay in every deal.' },
+      { icon: '📋', title: 'Agent-only MLS details', desc: 'Confidential remarks, showing instructions, lockbox info — only you see it.' },
+      { icon: '📤', title: 'Send listings directly to clients', desc: 'Share a property and it lands in your client\'s saved homes instantly.' },
+    ].map(item => (
+      <div key={item.title} className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+        <span className="text-xl shrink-0">{item.icon}</span>
+        <div>
+          <div className="font-medium text-sm">{item.title}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">{item.desc}</div>
+        </div>
+      </div>
+    ))}
+  </div>
+  <Button className="bg-amber-500 hover:bg-amber-600 text-white w-full"
+    onClick={() => setAgentWizardStep(1)}>
+    Get started — it's free
+  </Button>
+  <p className="text-xs text-muted-foreground text-center -mt-2">
+    San Diego agents only · License verification required · 2 minutes
+  </p>
+</div>
+
+Update the agent intent picker card description to:
+"Keep your clients. No lead selling. No competing agents."
+
+Final verification
+bash
+# New component files
+ls client/src/components/SendListingModal.tsx \
+   client/src/components/FindAgentModal.tsx \
+   server/lib/assignPlatformAgent.ts 2>&1
+
+# New endpoints registered
+grep -rn "contact-agent\|send-listing\|agents/search\|buyer/link-agent\|buyer/my-agent\|listing-share-url" \
+  server/routes/ artifacts/api-server/src/routes/ 2>/dev/null \
+  | grep -v node_modules | wc -l
+
+# TS clean
+npx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+
+# Tests pass
+for f in server/__tests__/*.test.ts artifacts/api-server/src/__tests__/*.test.ts; do
+  [ -f "$f" ] && echo "--- $f ---" && npx tsx "$f" 2>&1 | tail -3
+done
+
+# Smoke tests
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/properties/1/contact-agent"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/agents/search?q=david"
+curl -s -o /dev/null -w "%{http_code} " -X POST "http://localhost:5000/api/agent/send-listing"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/buyer/my-agent"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/agent/listing-share-url/1"
+
+Expected: 200 401 401 401 401
+
+Then answer in plain English:
+
+An unrepresented buyer creates an account and views a listing — who shows as their agent in the dashboard, and whose contact info shows on the listing?
+That same buyer later searches for "David Hussain" and links him manually — what changes?
+A different buyer who already has a real agent linked views the same listing — what do they see?
+A listing agent wants to share their listing on Instagram — exact steps and what happens when someone taps the link?
+An agent wants to send a specific listing to one of their clients — exact steps?
+A brand new agent visits xucasa.com and selects "Agent" during onboarding — what do they see before the license form?
+
+Show all outputs. Do not do anything else.
