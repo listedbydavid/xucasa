@@ -5,7 +5,7 @@ import { Router } from "express";
   import { resolveUserDestination } from "../shared/routing";
   import { authStorage } from "../replit_integrations/auth/storage";
   import { db } from "../db";
-  import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews, errorReports, notifications, buyerInterest, sellerConcessions, insertSellerConcessionSchema } from "@workspace/db";
+import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews, errorReports, notifications, buyerInterest, sellerConcessions, insertSellerConcessionSchema, pushTokens } from "@workspace/db";
   import { eq, desc, sql, or, and, ilike, inArray, count } from "drizzle-orm";
   import { api } from "../shared/routes";
   import { z } from "zod";
@@ -52,6 +52,8 @@ const notificationPrefsUpdateSchema = z.object({
   inAppOpenHouse: z.boolean().optional(),
   inAppAgentMatch: z.boolean().optional(),
   inAppSystem: z.boolean().optional(),
+  pushEnabled: z.boolean().optional(),
+  pushPriceDrop: z.boolean().optional(),
 }).refine(obj => Object.values(obj).some(v => v !== undefined), { message: "No valid fields to update" });
 
 async function shouldDeliverInApp(targetUserId: string, type: string): Promise<boolean> {
@@ -227,6 +229,34 @@ router.patch("/api/notification-preferences", isAuthenticated, async (req: any, 
     }
     const prefs = await storage.upsertNotificationPreferences(userId, updates);
     res.json(prefs);
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/api/push-tokens", isAuthenticated, async (req: any, res) => {
+  try {
+    const userId = req.user.claims.sub;
+    const parsed = z.object({
+      token: z.string().regex(/^ExponentPushToken\[.+\]$|^ExpoPushToken\[.+\]$/, "Invalid Expo push token"),
+      platform: z.enum(["ios", "android"]).optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0]?.message || "Invalid push token" });
+    await db.insert(pushTokens).values({ userId, ...parsed.data, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: pushTokens.token, set: { userId, platform: parsed.data.platform, updatedAt: new Date() } });
+    res.status(200).json({ registered: true });
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/api/push-tokens/:token", async (req: any, res) => {
+  try {
+    const token = Array.isArray(req.params.token) ? req.params.token[0] : req.params.token;
+    const parsed = z.string().regex(/^ExponentPushToken\[.+\]$|^ExpoPushToken\[.+\]$/).safeParse(token);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid Expo push token" });
+    await db.delete(pushTokens).where(eq(pushTokens.token, parsed.data));
+    res.status(204).end();
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
   }

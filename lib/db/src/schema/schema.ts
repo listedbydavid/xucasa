@@ -63,6 +63,7 @@ export const properties = pgTable("properties", {
   specialConditions: text("special_conditions"),
   mlsDocuments: jsonb("mls_documents"),
   virtualTourUrl: text("virtual_tour_url"),
+  priceUpdatedAt: timestamp("price_updated_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -91,8 +92,11 @@ export const savedProperties = pgTable("saved_properties", {
   userId: varchar("user_id").references(() => users.id).notNull(),
   propertyId: integer("property_id").references(() => properties.id).notNull(),
   listId: integer("list_id").references(() => favoriteLists.id),
+  priceDropAlerts: boolean("price_drop_alerts").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("saved_properties_user_property_idx").on(table.userId, table.propertyId),
+]);
 
 export const savedSearches = pgTable("saved_searches", {
   id: serial("id").primaryKey(),
@@ -497,6 +501,8 @@ export const notificationPreferences = pgTable("notification_preferences", {
   inAppOpenHouse: boolean("in_app_open_house").default(true).notNull(),
   inAppAgentMatch: boolean("in_app_agent_match").default(true).notNull(),
   inAppSystem: boolean("in_app_system").default(true).notNull(),
+  pushEnabled: boolean("push_enabled").default(true).notNull(),
+  pushPriceDrop: boolean("push_price_drop").default(true).notNull(),
   emailsSentToday: integer("emails_sent_today").default(0).notNull(),
   lastEmailSentAt: timestamp("last_email_sent_at"),
   lastEmailResetDate: text("last_email_reset_date"),
@@ -504,6 +510,39 @@ export const notificationPreferences = pgTable("notification_preferences", {
 });
 
 export const insertNotificationPreferencesSchema: z.ZodTypeAny = createInsertSchema(notificationPreferences).omit({ id: true, updatedAt: true });
+
+export const pushTokens = pgTable("push_tokens", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  token: text("token").notNull().unique(),
+  platform: text("platform"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const priceDropNotificationDeliveries = pgTable("price_drop_notification_deliveries", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  propertyId: integer("property_id").notNull(),
+  oldPrice: integer("old_price").notNull(),
+  newPrice: integer("new_price").notNull(),
+  eventKey: text("event_key").notNull(),
+  inAppDelivered: boolean("in_app_delivered").default(false).notNull(),
+  emailDelivered: boolean("email_delivered").default(false).notNull(),
+  pushDelivered: boolean("push_delivered").default(false).notNull(),
+  attempts: integer("attempts").default(0).notNull(),
+  nextAttemptAt: timestamp("next_attempt_at").defaultNow().notNull(),
+  lockedUntil: timestamp("locked_until"),
+  deliveredAt: timestamp("delivered_at"),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("price_drop_delivery_event_idx").on(
+    table.userId,
+    table.propertyId,
+    table.eventKey,
+  ),
+]);
 
 // Buyer Interest (swipe right upsert — no conversation created)
 export const buyerInterest = pgTable("buyer_interest", {

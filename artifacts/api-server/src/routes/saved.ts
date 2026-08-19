@@ -78,6 +78,21 @@ router.patch("/api/saved-properties/:propertyId/list", isAuthenticated, async (r
   }
 });
 
+router.patch("/api/saved-properties/:propertyId/price-drop-alert", isAuthenticated, async (req: any, res) => {
+  try {
+    const user = req.user.claims;
+    const propertyId = parseInt(req.params.propertyId);
+    if (isNaN(propertyId)) return res.status(400).json({ message: "Invalid ID" });
+    const parsed = z.object({ enabled: z.boolean() }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "enabled must be a boolean" });
+    const saved = await storage.setSavedPropertyPriceDropAlert(user.sub, propertyId, parsed.data.enabled);
+    if (!saved) return res.status(404).json({ message: "Saved property not found" });
+    res.status(200).json(saved);
+  } catch (err) {
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 router.get("/api/favorite-lists", isAuthenticated, async (req: any, res) => {
   try {
     const user = req.user.claims;

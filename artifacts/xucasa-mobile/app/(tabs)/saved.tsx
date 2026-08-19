@@ -1,11 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Platform } from 'react-native';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Platform, Switch } from 'react-native';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
-import { apiGet, apiDelete, adaptProperty, type SavedProperty } from '@/lib/api';
+import { apiGet, apiDelete, apiPatch, adaptProperty, type SavedProperty } from '@/lib/api';
 import { PropertyCard } from '@/components/PropertyCard';
 import { SkeletonCard } from '@/components/SkeletonCard';
 import { useAuth } from '@/contexts/AuthContext';
@@ -36,6 +36,12 @@ export default function SavedScreen() {
     await apiDelete(`/api/saved-properties/${propertyId}`);
     queryClient.invalidateQueries({ queryKey: ['saved-properties'] });
   };
+
+  const alertMutation = useMutation({
+    mutationFn: ({ propertyId, enabled }: { propertyId: number; enabled: boolean }) =>
+      apiPatch(`/api/saved-properties/${propertyId}/price-drop-alert`, { enabled }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['saved-properties'] }),
+  });
 
   if (!isAuthenticated) {
     return (
@@ -105,12 +111,39 @@ export default function SavedScreen() {
           data={data}
           keyExtractor={(s: SavedProperty) => String(s.id)}
           renderItem={({ item }: { item: SavedProperty }) => (
-            <PropertyCard
-              property={item.property}
-              isSaved
-              onPress={() => router.push(`/property/${item.property.id}`)}
-              onSaveToggle={() => handleUnsave(item.property.id)}
-            />
+            <View style={[styles.savedItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <PropertyCard
+                property={item.property}
+                isSaved
+                embedded
+                onPress={() => router.push(`/property/${item.property.id}`)}
+                onSaveToggle={() => handleUnsave(item.property.id)}
+              />
+              <View style={[styles.alertRow, { borderTopColor: colors.border }]}>
+                <View style={styles.alertCopy}>
+                  <Ionicons name="notifications-outline" size={18} color={colors.primary} />
+                  <View style={styles.alertText}>
+                    <Text style={[styles.alertTitle, { color: colors.foreground, fontFamily: 'DM_Sans_500Medium' }]}>
+                      Price drop alert
+                    </Text>
+                    <Text style={[styles.alertDescription, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
+                      Notify me when this home’s price falls
+                    </Text>
+                  </View>
+                </View>
+                <Switch
+                  accessibilityLabel={`Price drop alert for ${item.property.address}`}
+                  value={item.priceDropAlerts ?? false}
+                  disabled={alertMutation.isPending}
+                  trackColor={{ false: colors.border, true: colors.primary + '66' }}
+                  thumbColor={item.priceDropAlerts ? colors.primary : colors.mutedForeground}
+                  onValueChange={(enabled) => {
+                    Haptics.selectionAsync();
+                    alertMutation.mutate({ propertyId: item.property.id, enabled });
+                  }}
+                />
+              </View>
+            </View>
           )}
           contentContainerStyle={styles.list}
           refreshing={false}
@@ -141,6 +174,25 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 12,
   },
+  savedItem: {
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: 14,
+  },
+  alertRow: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  alertCopy: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  alertText: { flex: 1, gap: 1 },
+  alertTitle: { fontSize: 14 },
+  alertDescription: { fontSize: 12 },
   center: {
     flex: 1,
     alignItems: 'center',

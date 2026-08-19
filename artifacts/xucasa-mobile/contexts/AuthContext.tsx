@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { apiGet, apiPost, clearSession, type User } from '@/lib/api';
+import { retryPendingPushUnregistration, unregisterPushDevice } from '@/lib/pushNotifications';
 
 interface AuthContextType {
   user: User | null;
@@ -29,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
     setIsLoading(true);
+    retryPendingPushUnregistration().catch(() => undefined);
     refreshUser().finally(() => { if (mounted) setIsLoading(false); });
     return () => { mounted = false; };
   }, [refreshUser]);
@@ -44,6 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshUser]);
 
   const logout = useCallback(async () => {
+    try { await unregisterPushDevice(); } catch {}
     try { await apiGet('/api/logout'); } catch {}
     await clearSession();
     setUser(null);

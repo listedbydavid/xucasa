@@ -22,6 +22,7 @@ import { Router } from "express";
   import { logger } from "../logger";
   import { stripConfidentialFields, CONFIDENTIAL_MLS_FIELDS } from "../lib/mlsHelpers";
   import { runAgentVerificationFlow } from "../lib/agentVerification";
+  import { notifySavedPropertyPriceDrops } from "../lib/priceDropNotifications";
 
   const ERROR_ARCHIVE_PATH = path.join(process.cwd(), "data", "error-archive.json");
   
@@ -165,8 +166,29 @@ router.put(api.properties.update.path, isAuthenticated, async (req: any, res) =>
     }
 
     const input = api.properties.update.input.parse(req.body);
-    const updatedProp = await storage.updateProperty(id, input);
+    const priceChanged = typeof input.price === "number" && input.price !== prop.price;
+    const updatedProp = await storage.updateProperty(id, {
+      ...input,
+      ...(priceChanged ? { priceUpdatedAt: new Date() } : {}),
+    });
     res.status(200).json(updatedProp);
+
+    if (typeof input.price === "number" && input.price > 0 && input.price < prop.price) {
+      void notifySavedPropertyPriceDrops([
+        {
+          id,
+          oldPrice: prop.price,
+          newPrice: input.price,
+          eventKey: `${prop.price}:${input.price}:${prop.priceUpdatedAt.toISOString()}`,
+        },
+      ]).catch(error => {
+        logger.error({
+          event: "manual_price_drop_notifications_failed",
+          error: error instanceof Error ? error.message : String(error),
+          propertyId: id,
+        });
+      });
+    }
 
     // Re-geocode if address changed
     const merged = { ...prop, ...input };

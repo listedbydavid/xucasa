@@ -19,6 +19,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { setBaseUrl } from '@workspace/api-client-react';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 // Set API base URL for the generated client.
 // Priority: EXPO_PUBLIC_API_URL (EAS/production) > EXPO_PUBLIC_DOMAIN (Replit dev preview).
@@ -40,6 +41,7 @@ const queryClient = new QueryClient({
 });
 
 function RootLayoutNav() {
+  usePushNotifications();
   return (
     <Stack screenOptions={{ headerBackTitle: 'Back' }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

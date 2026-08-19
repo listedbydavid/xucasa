@@ -8,18 +8,23 @@ import { getPhotoUrl, formatPrice, isNewListing, type Property } from '@/lib/api
 interface PropertyCardProps {
   property: Property;
   isSaved?: boolean;
+  embedded?: boolean;
   onPress: () => void;
   onSaveToggle?: () => void;
 }
 
-export function PropertyCard({ property, isSaved = false, onPress, onSaveToggle }: PropertyCardProps) {
+export function PropertyCard({ property, isSaved = false, embedded = false, onPress, onSaveToggle }: PropertyCardProps) {
   const colors = useColors();
   const firstPhoto = getPhotoUrl(property.photos?.[0]);
   const isNew = isNewListing(property.listingDate);
 
   return (
     <TouchableOpacity
-      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
+      style={[
+        styles.card,
+        embedded && styles.embeddedCard,
+        { backgroundColor: colors.card, borderColor: colors.border },
+      ]}
       onPress={onPress}
       activeOpacity={0.92}
     >
@@ -116,6 +121,13 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'ios'
       ? { shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } }
       : { elevation: 2 }),
+  },
+  embeddedCard: {
+    borderRadius: 0,
+    borderWidth: 0,
+    marginBottom: 0,
+    elevation: 0,
+    shadowOpacity: 0,
   },
   imageContainer: {
     position: 'relative',

@@ -751,7 +751,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   async saveProperty(userId: string, propertyId: number, listId?: number | null): Promise<SavedProperty> {
-    const [saved] = await db.insert(savedProperties).values({ userId, propertyId, listId: listId ?? null }).returning();
+    const [saved] = await db.insert(savedProperties)
+      .values({ userId, propertyId, listId: listId ?? null })
+      .onConflictDoNothing({ target: [savedProperties.userId, savedProperties.propertyId] })
+      .returning();
+    if (saved) return saved;
+    const [existing] = await db.select().from(savedProperties)
+      .where(and(eq(savedProperties.userId, userId), eq(savedProperties.propertyId, propertyId)))
+      .limit(1);
+    return existing;
+  }
+
+  async setSavedPropertyPriceDropAlert(userId: string, propertyId: number, enabled: boolean): Promise<SavedProperty | undefined> {
+    const [saved] = await db.update(savedProperties)
+      .set({ priceDropAlerts: enabled })
+      .where(and(eq(savedProperties.userId, userId), eq(savedProperties.propertyId, propertyId)))
+      .returning();
     return saved;
   }
 
@@ -1587,7 +1602,7 @@ export class DatabaseStorage implements IStorage {
         "emailEnabled", "emailNewListing", "emailPriceDrop", "emailOpenHouse",
         "emailAgentMatch", "emailSystem", "emailDigestFrequency",
         "inAppEnabled", "inAppNewListing", "inAppPriceDrop", "inAppOpenHouse",
-        "inAppAgentMatch", "inAppSystem",
+        "inAppAgentMatch", "inAppSystem", "pushEnabled", "pushPriceDrop",
       ];
       for (const key of allowedKeys) {
         if (prefs[key] !== undefined) {
@@ -1616,6 +1631,8 @@ export class DatabaseStorage implements IStorage {
         inAppOpenHouse: prefs.inAppOpenHouse ?? true,
         inAppAgentMatch: prefs.inAppAgentMatch ?? true,
         inAppSystem: prefs.inAppSystem ?? true,
+        pushEnabled: prefs.pushEnabled ?? true,
+        pushPriceDrop: prefs.pushPriceDrop ?? true,
         emailsSentToday: 0,
         lastEmailResetDate: null,
         lastEmailSentAt: null,

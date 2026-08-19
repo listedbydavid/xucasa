@@ -7,15 +7,18 @@ import {
   ScrollView,
   Platform,
   Alert,
+  Switch,
 } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
-import { apiGet } from '@/lib/api';
+import { apiGet, apiPatch } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
+import type { NotificationPreferences } from '@/hooks/usePushNotifications';
+import { unregisterPushDevice } from '@/lib/pushNotifications';
 
 interface BuyerProfile {
   id: number;
@@ -73,6 +76,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, isAuthenticated, isLoading, logout } = useAuth();
+  const queryClient = useQueryClient();
   const topPadding = Platform.OS === 'web' ? 67 : insets.top;
 
   const { data: buyerProfile } = useQuery({
@@ -85,6 +89,26 @@ export default function ProfileScreen() {
     queryKey: ['assigned-agent'],
     queryFn: () => apiGet<AssignedAgent>('/api/assigned-agent'),
     enabled: isAuthenticated,
+  });
+
+  const { data: notificationPreferences } = useQuery({
+    queryKey: ['notification-preferences'],
+    queryFn: () => apiGet<NotificationPreferences>('/api/notification-preferences'),
+    enabled: isAuthenticated,
+  });
+
+  const preferenceMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const preferences = await apiPatch<NotificationPreferences>('/api/notification-preferences', {
+        pushEnabled: enabled,
+        pushPriceDrop: enabled,
+      });
+      if (!enabled) await unregisterPushDevice().catch(() => undefined);
+      return preferences;
+    },
+    onSuccess: (preferences) => {
+      queryClient.setQueryData(['notification-preferences'], preferences);
+    },
   });
 
   const handleLogout = () => {
@@ -234,6 +258,41 @@ export default function ProfileScreen() {
           )}
         </View>
 
+        {/* Notifications */}
+        <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'DM_Sans_500Medium' }]}>
+          NOTIFICATIONS
+        </Text>
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.row, { borderBottomWidth: 0 }]}>
+            <View style={[styles.rowIcon, { backgroundColor: colors.muted }]}>
+              <Ionicons name="notifications-outline" size={18} color={colors.primary} />
+            </View>
+            <View style={styles.rowContent}>
+              <Text style={[styles.preferenceTitle, { color: colors.foreground, fontFamily: 'DM_Sans_500Medium' }]}>
+                Saved-home price drops
+              </Text>
+              <Text style={[styles.preferenceDescription, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
+                Push alerts for homes you opt into on Saved
+              </Text>
+            </View>
+            <Switch
+              accessibilityLabel="Saved-home price drop notifications"
+              value={(notificationPreferences?.pushEnabled ?? true) && (notificationPreferences?.pushPriceDrop ?? true)}
+              disabled={!notificationPreferences || preferenceMutation.isPending}
+              trackColor={{ false: colors.border, true: colors.primary + '66' }}
+              thumbColor={
+                notificationPreferences?.pushEnabled && notificationPreferences?.pushPriceDrop
+                  ? colors.primary
+                  : colors.mutedForeground
+              }
+              onValueChange={(enabled) => {
+                Haptics.selectionAsync();
+                preferenceMutation.mutate(enabled);
+              }}
+            />
+          </View>
+        </View>
+
         {/* Account */}
         <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'DM_Sans_500Medium' }]}>
           ACCOUNT
@@ -336,5 +395,7 @@ const styles = StyleSheet.create({
   rowContent: { flex: 1, gap: 1 },
   rowLabel: { fontSize: 12 },
   rowValue: { fontSize: 14 },
+  preferenceTitle: { fontSize: 14 },
+  preferenceDescription: { fontSize: 12, lineHeight: 17 },
   signOutText: { fontSize: 15, flex: 1 },
 });

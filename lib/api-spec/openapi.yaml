@@ -10,6 +10,10 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: notifications
+    description: Notification preferences and push devices
+  - name: saved-properties
+    description: Saved-property alert settings
 paths:
   /healthz:
     get:
@@ -24,7 +28,134 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /saved-properties/{propertyId}/price-drop-alert:
+    patch:
+      operationId: updateSavedPropertyPriceDropAlert
+      tags: [saved-properties]
+      summary: Opt a saved property into or out of price-drop alerts
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriceDropAlertUpdate"
+      responses:
+        "200":
+          description: Updated saved property
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedPropertyAlert"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /notification-preferences:
+    get:
+      operationId: getNotificationPreferences
+      tags: [notifications]
+      summary: Get the current user's notification preferences
+      responses:
+        "200":
+          description: Notification preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationPreferences"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    patch:
+      operationId: updateNotificationPreferences
+      tags: [notifications]
+      summary: Update the current user's notification preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationPreferencesUpdate"
+      responses:
+        "200":
+          description: Updated notification preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationPreferences"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /push-tokens:
+    post:
+      operationId: registerPushToken
+      tags: [notifications]
+      summary: Register an Expo push token for the current user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PushTokenRegistration"
+      responses:
+        "200":
+          description: Token registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  registered:
+                    type: boolean
+                    const: true
+                required: [registered]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /push-tokens/{token}:
+    delete:
+      operationId: unregisterPushToken
+      tags: [notifications]
+      summary: Unregister an Expo push token for the current user
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Token unregistered
+        "400":
+          $ref: "#/components/responses/BadRequest"
 components:
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +164,53 @@ components:
           type: string
       required:
         - status
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+    PriceDropAlertUpdate:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+      required: [enabled]
+    SavedPropertyAlert:
+      type: object
+      properties:
+        id:
+          type: number
+        propertyId:
+          type: number
+        priceDropAlerts:
+          type: boolean
+      required: [id, propertyId, priceDropAlerts]
+    NotificationPreferences:
+      type: object
+      properties:
+        pushEnabled:
+          type: boolean
+        pushPriceDrop:
+          type: boolean
+      required: [pushEnabled, pushPriceDrop]
+    NotificationPreferencesUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        pushEnabled:
+          type: boolean
+        pushPriceDrop:
+          type: boolean
+    PushTokenRegistration:
+      type: object
+      properties:
+        token:
+          type: string
+          pattern: '^(ExponentPushToken|ExpoPushToken)\[.+\]$'
+        platform:
+          type: string
+          enum: [ios, android]
+      required: [token]
 

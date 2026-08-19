@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
-const COOKIE_KEY = '@xucasa_session';
+const COOKIE_KEY = 'xucasa.session';
 
 /**
  * Resolve the API origin in priority order:
@@ -27,15 +28,27 @@ export const getBaseUrl = (): string => {
 // ─── Cookie jar ───────────────────────────────────────────────────────────────
 
 async function getCookie(): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    return typeof localStorage === 'undefined' ? null : localStorage.getItem(COOKIE_KEY);
+  }
   return SecureStore.getItemAsync(COOKIE_KEY);
 }
 
 async function storeCookie(setCookieHeader: string): Promise<void> {
   const cookiePart = setCookieHeader.split(';')[0];
-  if (cookiePart) await SecureStore.setItemAsync(COOKIE_KEY, cookiePart);
+  if (!cookiePart) return;
+  if (Platform.OS === 'web') {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(COOKIE_KEY, cookiePart);
+    return;
+  }
+  await SecureStore.setItemAsync(COOKIE_KEY, cookiePart);
 }
 
 export async function clearSession(): Promise<void> {
+  if (Platform.OS === 'web') {
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(COOKIE_KEY);
+    return;
+  }
   await SecureStore.deleteItemAsync(COOKIE_KEY);
 }
 
@@ -74,6 +87,15 @@ export async function apiGet<T>(path: string): Promise<T> {
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const res = await apiFetch(path, { method: 'POST', body: JSON.stringify(body) });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Request failed' }));
+    throw new Error((err as any).message || 'Request failed');
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  const res = await apiFetch(path, { method: 'PATCH', body: JSON.stringify(body) });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: 'Request failed' }));
     throw new Error((err as any).message || 'Request failed');
@@ -177,6 +199,7 @@ export interface SavedProperty {
   propertyId: number;
   property: Property;
   createdAt: string;
+  priceDropAlerts?: boolean;
 }
 
 /** Friendly shape used by the mobile UI — populated by adaptConversation() */

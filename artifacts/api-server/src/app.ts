@@ -66,6 +66,8 @@ export async function createApp() {
   // Register all legacy routes
   const { registerRoutes } = await import("./routes/index");
   await registerRoutes(httpServer, app);
+  const { startPriceDropNotificationDispatcher } = await import("./lib/priceDropNotifications");
+  startPriceDropNotificationDispatcher();
 
   // Admin onboarding backfill
   try {

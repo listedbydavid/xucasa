@@ -34,3 +34,11 @@ Also: avoid capturing and logging JSON response bodies in Express middleware (lo
 Legacy Express route handlers use early-exit `return res.json()` patterns but no final return.
 Set `"noImplicitReturns": false` in the api-server tsconfig.json to avoid hundreds of TS7030 errors
 across route files — these are pre-existing patterns, not bugs.
+
+## Orval integer schemas with Zod v3
+
+Use OpenAPI `type: number` rather than `type: integer` for generated contracts while this workspace remains on Zod v3.
+
+**Why:** The current Orval Zod generator emits `zod.int()` for OpenAPI integer fields, but that API only exists in Zod v4 and breaks shared-library typechecks.
+
+**How to apply:** Keep stricter integer validation in handwritten server schemas where needed; use `number` for Orval-generated request and response fields until the workspace upgrades to Zod v4.

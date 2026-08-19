@@ -21,6 +21,8 @@
 import { db } from "./db";
 import { properties, idxSyncLog } from "@workspace/db";
 import { eq, and, inArray, notInArray, sql } from "drizzle-orm";
+import { notifySavedPropertyPriceDrops } from "./lib/priceDropNotifications";
+import { logger } from "./logger";
 
 const IDX_BASE = "https://middleware.idxbroker.com/api";
 const IDX_KEY = process.env.IDX_BROKER_API_KEY || "";
@@ -644,11 +646,21 @@ async function batchUpsertListings(normalised: any[]): Promise<{ added: number; 
   }
 
   const existingIdxRows = await db
-    .select({ idxId: properties.idxId, id: properties.id })
+    .select({
+      idxId: properties.idxId,
+      id: properties.id,
+      price: properties.price,
+      priceUpdatedAt: properties.priceUpdatedAt,
+    })
     .from(properties)
     .where(eq(properties.source, "idx"));
 
-  const existingMap = new Map(existingIdxRows.map(r => [r.idxId!, r.id]));
+  const existingMap = new Map(existingIdxRows.map(r => [r.idxId!, {
+    id: r.id,
+    price: r.price,
+    priceUpdatedAt: r.priceUpdatedAt,
+  }]));
+  const priceDrops: Array<{ id: number; oldPrice: number; newPrice: number; eventKey: string }> = [];
 
   let added = 0;
   let updated = 0;
@@ -659,11 +671,20 @@ async function batchUpsertListings(normalised: any[]): Promise<{ added: number; 
     const toUpdate: any[] = [];
 
     for (const listing of batch) {
-      const existingId = existingMap.get(listing.idxId);
+      const existing = existingMap.get(listing.idxId);
       const payload = { ...listing, idxUpdatedAt: new Date() };
 
-      if (existingId) {
-        toUpdate.push({ id: existingId, ...payload });
+      if (existing) {
+        if (payload.price !== existing.price) payload.priceUpdatedAt = new Date();
+        toUpdate.push({ id: existing.id, ...payload });
+        if (payload.price < existing.price) {
+          priceDrops.push({
+            id: existing.id,
+            oldPrice: existing.price,
+            newPrice: payload.price,
+            eventKey: `${existing.price}:${payload.price}:${existing.priceUpdatedAt?.toISOString() ?? "legacy"}`,
+          });
+        }
       } else {
         toInsert.push(payload);
       }
@@ -689,6 +710,15 @@ async function batchUpsertListings(normalised: any[]): Promise<{ added: number; 
     if ((i + BATCH_SIZE) % 500 === 0 || i + BATCH_SIZE >= deduped.length) {
       console.log(`[IDX Sync] Upserted ${Math.min(i + BATCH_SIZE, deduped.length)}/${deduped.length} listings...`);
     }
+  }
+
+  try {
+    await notifySavedPropertyPriceDrops(priceDrops);
+  } catch (error) {
+    logger.error({
+      event: "idx_price_drop_notifications_failed",
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   return { added, updated };
