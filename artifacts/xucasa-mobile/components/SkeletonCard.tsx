@@ -40,32 +40,33 @@ export function SkeletonCard() {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 16,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 24,
+    borderWidth: Platform.OS === 'web' ? 1 : 0,
     ...(Platform.OS === 'ios'
-      ? { shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } }
-      : { elevation: 2 }),
+      ? { shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }
+      : { elevation: 4 }),
   },
   image: {
-    height: 200,
+    height: 240,
     borderRadius: 0,
   },
   info: {
-    padding: 14,
-    gap: 8,
+    padding: 16,
+    paddingTop: 12,
+    gap: 10,
   },
   price: {
-    height: 22,
-    width: 140,
+    height: 28,
+    width: 160,
   },
   specs: {
-    height: 16,
-    width: 200,
+    height: 18,
+    width: 220,
   },
   address: {
-    height: 14,
-    width: '80%',
+    height: 16,
+    width: '90%',
   },
 });

@@ -25,13 +25,13 @@ function ConversationRow({ item, onPress }: { item: Conversation; onPress: () =>
 
   return (
     <TouchableOpacity
-      style={[styles.row, { borderBottomColor: colors.border }]}
+      style={[styles.row, { backgroundColor: colors.background, borderBottomColor: colors.border }]}
       onPress={onPress}
-      activeOpacity={0.75}
+      activeOpacity={0.7}
     >
       {/* Avatar */}
-      <View style={[styles.avatar, { backgroundColor: colors.primary + '20' }]}>
-        <Text style={[styles.avatarText, { color: colors.primary, fontFamily: 'DM_Sans_700Bold' }]}>
+      <View style={[styles.avatar, { backgroundColor: colors.primary + '15' }]}>
+        <Text style={[styles.avatarText, { color: colors.primary, fontFamily: 'Outfit_700Bold' }]}>
           {initials}
         </Text>
       </View>
@@ -39,19 +39,19 @@ function ConversationRow({ item, onPress }: { item: Conversation; onPress: () =>
       {/* Content */}
       <View style={styles.rowContent}>
         <View style={styles.rowTop}>
-          <Text style={[styles.rowName, { color: colors.foreground, fontFamily: 'DM_Sans_500Medium' }]} numberOfLines={1}>
+          <Text style={[styles.rowName, { color: colors.foreground, fontFamily: 'DMSans_700Bold' }]} numberOfLines={1}>
             {name}
           </Text>
-          <Text style={[styles.rowTime, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
+          <Text style={[styles.rowTime, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]}>
             {timeAgo}
           </Text>
         </View>
         {item.propertyAddress && (
-          <Text style={[styles.rowProp, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]} numberOfLines={1}>
-            re: {item.propertyAddress}
+          <Text style={[styles.rowProp, { color: colors.mutedForeground, fontFamily: 'DMSans_500Medium' }]} numberOfLines={1}>
+            {item.propertyAddress}
           </Text>
         )}
-        <Text style={[styles.rowLast, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]} numberOfLines={1}>
+        <Text style={[styles.rowLast, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]} numberOfLines={1}>
           {item.lastMessage || 'No messages yet'}
         </Text>
       </View>
@@ -97,14 +97,14 @@ export default function MessagesScreen() {
           <Text style={[styles.emptyTitle, { color: colors.foreground, fontFamily: 'Outfit_700Bold' }]}>
             Sign in to view messages
           </Text>
-          <Text style={[styles.emptyBody, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
+          <Text style={[styles.emptyBody, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]}>
             Connect with agents and sellers about homes you're interested in.
           </Text>
           <TouchableOpacity
             style={[styles.ctaBtn, { backgroundColor: colors.primary }]}
             onPress={() => router.push('/auth')}
           >
-            <Text style={[styles.ctaText, { color: colors.primaryForeground, fontFamily: 'DM_Sans_500Medium' }]}>
+            <Text style={[styles.ctaText, { color: colors.primaryForeground, fontFamily: 'DMSans_700Bold' }]}>
               Sign in
             </Text>
           </TouchableOpacity>
@@ -131,7 +131,7 @@ export default function MessagesScreen() {
           <Text style={[styles.emptyTitle, { color: colors.foreground, fontFamily: 'Outfit_700Bold' }]}>
             No messages yet
           </Text>
-          <Text style={[styles.emptyBody, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
+          <Text style={[styles.emptyBody, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]}>
             When you inquire about a listing, your conversation will appear here.
           </Text>
         </View>
@@ -148,6 +148,7 @@ export default function MessagesScreen() {
           refreshing={false}
           onRefresh={refetch}
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingTop: 8 }}
           ListFooterComponent={<View style={{ height: Platform.OS === 'web' ? 100 : 90 }} />}
         />
       )}
@@ -158,7 +159,7 @@ export default function MessagesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
@@ -166,49 +167,49 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 12,
+    gap: 16,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
-  avatarText: { fontSize: 16 },
-  rowContent: { flex: 1, gap: 2 },
+  avatarText: { fontSize: 20 },
+  rowContent: { flex: 1, gap: 4 },
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  rowName: { fontSize: 15, flex: 1 },
-  rowTime: { fontSize: 12, flexShrink: 0 },
-  rowProp: { fontSize: 12 },
-  rowLast: { fontSize: 13 },
+  rowName: { fontSize: 16, flex: 1 },
+  rowTime: { fontSize: 13, flexShrink: 0 },
+  rowProp: { fontSize: 13 },
+  rowLast: { fontSize: 14 },
   badge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 5,
+    paddingHorizontal: 6,
   },
-  badgeText: { fontSize: 11, fontWeight: '700' },
+  badgeText: { fontSize: 12, fontWeight: '700' },
   center: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: 16,
     padding: 32,
   },
-  emptyTitle: { fontSize: 20, textAlign: 'center' },
-  emptyBody: { fontSize: 15, textAlign: 'center' },
+  emptyTitle: { fontSize: 22, textAlign: 'center' },
+  emptyBody: { fontSize: 16, textAlign: 'center', lineHeight: 22 },
   ctaBtn: {
-    paddingHorizontal: 28,
-    paddingVertical: 12,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
     borderRadius: 24,
-    marginTop: 4,
+    marginTop: 8,
   },
-  ctaText: { fontSize: 15 },
+  ctaText: { fontSize: 16 },
 });

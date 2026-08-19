@@ -59,6 +59,7 @@
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",
     "@expo-google-fonts/outfit": "^0.4.3",
-    "expo-secure-store": "~15.0.8"
+    "expo-secure-store": "~15.0.8",
+    "react-native-maps": "1.18.0"
   }
 }

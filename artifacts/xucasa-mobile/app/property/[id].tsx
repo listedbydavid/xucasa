@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Share,
 } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -17,11 +18,33 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
-import { apiGet, apiPost, apiDelete, getPhotoUrl, formatPrice, adaptProperty, type Property, type SavedProperty } from '@/lib/api';
+import { apiGet, apiPost, apiDelete, getPhotoUrl, formatPrice, adaptProperty, type SavedProperty } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+function ListingPhoto({ uri }: { uri: string }) {
+  const colors = useColors();
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <View style={[styles.carouselPhoto, styles.carouselPhotoFallback, { backgroundColor: colors.muted }]}>
+        <Ionicons name="image-outline" size={56} color={colors.mutedForeground} />
+      </View>
+    );
+  }
+
+  return (
+    <Image
+      source={{ uri: getPhotoUrl(uri) ?? undefined }}
+      style={styles.carouselPhoto}
+      contentFit="cover"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 function PhotoCarousel({ photos }: { photos: string[] }) {
   const colors = useColors();
@@ -35,7 +58,7 @@ function PhotoCarousel({ photos }: { photos: string[] }) {
   if (photos.length === 0) {
     return (
       <View style={[styles.carouselEmpty, { backgroundColor: colors.muted }]}>
-        <Ionicons name="home-outline" size={60} color={colors.mutedForeground} />
+        <Ionicons name="image-outline" size={60} color={colors.mutedForeground} />
       </View>
     );
   }
@@ -50,48 +73,15 @@ function PhotoCarousel({ photos }: { photos: string[] }) {
         onScroll={onScroll}
         scrollEventThrottle={16}
         keyExtractor={(_, i) => String(i)}
-        renderItem={({ item }) => {
-          const url = getPhotoUrl(item);
-          return (
-            <Image
-              source={{ uri: url ?? undefined }}
-              style={{ width: SCREEN_WIDTH, height: 300 }}
-              contentFit="cover"
-            />
-          );
-        }}
+        renderItem={({ item }) => <ListingPhoto uri={item} />}
       />
-      {/* Dots */}
       {photos.length > 1 && (
-        <View style={styles.dots}>
-          {photos.slice(0, 10).map((_, i) => (
-            <View
-              key={i}
-              style={[
-                styles.dot,
-                { backgroundColor: i === activeIndex ? '#fff' : 'rgba(255,255,255,0.5)' },
-              ]}
-            />
-          ))}
+        <View style={styles.photoCount}>
+          <Text style={styles.photoCountText}>
+            {activeIndex + 1} of {photos.length}
+          </Text>
         </View>
       )}
-      <View style={styles.photoCount}>
-        <Text style={styles.photoCountText}>
-          {activeIndex + 1} / {photos.length}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function SpecChip({ icon, label }: { icon: string; label: string }) {
-  const colors = useColors();
-  return (
-    <View style={[styles.specChip, { backgroundColor: colors.muted }]}>
-      <Ionicons name={icon as any} size={15} color={colors.mutedForeground} />
-      <Text style={[styles.specChipText, { color: colors.foreground, fontFamily: 'DM_Sans_500Medium' }]}>
-        {label}
-      </Text>
     </View>
   );
 }
@@ -121,7 +111,6 @@ export default function PropertyDetailScreen() {
     enabled: isAuthenticated,
   });
 
-  // Derive isSaved from cache
   const computedIsSaved = React.useMemo(() => {
     if (isSaved !== null) return isSaved;
     if (!savedData || !id) return false;
@@ -145,9 +134,25 @@ export default function PropertyDetailScreen() {
       }
       queryClient.invalidateQueries({ queryKey: ['saved-properties'] });
     } catch {
-      setIsSaved(!next); // revert
+      setIsSaved(!next);
     } finally {
       setSavingInProgress(false);
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const configuredWebUrl = process.env.EXPO_PUBLIC_WEB_URL?.trim().replace(/\/+$/, '');
+      const url = configuredWebUrl
+        ? `${configuredWebUrl}/property/${id}`
+        : `xucasa://property/${id}`;
+      await Share.share({
+        message: property?.address ? `Check out this home on xucasa: ${property.address} - ${url}` : `Check out this home on xucasa: ${url}`,
+        url,
+      });
+    } catch (error: any) {
+      // Ignore abort errors
     }
   };
 
@@ -161,7 +166,6 @@ export default function PropertyDetailScreen() {
     if (!property) return;
     setStartingConvo(true);
     try {
-      // Create or retrieve the buyer conversation for this property
       const result = await apiPost<{ id: number } | { conversationId: number }>('/api/conversations', {
         propertyId: property.id,
       });
@@ -178,7 +182,7 @@ export default function PropertyDetailScreen() {
     }
   };
 
-  const photos = property?.photos?.map((p) => getPhotoUrl(p)).filter(Boolean) as string[] ?? [];
+  const photos = property?.photos?.filter(Boolean) ?? [];
 
   if (isLoading) {
     return (
@@ -196,7 +200,7 @@ export default function PropertyDetailScreen() {
           Property not found
         </Text>
         <TouchableOpacity onPress={() => router.back()} style={[styles.backBtnFull, { backgroundColor: colors.primary }]}>
-          <Text style={[{ color: colors.primaryForeground, fontFamily: 'DM_Sans_500Medium', fontSize: 15 }]}>Go back</Text>
+          <Text style={[{ color: colors.primaryForeground, fontFamily: 'DMSans_500Medium', fontSize: 15 }]}>Go back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -204,42 +208,82 @@ export default function PropertyDetailScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false} stickyHeaderIndices={[]} bounces>
-        {/* Photo carousel */}
+      <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
         <View>
           <PhotoCarousel photos={photos} />
 
-          {/* Back button overlay */}
           <TouchableOpacity
-            style={[styles.backBtn, { top: Platform.OS === 'web' ? 67 + 10 : insets.top + 10 }]}
+            style={[styles.floatingIconBtn, { position: 'absolute', top: Platform.OS === 'web' ? 67 + 10 : insets.top + 10, left: 14 }]}
             onPress={() => router.back()}
           >
-            <Ionicons name="chevron-back" size={22} color="#fff" />
+            <Ionicons name="chevron-back" size={24} color="#000" />
           </TouchableOpacity>
 
-          {/* Save button overlay */}
-          <TouchableOpacity
-            style={[styles.saveOverlayBtn, { top: Platform.OS === 'web' ? 67 + 10 : insets.top + 10 }]}
-            onPress={handleSaveToggle}
-            disabled={savingInProgress}
-          >
-            <Ionicons
-              name={computedIsSaved ? 'heart' : 'heart-outline'}
-              size={22}
-              color={computedIsSaved ? colors.primary : '#fff'}
-            />
-          </TouchableOpacity>
+          <View style={[styles.topRightActions, { top: Platform.OS === 'web' ? 67 + 10 : insets.top + 10, right: 14 }]}>
+            <TouchableOpacity
+              style={styles.floatingIconBtn}
+              onPress={handleShare}
+            >
+              <Ionicons
+                name="share-outline"
+                size={22}
+                color="#000"
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.floatingIconBtn}
+              onPress={handleSaveToggle}
+              disabled={savingInProgress}
+            >
+              <Ionicons
+                name={computedIsSaved ? 'heart' : 'heart-outline'}
+                size={22}
+                color={computedIsSaved ? colors.primary : '#000'}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Content */}
         <View style={styles.content}>
-          {/* Price */}
-          <Text style={[styles.price, { color: colors.foreground, fontFamily: 'Outfit_700Bold' }]}>
-            {formatPrice(property.price)}
+          <View style={styles.priceRow}>
+            <Text style={[styles.price, { color: colors.foreground, fontFamily: 'Outfit_700Bold' }]}>
+              {formatPrice(property.price)}
+            </Text>
+            {property.isBuyItNow && (
+              <View style={[styles.buyItNowBadge, { backgroundColor: '#1a6b3a' }]}>
+                <Ionicons name="flash" size={12} color="#fff" />
+                <Text style={styles.buyItNowText}>Buy It Now</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Text style={[styles.statValue, { color: colors.foreground, fontFamily: 'Outfit_700Bold' }]}>{property.beds}</Text>
+              <Text style={[styles.statLabel, { color: colors.mutedForeground, fontFamily: 'DMSans_500Medium' }]}>Beds</Text>
+            </View>
+            <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+            <View style={styles.statItem}>
+              <Text style={[styles.statValue, { color: colors.foreground, fontFamily: 'Outfit_700Bold' }]}>{property.baths}</Text>
+              <Text style={[styles.statLabel, { color: colors.mutedForeground, fontFamily: 'DMSans_500Medium' }]}>Baths</Text>
+            </View>
+            <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+            <View style={styles.statItem}>
+              <Text style={[styles.statValue, { color: colors.foreground, fontFamily: 'Outfit_700Bold' }]}>
+                {property.sqft?.toLocaleString() || '-'}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.mutedForeground, fontFamily: 'DMSans_500Medium' }]}>Sq Ft</Text>
+            </View>
+          </View>
+
+          <Text style={[styles.address, { color: colors.foreground, fontFamily: 'DMSans_500Medium' }]}>
+            {property.address}
+          </Text>
+          <Text style={[styles.cityState, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]}>
+            {[property.city, property.state, property.zipCode].filter(Boolean).join(', ')}
           </Text>
 
-          {/* Status + type badges */}
-          <View style={styles.badgeRow}>
+          <View style={styles.badgesRow}>
             {property.status && (
               <View style={[styles.badge, { backgroundColor: colors.primary }]}>
                 <Text style={[styles.badgeText, { color: colors.primaryForeground }]}>
@@ -252,117 +296,90 @@ export default function PropertyDetailScreen() {
                 <Text style={[styles.badgeText, { color: colors.foreground }]}>{property.type}</Text>
               </View>
             )}
+            {property.yearBuilt != null && (
+              <View style={[styles.badge, { backgroundColor: colors.muted }]}>
+                <Text style={[styles.badgeText, { color: colors.foreground }]}>Built {property.yearBuilt}</Text>
+              </View>
+            )}
+            {property.hoaFee != null && property.hoaFee > 0 && (
+              <View style={[styles.badge, { backgroundColor: colors.muted }]}>
+                <Text style={[styles.badgeText, { color: colors.foreground }]}>HOA ${property.hoaFee.toLocaleString()}/mo</Text>
+              </View>
+            )}
           </View>
 
-          {/* Address */}
-          <Text style={[styles.address, { color: colors.foreground, fontFamily: 'DM_Sans_500Medium' }]}>
-            {property.address}
-          </Text>
-          <Text style={[styles.cityState, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
-            {[property.city, property.state, property.zipCode].filter(Boolean).join(', ')}
-          </Text>
-
-          {/* Specs chips */}
-          <View style={styles.specChips}>
-            {property.beds != null && <SpecChip icon="bed-outline" label={`${property.beds} beds`} />}
-            {property.baths != null && <SpecChip icon="water-outline" label={`${property.baths} baths`} />}
-            {property.sqft != null && <SpecChip icon="resize-outline" label={`${property.sqft.toLocaleString()} sqft`} />}
-            {property.yearBuilt != null && <SpecChip icon="calendar-outline" label={`Built ${property.yearBuilt}`} />}
-            {property.parkingSpaces != null && <SpecChip icon="car-outline" label={`${property.parkingSpaces} parking`} />}
-          </View>
-
-          {/* HOA fee */}
-          {property.hoaFee != null && property.hoaFee > 0 && (
-            <Text style={[styles.hoaText, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
-              HOA: ${property.hoaFee.toLocaleString()}/mo
-            </Text>
-          )}
-
-          {/* Divider */}
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-          {/* Description */}
-          {property.description ? (
-            <>
+          {property.description && (
+            <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.foreground, fontFamily: 'Outfit_700Bold' }]}>
                 About this home
               </Text>
-              <Text style={[styles.description, { color: colors.foreground, fontFamily: 'DM_Sans_400Regular' }]}>
+              <Text style={[styles.description, { color: colors.foreground, fontFamily: 'DMSans_400Regular' }]}>
                 {property.description}
               </Text>
-              <View style={[styles.divider, { backgroundColor: colors.border }]} />
-            </>
-          ) : null}
+            </View>
+          )}
 
-          {/* Agent */}
           {property.agentName && (
-            <>
+            <View style={[styles.section, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 20 }]}>
               <Text style={[styles.sectionTitle, { color: colors.foreground, fontFamily: 'Outfit_700Bold' }]}>
-                Listed by
+                Listing Agent
               </Text>
-              <View style={[styles.agentCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.agentCard}>
                 <View style={[styles.agentAvatar, { backgroundColor: colors.primary + '20' }]}>
-                  <Text style={[{ fontSize: 18, color: colors.primary, fontFamily: 'Outfit_700Bold' }]}>
+                  <Text style={[{ fontSize: 20, color: colors.primary, fontFamily: 'Outfit_700Bold' }]}>
                     {(property.agentName || 'A')[0].toUpperCase()}
                   </Text>
                 </View>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={[styles.agentName, { color: colors.foreground, fontFamily: 'DM_Sans_500Medium' }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.agentName, { color: colors.foreground, fontFamily: 'DMSans_700Bold' }]}>
                     {property.agentName}
                   </Text>
-                  <Text style={[styles.agentContact, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
-                    Listing agent — contact via Messages
+                  <Text style={[styles.agentContact, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]}>
+                    Contact via Messages below
                   </Text>
                 </View>
               </View>
-              <View style={[styles.divider, { backgroundColor: colors.border }]} />
-            </>
-          )}
-
-          {/* MLS */}
-          {property.mlsNumber && (
-            <Text style={[styles.mls, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
-              MLS#: {property.mlsNumber}
-            </Text>
+            </View>
           )}
 
           <View style={{ height: 120 }} />
         </View>
       </ScrollView>
 
-      {/* Sticky CTA */}
+      {/* Sticky Bottom Action Bar */}
       <View
         style={[
-          styles.ctaBar,
+          styles.bottomBar,
           {
             backgroundColor: colors.background,
             borderTopColor: colors.border,
-            paddingBottom: Platform.OS === 'web' ? 34 : insets.bottom + 8,
+            paddingBottom: Platform.OS === 'web' ? 24 : insets.bottom + 8,
           },
         ]}
       >
         <TouchableOpacity
-          style={[styles.ctaBtn, { backgroundColor: colors.primary, opacity: startingConvo ? 0.6 : 1 }]}
-          onPress={handleContactAgent}
-          disabled={startingConvo}
-        >
-          {startingConvo
-            ? <ActivityIndicator size="small" color={colors.primaryForeground} />
-            : <Ionicons name="chatbubble-outline" size={18} color={colors.primaryForeground} />}
-          <Text style={[styles.ctaBtnText, { color: colors.primaryForeground, fontFamily: 'DM_Sans_500Medium' }]}>
-            {isAuthenticated ? 'Message agent' : 'Sign in to message'}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.saveBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
+          style={[styles.saveBtn, { backgroundColor: colors.card, borderColor: colors.border }]}
           onPress={handleSaveToggle}
           disabled={savingInProgress}
         >
-          <Ionicons
-            name={computedIsSaved ? 'heart' : 'heart-outline'}
-            size={22}
-            color={computedIsSaved ? colors.primary : colors.foreground}
-          />
+          <Ionicons name={computedIsSaved ? 'heart' : 'heart-outline'} size={24} color={computedIsSaved ? colors.primary : colors.foreground} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.contactBtn, { backgroundColor: colors.primary, opacity: startingConvo ? 0.7 : 1 }]}
+          onPress={handleContactAgent}
+          disabled={startingConvo}
+        >
+          {startingConvo ? (
+            <ActivityIndicator size="small" color={colors.primaryForeground} />
+          ) : (
+            <Ionicons name="chatbubble-ellipses" size={20} color={colors.primaryForeground} />
+          )}
+          <Text style={[styles.contactBtnText, { color: colors.primaryForeground, fontFamily: 'DMSans_700Bold' }]}>
+            {isAuthenticated ? 'Message Agent' : 'Sign In to Message'}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -371,131 +388,91 @@ export default function PropertyDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-  },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   errorText: { fontSize: 20 },
   backBtnFull: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 24 },
   carousel: { position: 'relative' },
-  carouselEmpty: {
-    height: 300,
+  carouselPhoto: { width: SCREEN_WIDTH, height: 340 },
+  carouselPhotoFallback: { alignItems: 'center', justifyContent: 'center' },
+  carouselEmpty: { height: 340, alignItems: 'center', justifyContent: 'center' },
+  floatingIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
-  backBtn: {
+  topRightActions: {
     position: 'absolute',
-    left: 14,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveOverlayBtn: {
-    position: 'absolute',
-    right: 14,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dots: {
-    position: 'absolute',
-    bottom: 12,
-    left: 0,
-    right: 0,
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 5,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    gap: 12,
   },
   photoCount: {
     position: 'absolute',
-    bottom: 12,
-    right: 14,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  photoCountText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  content: { padding: 20, gap: 8 },
-  price: { fontSize: 28, lineHeight: 34 },
-  badgeRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 4 },
-  badge: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 6 },
-  badgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  address: { fontSize: 16, marginTop: 6 },
-  cityState: { fontSize: 14 },
-  specChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-  specChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
+    bottom: 16,
+    right: 16,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
-  specChipText: { fontSize: 14 },
-  hoaText: { fontSize: 13, marginTop: 4 },
-  divider: { height: 1, marginVertical: 16 },
-  sectionTitle: { fontSize: 18, marginBottom: 8 },
-  description: { fontSize: 15, lineHeight: 23 },
-  agentCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  agentAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  agentName: { fontSize: 15 },
-  agentContact: { fontSize: 13 },
-  mls: { fontSize: 12, marginTop: 4 },
-  ctaBar: {
+  photoCountText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  content: { padding: 20, paddingTop: 24 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  price: { fontSize: 32 },
+  buyItNowBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, gap: 4 },
+  buyItNowText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  statsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', marginBottom: 20 },
+  statItem: { alignItems: 'flex-start', paddingRight: 16 },
+  statValue: { fontSize: 22 },
+  statLabel: { fontSize: 13, marginTop: 2 },
+  statDivider: { width: 1, height: 30, marginRight: 16 },
+  address: { fontSize: 18, marginBottom: 4 },
+  cityState: { fontSize: 15, marginBottom: 16 },
+  badgesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
+  badge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  badgeText: { fontSize: 12, fontWeight: '600' },
+  divider: { height: 1, marginBottom: 24 },
+  section: { marginBottom: 24 },
+  sectionTitle: { fontSize: 20, marginBottom: 12 },
+  description: { fontSize: 16, lineHeight: 24 },
+  agentCard: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 8 },
+  agentAvatar: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
+  agentName: { fontSize: 18, marginBottom: 2 },
+  agentContact: { fontSize: 14 },
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 16,
     borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 10,
+    gap: 12,
   },
-  ctaBtn: {
+  saveBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contactBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    borderRadius: 12,
     paddingVertical: 14,
-    borderRadius: 12,
+    gap: 8,
   },
-  ctaBtnText: { fontSize: 16 },
-  saveBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  contactBtnText: { fontSize: 16 },
 });

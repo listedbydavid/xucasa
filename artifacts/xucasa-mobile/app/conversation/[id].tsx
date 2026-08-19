@@ -7,8 +7,8 @@ import {
   TextInput,
   TouchableOpacity,
   Platform,
-  KeyboardAvoidingView,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -68,12 +68,12 @@ export default function ConversationScreen() {
         >
           <Text style={[
             styles.bubbleText,
-            { color: isMe ? colors.primaryForeground : colors.foreground, fontFamily: 'DM_Sans_400Regular' }
+            { color: isMe ? colors.primaryForeground : colors.foreground, fontFamily: 'DMSans_400Regular' }
           ]}>
             {item.content}
           </Text>
         </View>
-        <Text style={[styles.msgTime, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
+        <Text style={[styles.msgTime, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]}>
           {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </Text>
       </View>
@@ -103,7 +103,7 @@ export default function ConversationScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior="padding"
         keyboardVerticalOffset={0}
       >
         <FlatList
@@ -113,6 +113,8 @@ export default function ConversationScreen() {
           inverted
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
         />
 
         {/* Input bar */}
@@ -133,7 +135,7 @@ export default function ConversationScreen() {
                 backgroundColor: colors.card,
                 borderColor: colors.border,
                 color: colors.foreground,
-                fontFamily: 'DM_Sans_400Regular',
+                fontFamily: 'DMSans_400Regular',
               },
             ]}
             placeholder="Type a message..."

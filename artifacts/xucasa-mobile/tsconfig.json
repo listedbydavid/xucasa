@@ -4,6 +4,7 @@
     "baseUrl": ".",
     "strict": true,
     "skipLibCheck": true,
+    "types": [],
     "paths": {
       "@/*": [
         "./*"

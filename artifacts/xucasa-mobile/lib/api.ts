@@ -184,12 +184,18 @@ export function adaptProperty(raw: any): Property {
     photos: raw.photos ?? [],
     description: raw.description ?? undefined,
     mlsNumber: raw.mlsNumber ?? undefined,
-    listingDate: raw.listDate ? new Date(raw.listDate).toISOString() : (raw.listingDate ?? undefined),
+    listingDate: raw.listDate
+      ? new Date(raw.listDate).toISOString()
+      : (raw.idxUpdatedAt ?? raw.listingDate ?? undefined),
     agentName: raw.listingAgentName ?? raw.agentName ?? undefined,
     agentEmail: raw.listingAgentEmail ?? raw.agentEmail ?? undefined,
     agentPhone: raw.listingAgentPhone ?? raw.agentPhone ?? undefined,
-    latitude: raw.latitude ?? undefined,
-    longitude: raw.longitude ?? undefined,
+    latitude: raw.latitude != null
+      ? Number(raw.latitude)
+      : (raw.lat != null ? Number(raw.lat) : undefined),
+    longitude: raw.longitude != null
+      ? Number(raw.longitude)
+      : (raw.lng != null ? Number(raw.lng) : undefined),
     isBuyItNow: raw.isBuyItNow ?? false,
     yearBuilt: raw.yearBuilt ?? undefined,
     parkingSpaces: raw.parkingSpaces ?? undefined,

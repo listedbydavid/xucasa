@@ -91,7 +91,7 @@ export default function AuthScreen() {
         <Text style={[styles.logo, { color: colors.primary, fontFamily: 'Outfit_700Bold' }]}>
           xucasa
         </Text>
-        <Text style={[styles.subtitle, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
+        <Text style={[styles.subtitle, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]}>
           {tab === 'login' ? 'Welcome back' : 'Create your account'}
         </Text>
 
@@ -111,7 +111,7 @@ export default function AuthScreen() {
                   styles.tabText,
                   {
                     color: tab === t ? colors.foreground : colors.mutedForeground,
-                    fontFamily: tab === t ? 'DM_Sans_500Medium' : 'DM_Sans_400Regular',
+                    fontFamily: tab === t ? 'DMSans_500Medium' : 'DMSans_400Regular',
                   },
                 ]}
               >
@@ -125,7 +125,7 @@ export default function AuthScreen() {
         {error && (
           <View style={[styles.errorBox, { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' }]}>
             <Ionicons name="alert-circle-outline" size={16} color="#DC2626" />
-            <Text style={[styles.errorText, { color: '#DC2626', fontFamily: 'DM_Sans_400Regular' }]}>
+            <Text style={[styles.errorText, { color: '#DC2626', fontFamily: 'DMSans_400Regular' }]}>
               {error}
             </Text>
           </View>
@@ -135,11 +135,11 @@ export default function AuthScreen() {
         {tab === 'register' && (
           <View style={styles.nameRow}>
             <View style={[styles.field, { flex: 1 }]}>
-              <Text style={[styles.label, { color: colors.foreground, fontFamily: 'DM_Sans_500Medium' }]}>
+              <Text style={[styles.label, { color: colors.foreground, fontFamily: 'DMSans_500Medium' }]}>
                 First name
               </Text>
               <TextInput
-                style={[styles.input, { borderColor: colors.border, backgroundColor: colors.card, color: colors.foreground, fontFamily: 'DM_Sans_400Regular' }]}
+                style={[styles.input, { borderColor: colors.border, backgroundColor: colors.card, color: colors.foreground, fontFamily: 'DMSans_400Regular' }]}
                 placeholder="Jane"
                 placeholderTextColor={colors.mutedForeground}
                 value={firstName}
@@ -150,11 +150,11 @@ export default function AuthScreen() {
               />
             </View>
             <View style={[styles.field, { flex: 1 }]}>
-              <Text style={[styles.label, { color: colors.foreground, fontFamily: 'DM_Sans_500Medium' }]}>
+              <Text style={[styles.label, { color: colors.foreground, fontFamily: 'DMSans_500Medium' }]}>
                 Last name
               </Text>
               <TextInput
-                style={[styles.input, { borderColor: colors.border, backgroundColor: colors.card, color: colors.foreground, fontFamily: 'DM_Sans_400Regular' }]}
+                style={[styles.input, { borderColor: colors.border, backgroundColor: colors.card, color: colors.foreground, fontFamily: 'DMSans_400Regular' }]}
                 placeholder="Smith"
                 placeholderTextColor={colors.mutedForeground}
                 value={lastName}
@@ -169,11 +169,11 @@ export default function AuthScreen() {
 
         {/* Email */}
         <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.foreground, fontFamily: 'DM_Sans_500Medium' }]}>
+          <Text style={[styles.label, { color: colors.foreground, fontFamily: 'DMSans_500Medium' }]}>
             Email
           </Text>
           <TextInput
-            style={[styles.input, { borderColor: colors.border, backgroundColor: colors.card, color: colors.foreground, fontFamily: 'DM_Sans_400Regular' }]}
+            style={[styles.input, { borderColor: colors.border, backgroundColor: colors.card, color: colors.foreground, fontFamily: 'DMSans_400Regular' }]}
             placeholder="you@example.com"
             placeholderTextColor={colors.mutedForeground}
             value={email}
@@ -188,12 +188,12 @@ export default function AuthScreen() {
 
         {/* Password */}
         <View style={styles.field}>
-          <Text style={[styles.label, { color: colors.foreground, fontFamily: 'DM_Sans_500Medium' }]}>
+          <Text style={[styles.label, { color: colors.foreground, fontFamily: 'DMSans_500Medium' }]}>
             Password
           </Text>
           <View style={styles.passwordContainer}>
             <TextInput
-              style={[styles.passwordInput, { borderColor: colors.border, backgroundColor: colors.card, color: colors.foreground, fontFamily: 'DM_Sans_400Regular' }]}
+              style={[styles.passwordInput, { borderColor: colors.border, backgroundColor: colors.card, color: colors.foreground, fontFamily: 'DMSans_400Regular' }]}
               placeholder={tab === 'register' ? 'Min 10 chars, uppercase, number, symbol' : '••••••••'}
               placeholderTextColor={colors.mutedForeground}
               value={password}
@@ -226,7 +226,7 @@ export default function AuthScreen() {
           {loading ? (
             <ActivityIndicator color={colors.primaryForeground} />
           ) : (
-            <Text style={[styles.submitText, { color: colors.primaryForeground, fontFamily: 'DM_Sans_500Medium' }]}>
+            <Text style={[styles.submitText, { color: colors.primaryForeground, fontFamily: 'DMSans_500Medium' }]}>
               {tab === 'login' ? 'Sign in' : 'Create account'}
             </Text>
           )}

@@ -48,6 +48,26 @@ function RootLayoutNav() {
       <Stack.Screen name="property/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="auth" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="conversation/[id]" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="filters"
+        options={{
+          presentation: 'formSheet',
+          sheetAllowedDetents: [0.75, 1],
+          sheetGrabberVisible: true,
+          headerShown: false,
+          contentStyle: { backgroundColor: 'transparent' }
+        }}
+      />
+      <Stack.Screen
+        name="sort"
+        options={{
+          presentation: 'formSheet',
+          sheetAllowedDetents: [0.4],
+          sheetGrabberVisible: true,
+          headerShown: false,
+          contentStyle: { backgroundColor: 'transparent' }
+        }}
+      />
     </Stack>
   );
 }

@@ -54,14 +54,14 @@ export default function SavedScreen() {
           <Text style={[styles.emptyTitle, { color: colors.foreground, fontFamily: 'Outfit_700Bold' }]}>
             Sign in to save homes
           </Text>
-          <Text style={[styles.emptyBody, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
+          <Text style={[styles.emptyBody, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]}>
             Keep track of homes you love and get notified of price changes.
           </Text>
           <TouchableOpacity
             style={[styles.ctaBtn, { backgroundColor: colors.primary }]}
             onPress={() => router.push('/auth')}
           >
-            <Text style={[styles.ctaBtnText, { color: colors.primaryForeground, fontFamily: 'DM_Sans_500Medium' }]}>
+            <Text style={[styles.ctaBtnText, { color: colors.primaryForeground, fontFamily: 'DMSans_700Bold' }]}>
               Sign in
             </Text>
           </TouchableOpacity>
@@ -75,7 +75,7 @@ export default function SavedScreen() {
       <View style={[styles.header, { paddingTop: topPadding + 10, borderBottomColor: colors.border }]}>
         <Text style={[styles.title, { color: colors.foreground, fontFamily: 'Outfit_700Bold' }]}>Saved</Text>
         {data && data.length > 0 && (
-          <Text style={[styles.count, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
+          <Text style={[styles.count, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]}>
             {data.length} {data.length === 1 ? 'home' : 'homes'}
           </Text>
         )}
@@ -94,14 +94,14 @@ export default function SavedScreen() {
           <Text style={[styles.emptyTitle, { color: colors.foreground, fontFamily: 'Outfit_700Bold' }]}>
             No saved homes yet
           </Text>
-          <Text style={[styles.emptyBody, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
+          <Text style={[styles.emptyBody, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]}>
             Tap the heart on any listing to save it here.
           </Text>
           <TouchableOpacity
             style={[styles.ctaBtn, { backgroundColor: colors.primary }]}
             onPress={() => router.push('/')}
           >
-            <Text style={[styles.ctaBtnText, { color: colors.primaryForeground, fontFamily: 'DM_Sans_500Medium' }]}>
+            <Text style={[styles.ctaBtnText, { color: colors.primaryForeground, fontFamily: 'DMSans_700Bold' }]}>
               Browse listings
             </Text>
           </TouchableOpacity>
@@ -111,7 +111,7 @@ export default function SavedScreen() {
           data={data}
           keyExtractor={(s: SavedProperty) => String(s.id)}
           renderItem={({ item }: { item: SavedProperty }) => (
-            <View style={[styles.savedItem, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.savedItem, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: Platform.OS === 'web' ? 1 : 0 }]}>
               <PropertyCard
                 property={item.property}
                 isSaved
@@ -119,14 +119,14 @@ export default function SavedScreen() {
                 onPress={() => router.push(`/property/${item.property.id}`)}
                 onSaveToggle={() => handleUnsave(item.property.id)}
               />
-              <View style={[styles.alertRow, { borderTopColor: colors.border }]}>
+              <View style={[styles.alertRow, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
                 <View style={styles.alertCopy}>
-                  <Ionicons name="notifications-outline" size={18} color={colors.primary} />
+                  <Ionicons name="notifications-outline" size={20} color={colors.primary} />
                   <View style={styles.alertText}>
-                    <Text style={[styles.alertTitle, { color: colors.foreground, fontFamily: 'DM_Sans_500Medium' }]}>
+                    <Text style={[styles.alertTitle, { color: colors.foreground, fontFamily: 'DMSans_500Medium' }]}>
                       Price drop alert
                     </Text>
-                    <Text style={[styles.alertDescription, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
+                    <Text style={[styles.alertDescription, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]}>
                       Notify me when this home’s price falls
                     </Text>
                   </View>
@@ -159,62 +159,65 @@ export default function SavedScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 2,
+    gap: 4,
   },
   title: {
     fontSize: 28,
   },
   count: {
-    fontSize: 14,
+    fontSize: 15,
   },
   list: {
     padding: 16,
-    paddingTop: 12,
+    paddingTop: 16,
   },
   savedItem: {
-    borderRadius: 14,
-    borderWidth: 1,
+    borderRadius: 16,
     overflow: 'hidden',
-    marginBottom: 14,
+    marginBottom: 24,
+    ...(Platform.OS === 'ios'
+      ? { shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }
+      : { elevation: 4 }),
   },
   alertRow: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
   },
-  alertCopy: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  alertText: { flex: 1, gap: 1 },
-  alertTitle: { fontSize: 14 },
-  alertDescription: { fontSize: 12 },
+  alertCopy: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  alertText: { flex: 1, gap: 2 },
+  alertTitle: { fontSize: 15 },
+  alertDescription: { fontSize: 13 },
   center: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: 16,
     padding: 32,
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 22,
     textAlign: 'center',
   },
   emptyBody: {
-    fontSize: 15,
+    fontSize: 16,
     textAlign: 'center',
+    lineHeight: 22,
   },
   ctaBtn: {
-    paddingHorizontal: 28,
-    paddingVertical: 12,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
     borderRadius: 24,
-    marginTop: 4,
+    marginTop: 8,
   },
   ctaBtnText: {
-    fontSize: 15,
+    fontSize: 16,
   },
 });

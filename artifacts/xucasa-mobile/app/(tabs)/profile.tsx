@@ -22,7 +22,6 @@ import { unregisterPushDevice } from '@/lib/pushNotifications';
 
 interface BuyerProfile {
   id: number;
-  /** Server field: the buyer's pre-approval ceiling (single amount, not a range) */
   preApprovalAmount?: number;
   preferredCities?: string[];
   minBeds?: number;
@@ -53,20 +52,20 @@ function ProfileRow({ icon, label, value, onPress }: {
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <View style={[styles.rowIcon, { backgroundColor: colors.muted }]}>
-        <Ionicons name={icon as any} size={18} color={colors.primary} />
+      <View style={styles.rowIcon}>
+        <Ionicons name={icon as any} size={20} color={colors.foreground} />
       </View>
       <View style={styles.rowContent}>
-        <Text style={[styles.rowLabel, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
+        <Text style={[styles.rowLabel, { color: colors.foreground, fontFamily: 'DMSans_500Medium' }]}>
           {label}
         </Text>
         {value && (
-          <Text style={[styles.rowValue, { color: colors.foreground, fontFamily: 'DM_Sans_500Medium' }]}>
+          <Text style={[styles.rowValue, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]}>
             {value}
           </Text>
         )}
       </View>
-      {onPress && <Feather name="chevron-right" size={18} color={colors.mutedForeground} />}
+      {onPress && <Feather name="chevron-right" size={20} color={colors.mutedForeground} />}
     </Component>
   );
 }
@@ -153,15 +152,15 @@ export default function ProfileScreen() {
           <Text style={[styles.emptyTitle, { color: colors.foreground, fontFamily: 'Outfit_700Bold' }]}>
             Your xucasa account
           </Text>
-          <Text style={[styles.emptyBody, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
+          <Text style={[styles.emptyBody, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]}>
             Sign in to save homes, track your search, and connect with your agent.
           </Text>
           <TouchableOpacity
             style={[styles.ctaBtn, { backgroundColor: colors.primary }]}
             onPress={() => router.push('/auth')}
           >
-            <Text style={[styles.ctaText, { color: colors.primaryForeground, fontFamily: 'DM_Sans_500Medium' }]}>
-              Sign in or create account
+            <Text style={[styles.ctaText, { color: colors.primaryForeground, fontFamily: 'DMSans_700Bold' }]}>
+              Sign in or register
             </Text>
           </TouchableOpacity>
         </View>
@@ -177,27 +176,27 @@ export default function ProfileScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Avatar + name */}
-        <View style={[styles.userCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={[styles.bigAvatar, { backgroundColor: colors.primary + '20' }]}>
+        <View style={styles.userSection}>
+          <View style={[styles.bigAvatar, { backgroundColor: colors.primary + '15' }]}>
             <Text style={[styles.bigAvatarText, { color: colors.primary, fontFamily: 'Outfit_700Bold' }]}>
               {initials}
             </Text>
           </View>
-          <View style={{ flex: 1, gap: 2 }}>
+          <View style={{ flex: 1, gap: 4 }}>
             <Text style={[styles.userName, { color: colors.foreground, fontFamily: 'Outfit_700Bold' }]}>
               {displayName}
             </Text>
-            <Text style={[styles.userEmail, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
+            <Text style={[styles.userEmail, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]}>
               {user?.email}
             </Text>
           </View>
         </View>
 
         {/* Buyer profile section */}
-        <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'DM_Sans_500Medium' }]}>
+        <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'DMSans_700Bold' }]}>
           BUYER PROFILE
         </Text>
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.group}>
           {buyerProfile?.preApprovalAmount ? (
             <ProfileRow
               icon="cash-outline"
@@ -227,10 +226,10 @@ export default function ProfileScreen() {
         </View>
 
         {/* Agent section */}
-        <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'DM_Sans_500Medium' }]}>
+        <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'DMSans_700Bold' }]}>
           MY AGENT
         </Text>
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.group}>
           {assignedAgent ? (
             <>
               <ProfileRow
@@ -252,27 +251,27 @@ export default function ProfileScreen() {
           ) : (
             <ProfileRow
               icon="person-circle-outline"
-              label="No agent assigned"
-              value="An agent will be assigned when you're ready"
+              label="Agent"
+              value="An agent will be assigned soon"
             />
           )}
         </View>
 
         {/* Notifications */}
-        <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'DM_Sans_500Medium' }]}>
+        <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'DMSans_700Bold' }]}>
           NOTIFICATIONS
         </Text>
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.group}>
           <View style={[styles.row, { borderBottomWidth: 0 }]}>
-            <View style={[styles.rowIcon, { backgroundColor: colors.muted }]}>
-              <Ionicons name="notifications-outline" size={18} color={colors.primary} />
+            <View style={styles.rowIcon}>
+              <Ionicons name="notifications-outline" size={20} color={colors.foreground} />
             </View>
             <View style={styles.rowContent}>
-              <Text style={[styles.preferenceTitle, { color: colors.foreground, fontFamily: 'DM_Sans_500Medium' }]}>
-                Saved-home price drops
+              <Text style={[styles.preferenceTitle, { color: colors.foreground, fontFamily: 'DMSans_500Medium' }]}>
+                Price drop alerts
               </Text>
-              <Text style={[styles.preferenceDescription, { color: colors.mutedForeground, fontFamily: 'DM_Sans_400Regular' }]}>
-                Push alerts for homes you opt into on Saved
+              <Text style={[styles.preferenceDescription, { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular' }]}>
+                Alert me when saved homes change price
               </Text>
             </View>
             <Switch
@@ -294,19 +293,19 @@ export default function ProfileScreen() {
         </View>
 
         {/* Account */}
-        <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'DM_Sans_500Medium' }]}>
+        <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'DMSans_700Bold' }]}>
           ACCOUNT
         </Text>
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.group}>
           <TouchableOpacity
-            style={[styles.row, { borderBottomColor: colors.border, borderBottomWidth: 0 }]}
+            style={[styles.row, { borderBottomWidth: 0 }]}
             onPress={handleLogout}
             activeOpacity={0.7}
           >
-            <View style={[styles.rowIcon, { backgroundColor: '#FEF2F2' }]}>
-              <Ionicons name="log-out-outline" size={18} color="#EF4444" />
+            <View style={styles.rowIcon}>
+              <Ionicons name="log-out-outline" size={20} color="#DC3030" />
             </View>
-            <Text style={[styles.signOutText, { color: '#EF4444', fontFamily: 'DM_Sans_500Medium' }]}>
+            <Text style={[styles.signOutText, { color: '#DC3030', fontFamily: 'DMSans_500Medium' }]}>
               Sign out
             </Text>
           </TouchableOpacity>
@@ -321,7 +320,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
@@ -330,72 +329,62 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 14,
+    gap: 16,
     padding: 32,
   },
   emptyTitle: { fontSize: 22, textAlign: 'center' },
-  emptyBody: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
+  emptyBody: { fontSize: 16, textAlign: 'center', lineHeight: 22 },
   ctaBtn: {
-    paddingHorizontal: 28,
-    paddingVertical: 13,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
     borderRadius: 24,
-    marginTop: 4,
+    marginTop: 8,
   },
-  ctaText: { fontSize: 15 },
-  userCard: {
+  ctaText: { fontSize: 16 },
+  userSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    margin: 16,
-    padding: 16,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 14,
+    padding: 24,
+    gap: 16,
   },
   bigAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
-  bigAvatarText: { fontSize: 20 },
-  userName: { fontSize: 18 },
-  userEmail: { fontSize: 13 },
+  bigAvatarText: { fontSize: 24 },
+  userName: { fontSize: 22 },
+  userEmail: { fontSize: 15 },
   sectionLabel: {
-    fontSize: 11,
-    letterSpacing: 1,
-    marginHorizontal: 20,
-    marginBottom: 4,
-    marginTop: 8,
-  },
-  card: {
+    fontSize: 12,
+    letterSpacing: 1.2,
     marginHorizontal: 16,
     marginBottom: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
+    marginTop: 16,
+  },
+  group: {
+    marginBottom: 8,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 13,
-    gap: 12,
+    paddingVertical: 16,
+    gap: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   rowIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
   },
-  rowContent: { flex: 1, gap: 1 },
-  rowLabel: { fontSize: 12 },
-  rowValue: { fontSize: 14 },
-  preferenceTitle: { fontSize: 14 },
-  preferenceDescription: { fontSize: 12, lineHeight: 17 },
-  signOutText: { fontSize: 15, flex: 1 },
+  rowContent: { flex: 1, gap: 2 },
+  rowLabel: { fontSize: 16 },
+  rowValue: { fontSize: 15 },
+  preferenceTitle: { fontSize: 16 },
+  preferenceDescription: { fontSize: 14, marginTop: 2 },
+  signOutText: { fontSize: 16, flex: 1 },
 });
