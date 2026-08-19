@@ -1,0 +1,9 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "-Y-QkFksbtX-rvPwZ-og0"
+uri = "file://screenshots/xucasa-github-project-audit-full.txt"
+type = "text"
+title = "Full GitHub and project audit transcript"
+description = "Unabridged output for all seven requested commands (11,289,902 bytes)."
