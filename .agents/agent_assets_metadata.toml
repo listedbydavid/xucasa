@@ -7,3 +7,10 @@ uri = "file://screenshots/xucasa-github-project-audit-full.txt"
 type = "text"
 title = "Full GitHub and project audit transcript"
 description = "Unabridged output for all seven requested commands (11,289,902 bytes)."
+
+[[outputs]]
+id = "bfPfjxYIBOZtCAHqOcD_O"
+uri = "file://attached_assets/xucasa-secret-history-rewrite-full.log"
+type = "unspecified"
+title = "Complete Git history rewrite log"
+description = "Full untruncated output from the successful index-only rewrite; contains no token values."
