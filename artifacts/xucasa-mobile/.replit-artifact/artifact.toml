@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/xucasa-mobile/"
+title = "xucasa"
+description = "Native iPhone app for xucasa — browse real estate listings, search by location, view property details with photos, save favorites, and track your buyer journey. Backed by the existing xucasa platform API."
+version = "1.0.0"
+id = "artifacts/xucasa-mobile"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/xucasa-mobile/" ]
+localPort = 24861
+
+[services.development]
+run = "pnpm --filter @workspace/xucasa-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/xucasa-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/xucasa-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "24861"
+BASE_PATH = "/xucasa-mobile/"
