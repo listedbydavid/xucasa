@@ -19,7 +19,7 @@
  */
 
 import { db } from "./db";
-import { properties, idxSyncLog } from "@workspace/db";
+import { properties, idxSyncLog, notifications } from "@workspace/db";
 import { eq, and, inArray, notInArray, sql } from "drizzle-orm";
 import { notifySavedPropertyPriceDrops } from "./lib/priceDropNotifications";
 import { logger } from "./logger";
@@ -639,7 +639,12 @@ function deduplicateByIdxId(listings: any[]): any[] {
   return Array.from(map.values());
 }
 
-async function batchUpsertListings(normalised: any[]): Promise<{ added: number; updated: number }> {
+async function batchUpsertListings(normalised: any[]): Promise<{
+  added: number;
+  updated: number;
+  /** Maps idxId → DB property.id for every row touched in this sync. */
+  idxIdToDbId: Map<string, number>;
+}> {
   const deduped = deduplicateByIdxId(normalised);
   if (deduped.length !== normalised.length) {
     console.log(`[IDX Sync] Deduplicated ${normalised.length} → ${deduped.length} listings (removed ${normalised.length - deduped.length} duplicates)`);
@@ -662,6 +667,14 @@ async function batchUpsertListings(normalised: any[]): Promise<{ added: number; 
   }]));
   const priceDrops: Array<{ id: number; oldPrice: number; newPrice: number; eventKey: string }> = [];
 
+  // idxId → DB id for all rows upserted in this run (populated as we go)
+  const idxIdToDbId = new Map<string, number>();
+
+  // Seed with pre-existing IDs (updates keep the same id)
+  for (const [idxId, row] of existingMap) {
+    idxIdToDbId.set(idxId, row.id);
+  }
+
   let added = 0;
   let updated = 0;
 
@@ -672,7 +685,9 @@ async function batchUpsertListings(normalised: any[]): Promise<{ added: number; 
 
     for (const listing of batch) {
       const existing = existingMap.get(listing.idxId);
-      const payload = { ...listing, idxUpdatedAt: new Date() };
+      // Always keep listingStatus in sync with status for IDX rows so the
+      // transition step and buyer-side queries see a consistent value.
+      const payload = { ...listing, listingStatus: "active", idxUpdatedAt: new Date() };
 
       if (existing) {
         if (payload.price !== existing.price) payload.priceUpdatedAt = new Date();
@@ -691,7 +706,14 @@ async function batchUpsertListings(normalised: any[]): Promise<{ added: number; 
     }
 
     if (toInsert.length > 0) {
-      await db.insert(properties).values(toInsert);
+      // Use RETURNING to capture the auto-generated DB ids for new rows
+      const inserted = await db.insert(properties).values(toInsert).returning({
+        id: properties.id,
+        idxId: properties.idxId,
+      });
+      for (const row of inserted) {
+        if (row.idxId) idxIdToDbId.set(row.idxId, row.id);
+      }
       added += toInsert.length;
     }
 
@@ -721,7 +743,268 @@ async function batchUpsertListings(normalised: any[]): Promise<{ added: number; 
     });
   }
 
-  return { added, updated };
+  return { added, updated, idxIdToDbId };
+}
+
+// ── IDX Transition: archive manual listings that went live on the MLS ─────────
+
+/**
+ * Eligible listingStatus values for manual agent listings that may transition
+ * to the live MLS feed (IDX). Only pre-MLS and non-active statuses are
+ * considered; we never touch already-live or buyer-offer-stage listings.
+ */
+const ARCHIVABLE_LISTING_STATUSES = new Set(["off_market", "coming_soon", "pre_market"]);
+
+/**
+ * Normalise a full street address to a canonical pipe-delimited lowercase key
+ * for deterministic matching.
+ *
+ * Returns an empty string when ANY of the five required components
+ * (street number, street name, city, state, five-digit zip) is missing or
+ * blank after normalisation — partial addresses must never produce a match.
+ *
+ * Expands common street-type abbreviations so "123 Main St" and
+ * "123 Main Street" resolve to the same key.
+ *
+ * Exported for unit tests.
+ */
+export function normaliseAddress(parts: {
+  streetNumber?: string | null;
+  streetName?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+}): string {
+  const { streetNumber, streetName, city, state, zip } = parts;
+
+  const normNum = (streetNumber || "").trim().toLowerCase();
+
+  // Normalise street name: expand common abbreviations then clean punctuation
+  const normStreet = (streetName || "")
+    .toLowerCase()
+    .replace(/\bst\b/g, "street")
+    .replace(/\bave\b/g, "avenue")
+    .replace(/\bblvd\b/g, "boulevard")
+    .replace(/\bdr\b/g, "drive")
+    .replace(/\brd\b/g, "road")
+    .replace(/\bln\b/g, "lane")
+    .replace(/\bct\b/g, "court")
+    .replace(/\bpl\b/g, "place")
+    .replace(/\bway\b/g, "way")
+    .replace(/[.,#\-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const normCity = (city || "").trim().toLowerCase();
+  const normState = (state || "").trim().toLowerCase();
+  // Keep only digits, truncate to five-digit ZIP
+  const normZip = (zip || "").trim().replace(/\D/g, "").slice(0, 5);
+
+  // ALL five components must be present — any missing component returns "" so
+  // the caller knows not to add this address to the lookup map.
+  if (!normNum || !normStreet || !normCity || !normState || normZip.length < 5) {
+    return "";
+  }
+
+  return [normNum, normStreet, normCity, normState, normZip].join("|");
+}
+
+/**
+ * After a successful MLS sync, scan for agent-owned manual listings that have
+ * just appeared in the current incoming sync batch. Match by:
+ *   1. expectedMlsNumber (exact, case-insensitive) — highest confidence
+ *   2. Normalised full address (all five components required) — fallback
+ *
+ * Only listings with listingStatus in {off_market, coming_soon, pre_market}
+ * are eligible. Matched listings are archived and the owning agent is notified
+ * via the in-app notification system. Buyer-agent authority is never touched.
+ *
+ * @param incomingNormalisedRows  The normalised rows from the current sync
+ *   batch (same objects passed to batchUpsertListings), each carrying their
+ *   DB id after upsert. Pass the post-upsert DB rows so we have real IDs.
+ *
+ * Returns the count of rows successfully written to the DB as archived.
+ */
+export async function archiveManualListingsMatchedByMls(
+  incomingIdxRows: Array<{
+    id: number;
+    mlsNumber: string | null;
+    addressStreetNumber: string | null;
+    addressStreetName: string | null;
+    addressCity: string | null;
+    addressState: string | null;
+    addressZip: string | null;
+  }>
+): Promise<{ archived: number }> {
+  if (incomingIdxRows.length === 0) return { archived: 0 };
+
+  // Load all manual listings that are eligible for archiving
+  const manualCandidates = await db
+    .select({
+      id: properties.id,
+      agentId: properties.agentId,
+      expectedMlsNumber: properties.expectedMlsNumber,
+      addressStreetNumber: properties.addressStreetNumber,
+      addressStreetName: properties.addressStreetName,
+      addressCity: properties.addressCity,
+      addressState: properties.addressState,
+      addressZip: properties.addressZip,
+      listingStatus: properties.listingStatus,
+      title: properties.title,
+    })
+    .from(properties)
+    .where(
+      and(
+        eq(properties.source, "manual"),
+        sql`LOWER(${properties.listingStatus}) IN ('off_market', 'coming_soon', 'pre_market')`
+      )
+    );
+
+  if (manualCandidates.length === 0) return { archived: 0 };
+
+  // Build lookup maps from the incoming sync batch only.
+  // Map 1: mlsNumber (lowercase, trimmed) → IDX DB row id
+  const mlsNumberMap = new Map<string, number>();
+  // Map 2: normalised full address (all five parts required) → IDX DB row id
+  const addressMap = new Map<string, number>();
+
+  for (const row of incomingIdxRows) {
+    if (row.mlsNumber) {
+      mlsNumberMap.set(row.mlsNumber.toLowerCase().trim(), row.id);
+    }
+    const normAddr = normaliseAddress({
+      streetNumber: row.addressStreetNumber,
+      streetName: row.addressStreetName,
+      city: row.addressCity,
+      state: row.addressState,
+      zip: row.addressZip,
+    });
+    // normaliseAddress returns "" when any component is missing — skip those
+    if (normAddr) {
+      addressMap.set(normAddr, row.id);
+    }
+  }
+
+  const toArchive: Array<{
+    manualId: number;
+    idxPropertyId: number;
+    agentId: string | null;
+    title: string;
+    matchedBy: string;
+  }> = [];
+
+  for (const candidate of manualCandidates) {
+    // Guard: status filter already applied in DB query, but validate in-memory
+    // too so the logic is explicit and testable without a DB.
+    if (!ARCHIVABLE_LISTING_STATUSES.has((candidate.listingStatus || "").toLowerCase())) {
+      continue;
+    }
+
+    let idxPropertyId: number | null = null;
+    let matchedBy = "";
+
+    // Priority 1: exact MLS number match
+    if (candidate.expectedMlsNumber) {
+      const key = candidate.expectedMlsNumber.toLowerCase().trim();
+      const found = mlsNumberMap.get(key);
+      if (found !== undefined) {
+        idxPropertyId = found;
+        matchedBy = "mls_number";
+      }
+    }
+
+    // Priority 2: normalised address match (only when MLS number did not match)
+    if (idxPropertyId === null) {
+      const normAddr = normaliseAddress({
+        streetNumber: candidate.addressStreetNumber,
+        streetName: candidate.addressStreetName,
+        city: candidate.addressCity,
+        state: candidate.addressState,
+        zip: candidate.addressZip,
+      });
+      // "" means an incomplete address on the manual side — skip
+      if (normAddr) {
+        const found = addressMap.get(normAddr);
+        if (found !== undefined) {
+          idxPropertyId = found;
+          matchedBy = "address";
+        }
+      }
+    }
+
+    if (idxPropertyId !== null) {
+      toArchive.push({
+        manualId: candidate.id,
+        idxPropertyId,
+        agentId: candidate.agentId ?? null,
+        title: candidate.title,
+        matchedBy,
+      });
+    }
+  }
+
+  if (toArchive.length === 0) return { archived: 0 };
+
+  const now = new Date();
+  let archived = 0;
+
+  // Archive each matched listing and notify the owning agent.
+  // Count only rows where the DB write succeeds.
+  for (const item of toArchive) {
+    try {
+      await db
+        .update(properties)
+        .set({
+          listingStatus: "archived",
+          status: "archived",
+          archivedAt: now,
+          archivedReason: `Listing went live on MLS (matched by ${item.matchedBy}). IDX property ID: ${item.idxPropertyId}.`,
+          linkedMlsPropertyId: item.idxPropertyId,
+        })
+        .where(eq(properties.id, item.manualId));
+
+      archived++;
+
+      logger.info({
+        event: "idx_transition_archived",
+        manualId: item.manualId,
+        idxPropertyId: item.idxPropertyId,
+        title: item.title,
+        matchedBy: item.matchedBy,
+      });
+
+      // Notify the owning agent (best-effort; never throw on notification failure)
+      if (item.agentId) {
+        try {
+          await db.insert(notifications).values({
+            userId: item.agentId,
+            type: "system",
+            title: "Your listing is now live on the MLS",
+            message: `Your manual listing "${item.title}" has been automatically archived because it now appears in the MLS feed. The live IDX listing (property #${item.idxPropertyId}) is now the active record.`,
+            propertyId: item.idxPropertyId,
+            linkUrl: `/property/${item.idxPropertyId}`,
+            read: false,
+            archived: false,
+          });
+        } catch (notifErr: any) {
+          logger.error({
+            event: "idx_transition_notification_failed",
+            manualId: item.manualId,
+            agentId: item.agentId,
+            error: notifErr.message,
+          });
+        }
+      }
+    } catch (archiveErr: any) {
+      logger.error({
+        event: "idx_transition_archive_failed",
+        manualId: item.manualId,
+        error: archiveErr.message,
+      });
+    }
+  }
+
+  return { archived };
 }
 
 // ── Main sync function ────────────────────────────────────────────────────────
@@ -771,8 +1054,48 @@ export async function runIdxSync(): Promise<{ added: number; updated: number; re
 
     console.log(`[IDX Sync] ${normalised.length} valid for-sale listings after normalisation (filtered ${rawListings.length - allNormalised.length} with no price, ${leaseCount} tagged rentals, ${lowPriceCount} sub-$${RENTAL_PRICE_THRESHOLD} likely rentals)`);
 
-    const { added, updated } = await batchUpsertListings(normalised);
+    const { added, updated, idxIdToDbId } = await batchUpsertListings(normalised);
 
+    // ── IDX Transition: archive manual pre-MLS listings that went live ────────
+    // Build the incoming rows entirely from in-memory data (normalised + the
+    // idxId→DB-id map returned by batchUpsertListings) so we only match against
+    // listings present in the current sync batch, not historical IDX rows.
+    try {
+      const incomingIdxRows = normalised
+        .map(r => {
+          const dbId = idxIdToDbId.get(r.idxId);
+          if (dbId === undefined) return null;
+          return {
+            id: dbId,
+            mlsNumber: (r.mlsNumber as string | null) ?? null,
+            addressStreetNumber: (r.addressStreetNumber as string | null) ?? null,
+            addressStreetName: (r.addressStreetName as string | null) ?? null,
+            addressCity: (r.addressCity as string | null) ?? null,
+            addressState: (r.addressState as string | null) ?? null,
+            addressZip: (r.addressZip as string | null) ?? null,
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
+
+      const { archived } = await archiveManualListingsMatchedByMls(incomingIdxRows);
+      if (archived > 0) {
+        logger.info({
+          event: "idx_transition_complete",
+          archived,
+        });
+      }
+    } catch (transitionErr: any) {
+      // Non-fatal: log and continue so the sync result is still reported.
+      logger.error({
+        event: "idx_transition_step_failed",
+        error: transitionErr.message,
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Re-query to find IDX rows that were NOT in this sync and mark removed.
+    // This query happens after the transition step intentionally (archived manual
+    // listings are source=manual, not source=idx, so they are not affected).
     const existingIdxRows = await db
       .select({ idxId: properties.idxId, id: properties.id })
       .from(properties)

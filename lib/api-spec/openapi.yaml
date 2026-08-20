@@ -195,7 +195,7 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
+            type: number
       responses:
         "200":
           description: Agent contact info
@@ -238,6 +238,177 @@ paths:
                 required: [success, message]
         "400":
           $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /properties/{id}/photos:
+    post:
+      operationId: uploadListingPhotos
+      tags: [agent-listings]
+      summary: Upload listing photos
+      description: Owner-only. Accepts up to 20 JPG, PNG, WEBP, HEIC, or HEIF images, with a 10 MB limit per image.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/ListingPhotoUploadInput"
+      responses:
+        "201":
+          description: Photos uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListingPhotoResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      operationId: removeListingPhoto
+      tags: [agent-listings]
+      summary: Remove a listing photo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemoveListingPhotoInput"
+      responses:
+        "200":
+          description: Photo removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListingPhotoResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /properties/{id}/view:
+    post:
+      operationId: trackPropertyView
+      tags: [agent-listings]
+      summary: Track a public property view
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PropertyViewInput"
+      responses:
+        "200":
+          description: View processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tracked:
+                    type: boolean
+                  reason:
+                    type: string
+                required: [tracked]
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /properties/{id}/inquiry:
+    post:
+      operationId: createPropertyInquiry
+      tags: [agent-listings]
+      summary: Submit a public listing inquiry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PropertyInquiryInput"
+      responses:
+        "201":
+          description: Inquiry created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                required: [success]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          description: Inquiry rate limit exceeded
+  /properties/{id}/archive:
+    post:
+      operationId: archiveAgentListing
+      tags: [agent-listings]
+      summary: Soft archive an owned listing
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArchiveListingInput"
+      responses:
+        "200":
+          description: Archived property
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /agent/listing-analytics/{id}:
+    get:
+      operationId: getListingAnalytics
+      tags: [agent-listings]
+      summary: Get analytics for an owned listing
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Listing analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListingAnalytics"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
   /agents/search:
@@ -557,6 +728,97 @@ components:
         message:
           type: ["string", "null"]
       required: [name]
+    ListingPhotoResponse:
+      type: object
+      properties:
+        photos:
+          type: array
+          items:
+            type: string
+        imageUrl:
+          type: ["string", "null"]
+      required: [photos, imageUrl]
+    ListingPhotoUploadInput:
+      type: object
+      properties:
+        photos:
+          type: array
+          maxItems: 20
+          description: Binary listing photos sent as multipart form fields.
+          items:
+            type: string
+      required: [photos]
+    RemoveListingPhotoInput:
+      type: object
+      properties:
+        photoUrl:
+          type: string
+      required: [photoUrl]
+    ArchiveListingInput:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+    PropertyViewInput:
+      type: object
+      properties:
+        source:
+          type: string
+        isMobile:
+          type: boolean
+    PropertyInquiryInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+        contact:
+          type: string
+          minLength: 5
+          maxLength: 320
+        message:
+          type: ["string", "null"]
+          maxLength: 2000
+        source:
+          type: string
+          maxLength: 100
+      required: [name, contact]
+    ListingAnalytics:
+      type: object
+      properties:
+        views:
+          type: number
+        uniqueVisitors:
+          type: number
+        mobileViews:
+          type: number
+        inquiries:
+          type: number
+        saves:
+          type: number
+        byDay:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              views:
+                type: number
+            required: [date, views]
+        bySource:
+          type: array
+          items:
+            type: object
+            properties:
+              source:
+                type: string
+              views:
+                type: number
+            required: [source, views]
+      required: [views, uniqueVisitors, mobileViews, inquiries, saves, byDay, bySource]
     LinkAgentInput:
       type: object
       properties:

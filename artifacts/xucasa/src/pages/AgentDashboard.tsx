@@ -2,8 +2,8 @@ import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { usePageMeta } from "@/hooks/use-page-meta";
 import { useAuth } from "@/hooks/use-auth";
-import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
-import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar, Send, Eye, ContactRound, MessageSquare, AlertCircle, Loader2, BadgeCheck, Tag, Share2 } from "lucide-react";
+import { useMyProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
+import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar, Send, Eye, ContactRound, MessageSquare, AlertCircle, Loader2, BadgeCheck, Tag, Share2, BarChart3 } from "lucide-react";
 import { ConcessionForm } from "@/components/ConcessionForm";
 import { SendListingModal } from "@/components/SendListingModal";
 import { ShareListingModal } from "@/components/ShareListingModal";
@@ -32,8 +32,9 @@ function buildStreetViewUrl(lat: number, lng: number, size = "800x500"): string 
 export default function AgentDashboard() {
   usePageMeta({ title: 'Agent Portal', noIndex: true });
   const { user, isAuthenticated } = useAuth();
-  const { data: propertiesData, isLoading } = useProperties({ limit: 200 });
-  const properties = propertiesData?.properties || [];
+  const [, setLocation] = useLocation();
+  const { data: myProperties, isLoading } = useMyProperties();
+  const properties = myProperties || [];
   const { mutate: createProperty, isPending: isCreating } = useCreateProperty();
   const { mutate: updateProperty, isPending: isUpdating } = useUpdateProperty();
   const { mutate: deleteProperty } = useDeleteProperty();
@@ -44,9 +45,9 @@ export default function AgentDashboard() {
   const [concessionPropertyId, setConcessionPropertyId] = useState<number | null>(null);
   const [sharePropertyId, setSharePropertyId] = useState<number | null>(null);
 
-  const myProperties = properties.filter(p => p.agentId === user?.id) || properties;
+  const agentListings = properties;
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || user?.role !== 'agent') {
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center text-center">
         <h1 className="text-3xl font-bold mb-4">Agent Portal Access Required</h1>
@@ -56,13 +57,11 @@ export default function AgentDashboard() {
   }
 
   const openNew = () => {
-    setEditingProperty(null);
-    setIsModalOpen(true);
+    setLocation("/create-listing");
   };
 
   const openEdit = (p: PropertyResponse) => {
-    setEditingProperty(p);
-    setIsModalOpen(true);
+    setLocation(`/edit-listing/${p.id}`);
   };
 
   const handleDelete = (id: number) => {
@@ -139,93 +138,7 @@ export default function AgentDashboard() {
         </div>
 
         {/* Listings Tab */}
-        {activeTab === "listings" && (
-          isLoading ? (
-            <div className="animate-pulse space-y-4">
-              <div className="h-16 bg-muted rounded-xl" />
-              <div className="h-16 bg-muted rounded-xl" />
-            </div>
-          ) : myProperties.length === 0 ? (
-            <div className="text-center py-20 bg-card border border-border rounded-3xl">
-              <Home className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-30" />
-              <h3 className="font-display font-bold text-xl mb-2">No active listings</h3>
-              <p className="text-muted-foreground mb-6">Create your first listing to start reaching buyers.</p>
-              <button onClick={openNew} className="text-primary font-bold hover:underline">Create Listing</button>
-            </div>
-          ) : (
-            <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-muted/50 border-b border-border">
-                    <th className="p-4 font-bold text-muted-foreground text-sm uppercase tracking-wider">Property</th>
-                    <th className="p-4 font-bold text-muted-foreground text-sm uppercase tracking-wider">Price</th>
-                    <th className="p-4 font-bold text-muted-foreground text-sm uppercase tracking-wider">Status</th>
-                    <th className="p-4 font-bold text-muted-foreground text-sm uppercase tracking-wider text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {myProperties.map(property => (
-                    <tr key={property.id} className="hover:bg-muted/20 transition-colors" data-testid={`row-property-${property.id}`}>
-                      <td className="p-4 flex items-center gap-4">
-                        <div className="w-16 h-16 rounded-lg bg-muted overflow-hidden flex-shrink-0">
-                          {property.imageUrl
-                            ? <img src={property.imageUrl} className="w-full h-full object-cover" alt={property.title} />
-                            : <div className="w-full h-full flex items-center justify-center"><ImageOff className="w-5 h-5 text-muted-foreground/40" /></div>
-                          }
-                        </div>
-                        <div>
-                          <div className="font-bold text-foreground">{property.title}</div>
-                          <div className="text-sm text-muted-foreground">{property.location}</div>
-                          {(property as any).openHouseDate && new Date((property as any).openHouseDate) > new Date() && (
-                            <div className="flex items-center gap-1 mt-0.5 text-green-600 text-xs font-bold">
-                              <CalendarDays className="w-3 h-3" />
-                              Open House {new Date((property as any).openHouseDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-4 font-bold text-foreground">${property.price.toLocaleString()}</td>
-                      <td className="p-4">
-                        {property.isOffMarket ? (
-                          <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-bold">Buy it Now</span>
-                        ) : (
-                          <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-bold">Active</span>
-                        )}
-                      </td>
-                      <td className="p-4 text-right">
-                        <button
-                          onClick={() => setSharePropertyId(property.id)}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 mr-2 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded-full text-xs font-bold hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors border border-amber-200 dark:border-amber-800"
-                          data-testid={`button-share-${property.id}`}
-                          aria-label={`Share listing ${property.title}`}
-                        >
-                          <Share2 className="w-3.5 h-3.5" />
-                          Share
-                        </button>
-                        <button
-                          onClick={() => setConcessionPropertyId(property.id)}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 mr-2 bg-amber-500 text-white rounded-full text-xs font-bold hover:bg-amber-600 transition-colors"
-                          data-testid={`button-add-terms-${property.id}`}
-                          aria-label={`Add seller terms for ${property.title}`}
-                        >
-                          <Tag className="w-3.5 h-3.5" />
-                          Add Seller Terms
-                        </button>
-                        <button onClick={() => openEdit(property)} className="p-2 text-muted-foreground hover:text-primary transition-colors" data-testid={`button-edit-${property.id}`} aria-label={`Edit listing ${property.title}`}>
-                          <Edit3 className="w-5 h-5" aria-hidden="true" />
-                        </button>
-                        <button onClick={() => handleDelete(property.id)} className="p-2 text-muted-foreground hover:text-destructive transition-colors ml-2" data-testid={`button-delete-${property.id}`} aria-label={`Delete listing ${property.title}`}>
-                          <Trash2 className="w-5 h-5" aria-hidden="true" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )
-        )}
-
+        {activeTab === "listings" && <AgentListingsSection myProperties={agentListings} openNew={openNew} openEdit={openEdit} setSharePropertyId={setSharePropertyId} setConcessionPropertyId={setConcessionPropertyId} handleDelete={handleDelete} isLoading={isLoading} />}
         {/* Clients Tab */}
         {activeTab === "clients" && <AgentClientsSection />}
 
@@ -233,7 +146,7 @@ export default function AgentDashboard() {
         {activeTab === "contacts" && <AgentContactsSection />}
 
         {/* Open Houses Tab */}
-        {activeTab === "openhouses" && <AgentOpenHousesSection agentProperties={myProperties} />}
+        {activeTab === "openhouses" && <AgentOpenHousesSection agentProperties={agentListings} />}
 
         {/* MLS / IDX Sync Tab */}
         {activeTab === "beacon" && <BeaconTab />}
@@ -247,20 +160,6 @@ export default function AgentDashboard() {
         )}
       </div>
 
-      {isModalOpen && (
-        <PropertyFormModal
-          property={editingProperty}
-          onClose={() => setIsModalOpen(false)}
-          onSubmit={(data) => {
-            if (editingProperty) {
-              updateProperty({ id: editingProperty.id, ...data }, { onSuccess: () => setIsModalOpen(false) });
-            } else {
-              createProperty(data, { onSuccess: () => setIsModalOpen(false) });
-            }
-          }}
-          isPending={isCreating || isUpdating}
-        />
-      )}
       <ShareListingModal
         propertyId={sharePropertyId}
         isOpen={sharePropertyId !== null}
@@ -1807,6 +1706,156 @@ function AgentVerificationBanner({ user }: { user: any }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function AgentListingRow({ property, filter, setSharePropertyId, openEdit }: any) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <>
+      <tr className="hover:bg-muted/20 transition-colors">
+        <td className="p-4 flex items-center gap-4">
+          <div className="w-16 h-16 rounded-lg bg-muted overflow-hidden flex-shrink-0">
+            {property.imageUrl
+              ? <img src={property.imageUrl} className="w-full h-full object-cover" alt={property.title} />
+              : <div className="w-full h-full flex items-center justify-center"><ImageOff className="w-5 h-5 text-muted-foreground/40" /></div>
+            }
+          </div>
+          <div>
+            <div className="font-bold text-foreground hover:underline cursor-pointer" onClick={() => window.open(`/property/${property.id}`, "_blank")}>{property.title || property.location}</div>
+            <div className="text-sm text-muted-foreground">{property.location}</div>
+            <div className="flex gap-2 mt-1">
+              {property.beds != null && <span className="text-xs text-muted-foreground">{property.beds} beds</span>}
+              {property.baths != null && <span className="text-xs text-muted-foreground">{property.baths} baths</span>}
+              {property.sqft != null && <span className="text-xs text-muted-foreground">{property.sqft} sqft</span>}
+            </div>
+          </div>
+        </td>
+        <td className="p-4 font-bold text-foreground">${property.price.toLocaleString()}</td>
+        <td className="p-4">
+          <span className={`px-3 py-1 rounded-full text-xs font-bold capitalize ${property.isOffMarket ? "bg-yellow-100 text-yellow-800" : property.status === "active" ? "bg-green-100 text-green-800" : property.status === "coming_soon" ? "bg-purple-100 text-purple-800" : "bg-muted text-muted-foreground"}`}>
+            {property.isOffMarket ? "Buy it Now" : (property.status || "Active").replace("_", " ")}
+          </span>
+        </td>
+        <td className="p-4 text-right">
+          <button onClick={() => setExpanded(!expanded)} className="p-2 text-muted-foreground hover:text-primary transition-colors mr-2" title="Analytics"><BarChart3 className="w-5 h-5" /></button>
+          {filter !== "archived" && (
+            <button onClick={() => setSharePropertyId(property.id)} className="inline-flex items-center gap-1 px-3 py-1.5 mr-2 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded-full text-xs font-bold hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors border border-amber-200 dark:border-amber-800" title="Share"><Share2 className="w-3.5 h-3.5" /> Share</button>
+          )}
+          <button onClick={() => openEdit(property)} className="p-2 text-muted-foreground hover:text-primary transition-colors" title="Edit"><Edit3 className="w-5 h-5" /></button>
+          {filter === "archived" && property.linkedMlsPropertyId && (
+            <button onClick={() => window.open(`/property/${property.linkedMlsPropertyId}`, "_blank")} className="p-2 text-muted-foreground hover:text-primary transition-colors ml-2" title="View MLS Listing"><Link className="w-5 h-5" /></button>
+          )}
+        </td>
+      </tr>
+      {expanded && <tr><td colSpan={4} className="p-0 border-b border-border bg-muted/10"><ListingAnalyticsPanel propertyId={property.id} /></td></tr>}
+    </>
+  );
+}
+
+function AgentListingsSection({ myProperties, openNew, openEdit, setSharePropertyId, setConcessionPropertyId, handleDelete, isLoading }: any) {
+  const [filter, setFilter] = useState("active");
+
+  const filtered = myProperties.filter((p: any) => {
+    if (filter === "archived") return p.status === "archived";
+    if (filter === "off_market") return p.isOffMarket || p.status === "off_market";
+    if (filter === "coming_soon") return p.status === "coming_soon" || p.listingStatus === "coming_soon";
+    return p.status === "active" && !p.isOffMarket && p.listingStatus !== "coming_soon";
+  });
+
+  return (
+    <div className="space-y-6">
+      <div className="flex gap-2 border-b border-border pb-2 overflow-x-auto">
+        {(["active", "coming_soon", "off_market", "archived"] as const).map(f => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${filter === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+          >
+            {f === "active" ? "Active" : f === "coming_soon" ? "Coming Soon" : f === "off_market" ? "Off Market / Private" : "Archived"}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <div className="animate-pulse space-y-4">
+          <div className="h-16 bg-muted rounded-xl" />
+          <div className="h-16 bg-muted rounded-xl" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-20 bg-card border border-border rounded-3xl">
+          <Home className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-30" />
+          <h3 className="font-display font-bold text-xl mb-2">No listings found</h3>
+          <p className="text-muted-foreground mb-6">Create a listing to see it here.</p>
+          <button onClick={openNew} className="text-primary font-bold hover:underline">Create Listing</button>
+        </div>
+      ) : (
+        <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-muted/50 border-b border-border">
+                <th className="p-4 font-bold text-muted-foreground text-sm uppercase tracking-wider">Property</th>
+                <th className="p-4 font-bold text-muted-foreground text-sm uppercase tracking-wider">Price</th>
+                <th className="p-4 font-bold text-muted-foreground text-sm uppercase tracking-wider">Status</th>
+                <th className="p-4 font-bold text-muted-foreground text-sm uppercase tracking-wider text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filtered.map((property: any) => (
+                <AgentListingRow key={property.id} property={property} filter={filter} setSharePropertyId={setSharePropertyId} openEdit={openEdit} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+import { useGetListingAnalytics, getGetListingAnalyticsQueryKey } from "@workspace/api-client-react";
+
+function ListingAnalyticsPanel({ propertyId }: { propertyId: number }) {
+  const { data, isLoading } = useGetListingAnalytics(propertyId, { query: { enabled: !!propertyId, queryKey: getGetListingAnalyticsQueryKey(propertyId) } });
+
+  if (isLoading) {
+    return <div className="p-4 bg-muted/50 border-t border-border animate-pulse h-24" />;
+  }
+
+  if (!data) return null;
+
+  return (
+    <div className="p-4 bg-muted/30 border-t border-border">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1">Total Views</div>
+          <div className="text-xl font-bold">{data.views.toLocaleString()}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1">Unique Visitors</div>
+          <div className="text-xl font-bold">{data.uniqueVisitors.toLocaleString()}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1">Saves</div>
+          <div className="text-xl font-bold">{data.saves.toLocaleString()}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1">Inquiries</div>
+          <div className="text-xl font-bold">{data.inquiries.toLocaleString()}</div>
+        </div>
+      </div>
+      {data.bySource && data.bySource.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-border">
+          <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-2">Traffic Sources</div>
+          <div className="flex gap-4 text-sm">
+            {data.bySource.map(s => (
+              <div key={s.source}>
+                <span className="text-muted-foreground">{s.source || "Direct"}:</span> <span className="font-bold">{s.views}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

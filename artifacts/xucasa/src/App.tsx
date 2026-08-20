@@ -62,6 +62,9 @@ import Partners from "@/pages/Partners";
 import { CookieConsent } from "@/components/CookieConsent";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import RestartButton from "@/components/tours/RestartButton";
+import { AppDownloadBanner } from "@/components/AppDownloadBanner";
+import CreateListing from "@/pages/CreateListing";
+import EditListing from "@/pages/EditListing";
 import { ProtectedRoute, AuthOnlyRoute } from "@/components/OnboardingGuard";
 import { PreviewProvider, usePreview } from "@/lib/preview-context";
 import { AdminPreviewBar } from "@/components/AdminPreviewBar";
@@ -71,6 +74,8 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/search" component={Search} />
+      <Route path="/create-listing">{() => <ProtectedRoute component={CreateListing} />}</Route>
+      <Route path="/edit-listing/:id">{() => <ProtectedRoute component={EditListing} />}</Route>
       <Route path="/sell">{() => <ProtectedRoute component={Sell} />}</Route>
       <Route path="/home-report">{() => <ProtectedRoute component={HomeReport} />}</Route>
       <Route path="/swipe" component={Swipe} />
@@ -156,6 +161,7 @@ function AppContent() {
       <Footer />
       <CookieConsent />
       <InstallPrompt />
+      <AppDownloadBanner />
       <RestartButton />
     </div>
   );

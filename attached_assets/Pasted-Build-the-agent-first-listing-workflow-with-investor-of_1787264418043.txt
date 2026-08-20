@@ -1,0 +1,580 @@
+Build the agent-first listing workflow with investor/off-market deal support. This is one comprehensive build — read everything before starting.
+
+The Core Use Case
+
+A realtor finds a fixer or non-loanable property. They create a private listing on xucasa, get a shareable link, and send it to investor contacts via text/DM/email. The investor taps the link, lands on xucasa.com, sees the listing with the agent's contact info front and center, and can call/text/message the agent with zero friction — no account required. If no deal happens off-market, the property goes to MLS, the off-market listing auto-archives, and the MLS listing takes over on the portal. The agent sees everything in their dashboard with analytics.
+
+Part 1 — Database changes (shared/schema.ts or lib/db)
+Add fields to properties table:
+typescript
+// Listing lifecycle
+listingStatus: text("listing_status").default("active").notNull(),
+// Values: active | coming_soon | pre_market | off_market | pending | sold | archived
+
+// MLS linking for off-market → active transition
+expectedMlsNumber: text("expected_mls_number"), // agent enters this when creating off-market
+archivedAt: timestamp("archived_at"),
+archivedReason: text("archived_reason"), // 'went_to_mls' | 'deal_closed' | 'manual' | 'expired'
+linkedMlsPropertyId: integer("linked_mls_property_id").references(() => properties.id),
+// When off-market goes to MLS, this links the two records
+
+// Agent contact override for off-market listings
+agentPhone: text("agent_phone"), // pulled from agent profile but overridable
+agentEmail: text("agent_email"),
+
+// Coming soon
+expectedListDate: text("expected_list_date"),
+preMarketNotes: text("pre_market_notes"),
+
+// Extended property details
+yearBuilt: integer("year_built"),
+conditionNotes: text("condition_notes"), // for fixer/investor listings: "Needs full renovation, non-loanable"
+investorNotes: text("investor_notes"),   // cash/hard money details, ARV, repair estimate
+arv: integer("arv"),                      // After Repair Value
+estimatedRepairCost: integer("estimated_repair_cost"),
+Add new table property_analytics:
+typescript
+export const propertyAnalytics = pgTable("property_analytics", {
+  id: serial("id").primaryKey(),
+  propertyId: integer("property_id").references(() => properties.id).notNull(),
+  viewedAt: timestamp("viewed_at").defaultNow().notNull(),
+  viewerUserId: varchar("viewer_user_id").references(() => users.id), // null if guest
+  viewerIp: text("viewer_ip"),
+  referringAgentId: varchar("referring_agent_id").references(() => users.id),
+  source: text("source"), // 'direct' | 'share_link' | 'search' | 'saved'
+  userAgent: text("user_agent"),
+  isMobile: boolean("is_mobile").default(false),
+});
+
+export const propertyInquiries = pgTable("property_inquiries", {
+  id: serial("id").primaryKey(),
+  propertyId: integer("property_id").references(() => properties.id).notNull(),
+  agentId: varchar("agent_id").references(() => users.id),
+  name: text("name").notNull(),
+  contact: text("contact").notNull(), // email or phone
+  message: text("message"),
+  source: text("source").default("inquiry"), // 'inquiry' | 'tour_request'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+Part 2 — Backend endpoints
+Property creation (update existing POST /api/properties)
+
+Update the Zod schema to accept all new fields:
+
+typescript
+const createListingSchema = z.object({
+  listingStatus: z.enum(['active', 'coming_soon', 'pre_market', 'off_market']).default('active'),
+  title: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  price: z.number().int().positive(),
+  propertyType: z.enum(['Single Family', 'Condo', 'Townhouse', 'Multi-Family', 'Land', 'Mobile', 'Commercial']).optional(),
+  addressStreetNumber: z.string().optional(),
+  addressStreetName: z.string().min(1),
+  addressUnitNumber: z.string().optional(),
+  addressCity: z.string().min(1),
+  addressState: z.string().default('CA'),
+  addressZip: z.string().optional(),
+  beds: z.number().int().min(0).optional(),
+  baths: z.number().min(0).optional(),
+  sqft: z.number().int().min(0).optional(),
+  lotSize: z.number().int().min(0).optional(),
+  hoaFee: z.number().int().min(0).optional(),
+  yearBuilt: z.number().int().min(1800).max(2030).optional(),
+  listDate: z.string().optional(),
+  openHouseDate: z.string().optional(),
+  openHouseTime: z.string().optional(),
+  expectedListDate: z.string().optional(),
+  expectedMlsNumber: z.string().optional(),
+  preMarketNotes: z.string().max(500).optional(),
+  conditionNotes: z.string().max(500).optional(),
+  investorNotes: z.string().max(500).optional(),
+  arv: z.number().int().positive().optional(),
+  estimatedRepairCost: z.number().int().positive().optional(),
+  showingInstructions: z.string().max(500).optional(),
+  confidentialRemarks: z.string().max(500).optional(),
+  lockboxType: z.string().optional(),
+  accessInstructions: z.string().max(500).optional(),
+  source: z.enum(['manual', 'coming_soon', 'off_market']).default('manual'),
+});
+
+After creating: set agentId = caller's userId, pull agent's phone/email from their profile and set agentPhone/agentEmail on the listing.
+
+Photo upload
+typescript
+POST /api/properties/:id/photos
+isAuthenticated + must own the property (agentId === caller)
+multipart/form-data, field: photos, max 20 files, each max 10MB
+Accepted: image/jpeg, image/png, image/webp, image/heic
+
+For each file:
+- sharp: resize to max 2400px wide, convert to webp, quality 85
+- Save to dist/public/listing-photos/{propertyId}/
+- Append URL to property.photos array
+
+Returns: { photos: string[], total: number }
+
+DELETE /api/properties/:id/photos
+Body: { photoUrl: string }
+Removes one URL from photos array
+Caller must own property
+Property analytics tracking
+typescript
+POST /api/properties/:id/view
+// Public — no auth required, called client-side on page load
+// Rate limit: 1 per IP per property per hour (don't double-count refreshes)
+Body: { source?: string, referringAgentId?: string }
+
+Handler:
+- Parse User-Agent to detect isMobile
+- Insert into property_analytics
+- Do NOT block the response — fire and forget (async, no await on insert)
+Returns: { success: true }
+Property inquiry (frictionless — no account needed)
+typescript
+POST /api/properties/:id/inquiry
+// Public — no auth required
+// Rate limit: 3 per IP per hour
+
+Body: {
+  name: z.string().min(1).max(100),
+  contact: z.string().min(5).max(200), // email or phone
+  message: z.string().max(500).optional(),
+  source: z.enum(['inquiry', 'tour_request']).default('inquiry'),
+}
+
+Handler:
+1. Validate body
+2. Get property + agent info
+3. Insert into property_inquiries
+4. Notify the agent (referringAgentId from session, OR property.agentId, OR David):
+   type: 'property_inquiry'
+   title: '{name} inquired about your listing'
+   message: '{contact} — {message ?? "No message"}'
+   propertyId: id
+5. Audit log
+6. Return { success: true, message: 'Message sent! {agentFirstName} will be in touch soon.' }
+Agent listing analytics endpoint
+typescript
+GET /api/agent/listing-analytics/:propertyId
+isAuthenticated + must own property
+
+Returns:
+{
+  totalViews: number,
+  uniqueViews: number,       // distinct IPs
+  mobileViews: number,
+  saves: number,             // count of saved_properties for this propertyId
+  inquiries: number,         // count of property_inquiries
+  daysOnMarket: number,      // days since listDate or createdAt
+  viewsByDay: { date: string, views: number }[], // last 30 days
+  topReferrers: { source: string, count: number }[],
+}
+Soft archive endpoint
+typescript
+POST /api/properties/:id/archive
+isAuthenticated + must own property
+
+Body: { reason: 'deal_closed' | 'manual' | 'no_longer_available' }
+
+Sets: listingStatus = 'archived', archivedAt = now(), archivedReason = reason
+Returns: { success: true }
+Auto-archive in IDX sync (server/idxSync.ts or artifacts/api-server/src/idxSync.ts)
+
+In the IDX sync upsert logic, after each property is upserted from the MLS feed:
+
+typescript
+// After upserting an MLS listing, check for matching off-market/coming-soon listings
+async function checkAndArchiveOffMarketMatch(mlsProperty: Property) {
+  // Match by: expectedMlsNumber (exact) OR address (street number + name + city, normalized)
+  const normalizeAddress = (s: string) => s.toLowerCase().trim().replace(/\s+/g, ' ');
+
+  const candidates = await db.select()
+    .from(properties)
+    .where(
+      and(
+        inArray(properties.listingStatus, ['off_market', 'coming_soon', 'pre_market']),
+        or(
+          // MLS number match (most reliable)
+          eq(properties.expectedMlsNumber, mlsProperty.mlsNumber),
+          // Address match (fallback)
+          and(
+            eq(
+              sql`LOWER(TRIM(${properties.addressStreetNumber} || ' ' || ${properties.addressStreetName}))`,
+              normalizeAddress(`${mlsProperty.addressStreetNumber} ${mlsProperty.addressStreetName}`)
+            ),
+            eq(sql`LOWER(TRIM(${properties.addressCity}))`, normalizeAddress(mlsProperty.addressCity))
+          )
+        )
+      )
+    );
+
+  for (const offMarketListing of candidates) {
+    // Archive the off-market listing
+    await db.update(properties)
+      .set({
+        listingStatus: 'archived',
+        archivedAt: new Date(),
+        archivedReason: 'went_to_mls',
+        linkedMlsPropertyId: mlsProperty.id,
+      })
+      .where(eq(properties.id, offMarketListing.id));
+
+    // Notify the agent
+    if (offMarketListing.agentId) {
+      await storage.createNotification({
+        userId: offMarketListing.agentId,
+        type: 'listing_went_live',
+        title: 'Your listing went live on MLS',
+        message: `Your off-market listing at ${offMarketListing.addressStreetNumber} ${offMarketListing.addressStreetName} has gone live on the MLS and has been archived. The active MLS listing is now live on Xucasa.`,
+        propertyId: mlsProperty.id,
+        linkUrl: `/property/${mlsProperty.id}`,
+        metadata: {
+          archivedPropertyId: offMarketListing.id,
+          mlsPropertyId: mlsProperty.id,
+        },
+      });
+    }
+  }
+}
+
+Call this function for every property upserted during IDX sync.
+
+Part 3 — Agent listing creation UI
+Create client/src/pages/CreateListing.tsx
+
+Route: /create-listing
+Requires: authenticated + agentVerified. If not verified, show: "Your agent account is pending verification. You'll be able to create listings once verified."
+
+Multi-step form with progress bar (Step X of 6):
+
+Step 1 — Listing type (large card selector):
+
+🔒 Off Market / Investor Deal
+   "Private listing, not on MLS. Share via link with investors or buyers."
+   [Most common for fixer/cash deals]
+
+🔜 Coming Soon
+   "Your listing isn't on the market yet. Build buyer interest before you list."
+
+🏠 Active Listing
+   "You have an active listing you want to feature on Xucasa."
+
+When "Off Market / Investor Deal" is selected, show an amber info box:
+
+"Off-market listings are private. Only people with your share link can view them.
+ If this property later goes to MLS, we'll automatically archive this listing
+ and the MLS version will appear on Xucasa."
+
+Step 2 — Address & price:
+
+Street number + street name (separate inputs)
+Unit number (optional)
+City (default: San Diego), State (default: CA), Zip
+Asking price ($, comma-formatted)
+For off-market: ARV — After Repair Value (optional, label: "After Repair Value (ARV)")
+For off-market: Estimated repair cost (optional)
+Expected MLS number (optional, label: "MLS # if you know it — helps us auto-link when it goes live")
+Property type select
+Expected list date (for coming soon only)
+
+Step 3 — Property details:
+
+Beds (pill: Studio, 1, 2, 3, 4, 5+)
+Baths (pill: 1, 1.5, 2, 2.5, 3, 3.5, 4+)
+Sqft (number input)
+Lot size (optional)
+Year built (optional)
+HOA fee (optional)
+
+Step 4 — Description:
+
+Main description (textarea, 2000 chars, live counter)
+For off-market: "Condition notes" (textarea, 500 chars, placeholder: "e.g. Full renovation needed, non-loanable, cash or hard money only, roof replaced 2020...")
+For off-market: "Investor notes" (textarea, 500 chars, placeholder: "e.g. ARV $850k, estimated $120k in repairs, great bones, prime location...")
+For coming soon: "Pre-market notes" (textarea, placeholder: "What makes this special before it lists?")
+Open house date + time (optional)
+
+Step 5 — Photos:
+
+Large drag-and-drop zone: "Drop photos here or tap to select"
+Accepts JPG, PNG, WEBP, HEIC
+Max 20 photos, each max 10MB
+Preview grid with × to remove
+Reorder: drag on desktop, up/down arrows on mobile
+Upload progress indicator per photo
+"You can add photos after publishing" helper text
+
+Step 6 — Review & publish:
+
+Preview card showing: first photo, address, price, beds/baths, status badge, your name + phone
+"Publish Listing" button → POST /api/properties → then POST photos
+"Save as Draft" → publishes with listingStatus: 'off_market' (invisible to public until shared)
+After publish: navigate to /agent?tab=listings with toast: "Listing created! Copy your share link below."
+Part 4 — Edit listing page
+Create client/src/pages/EditListing.tsx
+
+Route: /edit-listing/:id
+Same form as CreateListing, pre-populated.
+
+Additional controls at top:
+
+Status dropdown: Active / Coming Soon / Off Market / Pending / Sold / Archive
+"Archive this listing" button (with confirm dialog) → POST /api/properties/:id/archive
+
+Photo management:
+
+Shows existing photos in a grid
+× to delete each photo
+Upload new photos at the bottom
+Changes save via PUT /api/properties/:id
+Part 5 — Agent dashboard "My Listings" tab
+
+In AgentDashboard.tsx, build a full listings management tab:
+
+Tabs within listings: Active | Coming Soon | Off Market | Archived
+
+Each listing card shows:
+
+Thumbnail photo (or placeholder if none)
+Status badge (color coded: Active=green, Coming Soon=amber, Off Market=gray, Archived=slate)
+Address, price, beds/baths
+Analytics strip: 👁 {views} views · 🔖 {saves} saves · 💬 {inquiries} inquiries · 📅 {daysOnMarket}d on market
+Action buttons:
+"Copy Link" → copies https://xucasa.com/property/{id}?agent={agentId}, shows "Copied!" toast
+"Edit" → /edit-listing/{id}
+"Send to Client" → opens SendListingModal
+"Analytics" → expands inline analytics panel (views by day chart, top sources)
+For archived: show "View MLS Listing →" link if linkedMlsPropertyId exists
+
+"+ Create Listing" button top right → /create-listing
+
+Analytics panel (inline expand per listing):
+
+Views last 30 days: [sparkline chart using recharts]
+Total views: X  |  Mobile: X%  |  Saves: X  |  Inquiries: X
+Days on market: X
+Top sources: Direct / Share link / Search
+Part 6 — Guest-optimized property detail page
+
+Update client/src/pages/PropertyDetail.tsx for frictionless guest experience:
+
+Agent contact section (no account needed):
+
+tsx
+<div className="border rounded-xl p-4 bg-white dark:bg-card shadow-sm">
+  {/* Agent photo + name + brokerage */}
+  <div className="flex items-center gap-3 mb-4">
+    <img or initials avatar />
+    <div>
+      <div className="font-semibold">{firstName} {lastName}</div>
+      <div className="text-sm text-muted-foreground">{brokerageName}</div>
+    </div>
+  </div>
+
+  {/* Three contact actions — all work without account */}
+  <div className="flex flex-col gap-2">
+    <Button
+      className="w-full bg-amber-500 hover:bg-amber-600 text-white"
+      onClick={() => setShowInquiryModal(true)}
+    >
+      Send a Message
+    </Button>
+
+    {agentPhone && (
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="outline" asChild className="w-full">
+          <a href={`tel:${agentPhone}`}>
+            📞 Call {firstName}
+          </a>
+        </Button>
+        <Button variant="outline" asChild className="w-full">
+          <a href={`sms:${agentPhone}`}>
+            💬 Text {firstName}
+          </a>
+        </Button>
+      </div>
+    )}
+  </div>
+
+  {/* Shared by banner for referral links */}
+  {referringAgent && (
+    <p className="text-xs text-center text-muted-foreground mt-3">
+      Shared by {firstName} {lastName} · {brokerageName}
+    </p>
+  )}
+</div>
+
+Inquiry modal (Send a Message — no account needed):
+
+tsx
+Fields:
+- Your name (required)
+- Email or phone number (required, one of either)
+- Message (optional, placeholder: "I'm interested in this property. Please contact me.")
+Submit → POST /api/properties/:id/inquiry
+Success: "Message sent! {agentFirstName} will be in touch soon."
+
+Track views on page load:
+
+typescript
+// In useEffect on mount, fire and forget:
+fetch(`/api/properties/${id}/view`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    source: searchParams.get('agent') ? 'share_link' : 'direct',
+    referringAgentId: searchParams.get('agent') ?? undefined,
+  }),
+}).catch(() => {}); // never block the UI
+
+Off-market listing display:
+For properties with listingStatus === 'off_market':
+
+Show amber banner at top: "🔒 Off-Market Listing — Shared privately by the listing agent"
+Show condition notes and investor notes sections if present
+Show ARV and estimated repair cost if present:
+After Repair Value (ARV): $850,000
+Estimated Repairs: $120,000
+Potential Equity: $730,000
+Do NOT index these pages: add <meta name="robots" content="noindex"> via usePageMeta for off_market listings
+Part 7 — Mobile app download prompt (iOS smart banner)
+Add to client/index.html — Apple Smart App Banner:
+html
+<!-- Apple Smart App Banner — shows natively in iOS Safari -->
+<meta name="apple-itunes-app" content="app-id=PLACEHOLDER_APP_ID, app-argument=xucasa://">
+
+Use PLACEHOLDER_APP_ID for now — will be replaced with real App Store ID when submitted.
+
+Add client/src/components/AppDownloadBanner.tsx:
+tsx
+// Shows on mobile browsers only (not in-app, not on desktop)
+// Appears after 8 seconds on the page or after scrolling 300px — whichever comes first
+// Dismissable with X — stays dismissed for the session (React state only, no localStorage)
+// Position: sticky bottom banner (above any other fixed elements)
+// Does NOT show if user is already using the Xucasa iOS app (check user agent for Expo/xucasa)
+
+const AppDownloadBanner = () => {
+  const [show, setShow] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    // Only show on mobile browsers
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isInApp = /xucasa|Expo/i.test(navigator.userAgent);
+    if (!isMobile || isInApp || dismissed) return;
+
+    // Show after 8 seconds
+    const timer = setTimeout(() => setShow(true), 8000);
+
+    // Or after 300px scroll
+    const handleScroll = () => {
+      if (window.scrollY > 300) { setShow(true); clearTimeout(timer); }
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => { clearTimeout(timer); window.removeEventListener('scroll', handleScroll); };
+  }, [dismissed]);
+
+  if (!show || dismissed) return null;
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-card border-t shadow-lg px-4 py-3 flex items-center gap-3">
+      <img src="/icons/icon-72x72.png" className="w-12 h-12 rounded-xl shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="font-semibold text-sm">Xucasa</div>
+        <div className="text-xs text-muted-foreground">Better on the app — search, swipe, connect</div>
+      </div>
+      
+        href="https://apps.apple.com/app/xucasa/PLACEHOLDER"
+        className="bg-amber-500 text-white text-xs font-medium px-3 py-1.5 rounded-full shrink-0"
+      >
+        Get App
+      </a>
+      <button onClick={() => { setDismissed(true); setShow(false); }} className="text-muted-foreground shrink-0 ml-1">
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+};
+
+Wire <AppDownloadBanner /> into client/src/App.tsx so it appears on all pages.
+
+Show the banner also on:
+
+Property detail pages (most likely entry point from a shared link)
+Search page
+Home page
+Part 8 — Property cards status badges
+
+In client/src/components/PropertyCard.tsx, add status badge overlay on the photo:
+
+tsx
+const STATUS_BADGES = {
+  coming_soon: { label: 'Coming Soon', className: 'bg-amber-500 text-white' },
+  pre_market: { label: 'Pre-Market', className: 'bg-purple-500 text-white' },
+  off_market: { label: 'Off Market', className: 'bg-slate-600 text-white' },
+  pending: { label: 'Pending', className: 'bg-blue-500 text-white' },
+  sold: { label: 'Sold', className: 'bg-red-500 text-white' },
+};
+// Active listings show no badge
+// Archived listings don't show on public pages
+
+// Badge position: top-left corner of photo
+// Style: rounded-br-lg, px-2 py-1, text-xs font-medium
+Part 9 — Coming soon section on home page
+
+In client/src/pages/Home.tsx, add a section after the main listings:
+
+tsx
+// "Coming Soon — Be the first to know"
+// Fetches GET /api/properties?status=coming_soon&limit=6
+// Horizontal scroll on mobile, 3-column grid on desktop
+// Each card shows: photo, Coming Soon badge, address, price, expected list date if set
+// "Notify me when it lists" button → requires account → saves to saved_properties
+// Only show section if there are coming_soon listings (don't show empty section)
+Final verification
+bash
+# New pages
+ls client/src/pages/CreateListing.tsx \
+   client/src/pages/EditListing.tsx \
+   client/src/components/AppDownloadBanner.tsx 2>&1
+
+# New tables in schema
+grep -c "property_analytics\|property_inquiries\|listing_status\|archived_at\|linked_mls_property_id" \
+  shared/schema.ts lib/db/src/schema/*.ts 2>/dev/null | grep -v "^0$"
+
+# New endpoints
+grep -rn "properties/:id/photos\|properties/:id/inquiry\|properties/:id/view\|properties/:id/archive\|listing-analytics" \
+  server/routes/ artifacts/api-server/src/routes/ 2>/dev/null | grep -v node_modules | wc -l
+
+# App routes wired
+grep -c "CreateListing\|EditListing\|AppDownloadBanner" client/src/App.tsx
+
+# TS clean
+npx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+
+# Schema pushed
+npx drizzle-kit push --force 2>&1 </dev/null | tail -3
+
+# Tests pass
+for f in server/__tests__/*.test.ts artifacts/api-server/src/__tests__/*.test.ts; do
+  [ -f "$f" ] && echo "--- $f ---" && npx tsx "$f" 2>&1 | tail -3
+done
+
+# Smoke tests
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/properties?status=coming_soon&limit=6"
+curl -s -o /dev/null -w "%{http_code} " -X POST "http://localhost:5000/api/properties/1/inquiry" -H "Content-Type: application/json" -d '{"name":"Test","contact":"619-555-0000"}'
+curl -s -o /dev/null -w "%{http_code} " -X POST "http://localhost:5000/api/properties/1/view" -H "Content-Type: application/json" -d '{"source":"direct"}'
+curl -s -o /dev/null -w "%{http_code} " -X POST "http://localhost:5000/api/properties/1/photos"
+
+Expected: 200 200 200 401
+(coming soon public, inquiry public, view tracking public, photos require auth)
+
+Then answer in plain English:
+
+Walk through exactly what David does to create an off-market fixer listing and share it with an investor contact via iMessage — step by step
+What does the investor see when they tap the link on their iPhone? Do they need an account to call David?
+What happens when that same property later goes live on MLS — from the IDX sync's perspective and from David's perspective?
+Where does David see analytics for his listing and what does he see?
+What does a mobile browser visitor see after 8 seconds on any page?
+
+Show all outputs. Do not do anything else.

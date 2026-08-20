@@ -1,13 +1,17 @@
 import { Router } from "express";
+  import { randomUUID } from "crypto";
+  import multer from "multer";
+  import sharp from "sharp";
+  import { rateLimit } from "express-rate-limit";
   import fs from "fs";
   import path from "path";
   import { safeUser } from "../utils/safeUser";
-  import { storage, buyerProfileCompleteness, resolveBuyerAgent } from "../storage";
+  import { DAVID_USER_ID, storage, buyerProfileCompleteness, resolveBuyerAgent } from "../storage";
   import { resolveUserDestination } from "../shared/routing";
   import { authStorage } from "../replit_integrations/auth/storage";
   import { db } from "../db";
-  import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews, errorReports, notifications, buyerInterest, sellerConcessions, insertSellerConcessionSchema } from "@workspace/db";
-  import { eq, desc, sql, or, and, ilike, inArray, count } from "drizzle-orm";
+  import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews, errorReports, notifications, buyerInterest, sellerConcessions, insertSellerConcessionSchema, propertyAnalytics, propertyInquiries } from "@workspace/db";
+  import { eq, desc, sql, or, and, ilike, inArray, count, gt } from "drizzle-orm";
   import { api } from "../shared/routes";
   import { z } from "zod";
   import { isAuthenticated } from "../replit_integrations/auth";
@@ -23,10 +27,115 @@ import { Router } from "express";
   import { stripConfidentialFields, CONFIDENTIAL_MLS_FIELDS } from "../lib/mlsHelpers";
   import { runAgentVerificationFlow } from "../lib/agentVerification";
   import { notifySavedPropertyPriceDrops } from "../lib/priceDropNotifications";
+  import { deleteListingPhoto, getListingPhoto, uploadListingPhoto } from "../lib/listingPhotoStorage";
+  import { hasListingShareAccess, isPrivateListing } from "../lib/listingShareAccess";
 
   const ERROR_ARCHIVE_PATH = path.join(process.cwd(), "data", "error-archive.json");
   
 const router = Router();
+
+const listingStatuses = ["active", "coming_soon", "pre_market", "off_market", "pending", "sold", "archived"] as const;
+const listingStatusSchema = z.enum(listingStatuses);
+const optionalText = (max: number) => z.string().trim().max(max).nullable().optional();
+
+const listingInputSchema = z.object({
+  title: z.string().trim().min(3).max(160),
+  description: z.string().trim().max(10_000).optional().default(""),
+  price: z.coerce.number().int().min(0).max(2_000_000_000),
+  addressStreetNumber: optionalText(30),
+  addressStreetName: optionalText(160),
+  addressUnitNumber: optionalText(50),
+  addressCity: z.string().trim().min(1).max(100),
+  addressState: z.string().trim().min(2).max(30),
+  addressCounty: optionalText(100),
+  addressZip: optionalText(20),
+  location: optionalText(220),
+  beds: z.coerce.number().int().min(0).max(100).optional().default(0),
+  baths: z.coerce.number().min(0).max(100).optional().default(0),
+  sqft: z.coerce.number().int().min(0).max(10_000_000).optional().default(0),
+  lotSize: z.coerce.number().int().min(0).nullable().optional(),
+  hoaFee: z.coerce.number().int().min(0).nullable().optional(),
+  propertyType: optionalText(100),
+  listingStatus: listingStatusSchema.optional(),
+  status: listingStatusSchema.optional(),
+  expectedMlsNumber: optionalText(100),
+  expectedListDate: optionalText(40),
+  preMarketNotes: optionalText(5_000),
+  yearBuilt: z.coerce.number().int().min(1700).max(2200).nullable().optional(),
+  conditionNotes: optionalText(5_000),
+  investorNotes: optionalText(10_000),
+  arv: z.coerce.number().int().min(0).max(2_000_000_000).nullable().optional(),
+  estimatedRepairCost: z.coerce.number().int().min(0).max(2_000_000_000).nullable().optional(),
+  imageUrl: optionalText(2_000),
+  photos: z.array(z.string().max(2_000)).max(20).optional(),
+  isOffMarket: z.boolean().optional(),
+  lat: z.union([z.string(), z.number()]).nullable().optional(),
+  lng: z.union([z.string(), z.number()]).nullable().optional(),
+  openHouseDate: z.string().datetime().nullable().optional(),
+  openHouseTime: optionalText(100),
+  source: z.enum(["manual", "coming_soon", "pre_market", "off_market"]).optional(),
+}).strict();
+
+const listingUpdateSchema = listingInputSchema.partial();
+const inquiryInputSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  contact: z.string().trim().min(5).max(320),
+  message: z.string().trim().max(2_000).nullable().optional(),
+  source: z.string().trim().max(100).optional().default("listing_inquiry"),
+}).strict();
+
+const photoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { files: 20, fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, callback) => {
+    const accepted = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
+    const isAccepted = accepted.has(file.mimetype);
+    if (!isAccepted) return callback(new Error("Unsupported image type"));
+    callback(null, true);
+  },
+}).array("photos", 20);
+
+const inquiryRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many inquiries. Please try again later." },
+});
+
+function normaliseListingWrite(input: z.infer<typeof listingUpdateSchema>) {
+  const requestedStatus = input.listingStatus ?? input.status;
+  const updates: Record<string, unknown> = { ...input };
+  delete updates.source;
+  delete updates.isOffMarket;
+  if (requestedStatus) {
+    updates.listingStatus = requestedStatus;
+    updates.status = requestedStatus;
+    updates.isOffMarket = requestedStatus === "off_market";
+    updates.source = requestedStatus === "active" ? "manual" : requestedStatus;
+  }
+  if (input.baths !== undefined) updates.baths = String(input.baths);
+  if (input.lat !== undefined && input.lat !== null) updates.lat = String(input.lat);
+  if (input.lng !== undefined && input.lng !== null) updates.lng = String(input.lng);
+  if (input.openHouseDate !== undefined) {
+    updates.openHouseDate = input.openHouseDate ? new Date(input.openHouseDate) : null;
+  }
+  return updates;
+}
+
+async function requireListingOwner(propertyId: number, userId: string) {
+  const property = await storage.getProperty(propertyId);
+  if (!property || property.agentId !== userId) return null;
+  return property;
+}
+
+function withoutServerOwnedAgentFields(body: unknown): Record<string, unknown> {
+  const payload = body && typeof body === "object" ? { ...(body as Record<string, unknown>) } : {};
+  delete payload.agentId;
+  delete payload.agentPhone;
+  delete payload.agentEmail;
+  return payload;
+}
 
 const soldCache = new Map<string, { data: any[]; ts: number }>();
 const SOLD_CACHE_TTL = 30 * 60 * 1000;
@@ -109,7 +218,7 @@ router.get("/api/locations/autocomplete", async (req, res) => {
 router.get("/api/properties/mine", isAuthenticated, async (req, res) => {
   try {
     const mine = await storage.getPropertiesByAgent(req.user!.claims.sub);
-    res.json(mine.map(stripConfidentialFields));
+    res.json(mine);
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }
@@ -121,6 +230,8 @@ router.get(api.properties.get.path, async (req: any, res) => {
   
   const prop = await storage.getProperty(id);
   if (!prop) return res.status(404).json({ message: "Property not found" });
+  if (!hasListingShareAccess(req, prop)) return res.status(404).json({ message: "Property not found" });
+  if (isPrivateListing(prop)) res.set("X-Robots-Tag", "noindex, nofollow");
 
   // Persist verified referring agent from ?agent= query param into the session.
   // This is used by GET /api/properties/:id/contact-agent to show the referring
@@ -144,14 +255,45 @@ router.get(api.properties.get.path, async (req: any, res) => {
 
 router.post(api.properties.create.path, isAuthenticated, async (req: any, res) => {
   try {
-    const user = req.user.claims;
-    const input = api.properties.create.input.parse(req.body);
+    const userId = req.user.claims.sub;
+    const agent = await storage.getUser(userId);
+    if (!agent || agent.role !== "agent" || !agent.agentVerified) {
+      return res.status(403).json({ message: "A verified agent account is required to create listings" });
+    }
+
+    const input = listingInputSchema.parse(withoutServerOwnedAgentFields(req.body));
     const { normalisePropertyType } = await import("../idxSync");
     const propertyType = normalisePropertyType(input.propertyType) || input.propertyType;
     if (!propertyType) {
       return res.status(400).json({ message: "Property type is required", field: "propertyType" });
     }
-    const prop = await storage.createProperty({ ...input, propertyType, agentId: user.sub });
+    const listingStatus = input.listingStatus
+      ?? input.status
+      ?? (input.isOffMarket ? "off_market" : "active");
+    if (!["active", "coming_soon", "pre_market", "off_market"].includes(listingStatus)) {
+      return res.status(400).json({ message: "New listings must be active, coming soon, pre-market, or off-market" });
+    }
+    const location = input.location
+      || [input.addressCity, input.addressState].filter(Boolean).join(", ");
+    const normalized = normaliseListingWrite({ ...input, listingStatus });
+    const prop = await storage.createProperty({
+      ...normalized,
+      title: input.title,
+      description: input.description,
+      price: input.price,
+      location,
+      beds: input.beds,
+      baths: String(input.baths),
+      sqft: input.sqft,
+      propertyType,
+      agentId: userId,
+      agentPhone: agent.phone ?? null,
+      agentEmail: agent.email ?? null,
+      listingStatus,
+      status: listingStatus,
+      source: listingStatus === "active" ? "manual" : listingStatus,
+      isOffMarket: listingStatus === "off_market",
+    } as any);
     res.status(201).json(prop);
 
     // Geocode in background after response is sent
@@ -177,17 +319,20 @@ router.put(api.properties.update.path, isAuthenticated, async (req: any, res) =>
     const prop = await storage.getProperty(id);
     if (!prop) return res.status(404).json({ message: "Property not found" });
     
-    const user = req.user.claims;
-    if (prop.agentId !== user.sub) {
-      return res.status(401).json({ message: "Unauthorized: You can only edit your own properties" });
+    const userId = req.user.claims.sub;
+    if (prop.agentId !== userId) {
+      return res.status(403).json({ message: "You can only edit your own properties" });
     }
 
-    const input = api.properties.update.input.parse(req.body);
+    const input = listingUpdateSchema.parse(withoutServerOwnedAgentFields(req.body));
+    if (input.listingStatus === "archived" || input.status === "archived") {
+      return res.status(400).json({ message: "Use the archive action to archive a listing" });
+    }
     const priceChanged = typeof input.price === "number" && input.price !== prop.price;
     const updatedProp = await storage.updateProperty(id, {
-      ...input,
+      ...normaliseListingWrite(input),
       ...(priceChanged ? { priceUpdatedAt: new Date() } : {}),
-    });
+    } as any);
     res.status(200).json(updatedProp);
 
     if (typeof input.price === "number" && input.price > 0 && input.price < prop.price) {
@@ -196,7 +341,7 @@ router.put(api.properties.update.path, isAuthenticated, async (req: any, res) =>
           id,
           oldPrice: prop.price,
           newPrice: input.price,
-          eventKey: `${prop.price}:${input.price}:${prop.priceUpdatedAt.toISOString()}`,
+          eventKey: `${prop.price}:${input.price}:${prop.priceUpdatedAt?.toISOString?.() ?? "manual"}`,
         },
       ]).catch(error => {
         logger.error({
@@ -243,6 +388,281 @@ router.delete(api.properties.delete.path, isAuthenticated, async (req: any, res)
   }
 });
 
+router.get("/api/listing-photos/:propertyId/:fileName", async (req, res) => {
+  try {
+    const propertyId = Number(req.params.propertyId);
+    if (!Number.isInteger(propertyId)) return res.status(400).json({ message: "Invalid property ID" });
+    const property = await storage.getProperty(propertyId);
+    if (!property || !hasListingShareAccess(req, property)) {
+      return res.status(404).json({ message: "Photo not found" });
+    }
+    const file = await getListingPhoto(propertyId, req.params.fileName);
+    if (!file) return res.status(404).json({ message: "Photo not found" });
+    const [metadata] = await file.getMetadata();
+    res.setHeader("Content-Type", metadata.contentType || "image/webp");
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    file.createReadStream()
+      .on("error", () => {
+        if (!res.headersSent) res.status(500).json({ message: "Unable to read photo" });
+      })
+      .pipe(res);
+  } catch {
+    res.status(404).json({ message: "Photo not found" });
+  }
+});
+
+router.post("/api/properties/:id/photos", isAuthenticated, (req: any, res) => {
+  photoUpload(req, res, async (uploadError: any) => {
+    if (uploadError) {
+      return res.status(400).json({ message: uploadError.message || "Photo upload failed" });
+    }
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id)) return res.status(400).json({ message: "Invalid property ID" });
+      const property = await requireListingOwner(id, req.user.claims.sub);
+      if (!property) return res.status(403).json({ message: "You can only add photos to your own listings" });
+
+      const files = (req.files || []) as Express.Multer.File[];
+      if (!files.length) return res.status(400).json({ message: "Select at least one photo" });
+      const existingPhotos = property.photos || [];
+      if (existingPhotos.length + files.length > 20) {
+        return res.status(400).json({ message: "Listings can have at most 20 photos" });
+      }
+
+      const uploaded: Array<{ fileName: string; url: string }> = [];
+      try {
+        for (const file of files) {
+          const optimized = await sharp(file.buffer)
+            .rotate()
+            .resize(2400, 2400, { fit: "inside", withoutEnlargement: true })
+            .webp({ quality: 85 })
+            .toBuffer();
+          const fileName = `${randomUUID()}.webp`;
+          const url = await uploadListingPhoto(id, fileName, optimized);
+          uploaded.push({ fileName, url });
+        }
+      } catch (error) {
+        await Promise.all(uploaded.map(photo => deleteListingPhoto(id, photo.fileName)));
+        throw error;
+      }
+
+      const photos = [...existingPhotos, ...uploaded.map(photo => photo.url)];
+      const updated = await storage.updateProperty(id, {
+        photos,
+        imageUrl: property.imageUrl || photos[0] || null,
+      } as any);
+      res.status(201).json({ photos: updated.photos, imageUrl: updated.imageUrl });
+    } catch (error) {
+      logger.error({
+        event: "listing_photo_upload_failed",
+        error: error instanceof Error ? error.message : String(error),
+      });
+      res.status(500).json({ message: "Photo upload failed" });
+    }
+  });
+});
+
+router.delete("/api/properties/:id/photos", isAuthenticated, async (req: any, res) => {
+  try {
+    const id = Number(req.params.id);
+    const body = z.object({ photoUrl: z.string().min(1) }).strict().parse(req.body);
+    const property = await requireListingOwner(id, req.user.claims.sub);
+    if (!property) return res.status(403).json({ message: "You can only remove photos from your own listings" });
+    const expectedPrefix = `/api/listing-photos/${id}/`;
+    if (!body.photoUrl.startsWith(expectedPrefix) || !(property.photos || []).includes(body.photoUrl)) {
+      return res.status(400).json({ message: "Photo does not belong to this listing" });
+    }
+    const fileName = body.photoUrl.slice(expectedPrefix.length);
+    await deleteListingPhoto(id, fileName);
+    const photos = (property.photos || []).filter(photo => photo !== body.photoUrl);
+    const updated = await storage.updateProperty(id, {
+      photos,
+      imageUrl: property.imageUrl === body.photoUrl ? (photos[0] || null) : property.imageUrl,
+    } as any);
+    res.json({ photos: updated.photos, imageUrl: updated.imageUrl });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ message: error.errors[0].message });
+    }
+    res.status(500).json({ message: "Unable to remove photo" });
+  }
+});
+
+router.post("/api/properties/:id/view", async (req: any, res) => {
+  try {
+    const id = Number(req.params.id);
+    const input = z.object({
+      source: z.string().trim().max(100).optional().default("direct"),
+      isMobile: z.boolean().optional().default(false),
+    }).strict().parse(req.body || {});
+    const property = await storage.getProperty(id);
+    if (!property) return res.status(404).json({ message: "Property not found" });
+    if (!hasListingShareAccess(req, property)) return res.status(404).json({ message: "Property not found" });
+
+    const viewerIp = req.ip || req.socket.remoteAddress || null;
+    if (viewerIp) {
+      const [recent] = await db.select({ id: propertyAnalytics.id })
+        .from(propertyAnalytics)
+        .where(and(
+          eq(propertyAnalytics.propertyId, id),
+          eq(propertyAnalytics.viewerIp, viewerIp),
+          gt(propertyAnalytics.viewedAt, new Date(Date.now() - 60 * 60 * 1000)),
+        ))
+        .limit(1);
+      if (recent) return res.json({ tracked: false, reason: "rate_limited" });
+    }
+
+    const referringAgentId = req.session?.referredPropertyId === id
+      ? req.session.referringAgentId || null
+      : null;
+    void db.insert(propertyAnalytics).values({
+      propertyId: id,
+      viewerUserId: req.user?.claims?.sub || null,
+      viewerIp,
+      referringAgentId,
+      source: input.source,
+      userAgent: req.get("user-agent") || null,
+      isMobile: input.isMobile,
+    }).catch(error => {
+      logger.error({
+        event: "property_view_tracking_failed",
+        error: error instanceof Error ? error.message : String(error),
+        propertyId: id,
+      });
+    });
+    res.json({ tracked: true });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ message: error.errors[0].message });
+    }
+    res.status(500).json({ message: "Unable to track property view" });
+  }
+});
+
+router.post("/api/properties/:id/inquiry", inquiryRateLimit, async (req: any, res) => {
+  try {
+    const id = Number(req.params.id);
+    const input = inquiryInputSchema.parse(req.body);
+    const property = await storage.getProperty(id);
+    if (!property) return res.status(404).json({ message: "Property not found" });
+    if (!hasListingShareAccess(req, property)) return res.status(404).json({ message: "Property not found" });
+
+    let agentId: string | null = null;
+    const buyerId = req.user?.claims?.sub;
+    if (buyerId) {
+      const buyer = await storage.getUser(buyerId);
+      if (buyer?.assignedAgentUserId && buyer.assignedAgentUserId !== DAVID_USER_ID) {
+        agentId = buyer.assignedAgentUserId;
+      }
+    }
+    if (!agentId && req.session?.referredPropertyId === id && req.session.referringAgentId) {
+      const referringAgent = await storage.getUser(req.session.referringAgentId);
+      if (referringAgent?.agentVerified && referringAgent.role === "agent") {
+        agentId = referringAgent.id;
+      }
+    }
+    agentId = agentId || property.agentId || DAVID_USER_ID;
+
+    const [inquiry] = await db.insert(propertyInquiries).values({
+      propertyId: id,
+      agentId,
+      name: input.name,
+      contact: input.contact,
+      message: input.message || null,
+      source: input.source,
+    }).returning();
+
+    await storage.createNotification({
+      userId: agentId,
+      type: "property_inquiry",
+      title: `New inquiry for ${property.title}`,
+      message: `${input.name} asked about ${property.location}`,
+      propertyId: id,
+      linkUrl: `/property/${id}`,
+      read: false,
+      archived: false,
+      metadata: { inquiryId: inquiry.id, source: input.source },
+    } as any);
+    void audit({
+      req,
+      event: "property_inquiry_created",
+      outcome: "success",
+      userId: buyerId || null,
+      propertyId: id,
+      resourceType: "property",
+      resourceId: String(id),
+      metadata: { inquiryId: inquiry.id, agentId, source: input.source },
+    });
+    res.status(201).json({ success: true });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ message: error.errors[0].message });
+    }
+    logger.error({
+      event: "property_inquiry_failed",
+      error: error instanceof Error ? error.message : String(error),
+    });
+    res.status(500).json({ message: "Unable to submit inquiry" });
+  }
+});
+
+router.get("/api/agent/listing-analytics/:id", isAuthenticated, async (req: any, res) => {
+  try {
+    const id = Number(req.params.id);
+    const property = await requireListingOwner(id, req.user.claims.sub);
+    if (!property) return res.status(403).json({ message: "You can only view analytics for your own listings" });
+    const [totals, inquiries, saves, byDay, bySource] = await Promise.all([
+      db.select({
+        views: count(),
+        uniqueVisitors: sql<number>`count(distinct coalesce(${propertyAnalytics.viewerUserId}, ${propertyAnalytics.viewerIp}))`,
+        mobileViews: sql<number>`count(*) filter (where ${propertyAnalytics.isMobile} = true)`,
+      }).from(propertyAnalytics).where(eq(propertyAnalytics.propertyId, id)),
+      db.select({ total: count() }).from(propertyInquiries).where(eq(propertyInquiries.propertyId, id)),
+      db.select({ total: count() }).from(savedProperties).where(eq(savedProperties.propertyId, id)),
+      db.select({
+        date: sql<string>`to_char(date_trunc('day', ${propertyAnalytics.viewedAt}), 'YYYY-MM-DD')`,
+        views: count(),
+      }).from(propertyAnalytics).where(eq(propertyAnalytics.propertyId, id))
+        .groupBy(sql`date_trunc('day', ${propertyAnalytics.viewedAt})`)
+        .orderBy(sql`date_trunc('day', ${propertyAnalytics.viewedAt})`),
+      db.select({ source: propertyAnalytics.source, views: count() })
+        .from(propertyAnalytics)
+        .where(eq(propertyAnalytics.propertyId, id))
+        .groupBy(propertyAnalytics.source),
+    ]);
+    res.json({
+      views: Number(totals[0]?.views || 0),
+      uniqueVisitors: Number(totals[0]?.uniqueVisitors || 0),
+      mobileViews: Number(totals[0]?.mobileViews || 0),
+      inquiries: Number(inquiries[0]?.total || 0),
+      saves: Number(saves[0]?.total || 0),
+      byDay: byDay.map(row => ({ ...row, views: Number(row.views) })),
+      bySource: bySource.map(row => ({ source: row.source, views: Number(row.views) })),
+    });
+  } catch {
+    res.status(500).json({ message: "Unable to load listing analytics" });
+  }
+});
+
+router.post("/api/properties/:id/archive", isAuthenticated, async (req: any, res) => {
+  try {
+    const id = Number(req.params.id);
+    const body = z.object({ reason: z.string().trim().min(2).max(500).optional() }).strict().parse(req.body || {});
+    const property = await requireListingOwner(id, req.user.claims.sub);
+    if (!property) return res.status(403).json({ message: "You can only archive your own listings" });
+    const updated = await storage.updateProperty(id, {
+      listingStatus: "archived",
+      status: "archived",
+      archivedAt: new Date(),
+      archivedReason: body.reason || "Archived by listing owner",
+    } as any);
+    res.json(updated);
+  } catch (error) {
+    if (error instanceof z.ZodError) return res.status(400).json({ message: error.errors[0].message });
+    res.status(500).json({ message: "Unable to archive listing" });
+  }
+});
+
 router.get("/api/properties/:id/similar", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -250,6 +670,7 @@ router.get("/api/properties/:id/similar", async (req, res) => {
 
     const prop = await storage.getProperty(id);
     if (!prop) return res.status(404).json({ message: "Property not found" });
+    if (!hasListingShareAccess(req, prop)) return res.status(404).json({ message: "Property not found" });
 
     if (!prop.lat || !prop.lng || !prop.price) return res.json([]);
 
@@ -298,6 +719,7 @@ router.get("/api/properties/:id/sold-nearby", async (req, res) => {
 
     const prop = await storage.getProperty(id);
     if (!prop) return res.status(404).json({ message: "Property not found" });
+    if (!hasListingShareAccess(req, prop)) return res.status(404).json({ message: "Property not found" });
 
     if (!prop.lat || !prop.lng) return res.json([]);
 
@@ -431,6 +853,7 @@ router.get("/api/properties/:id/public-records", async (req, res) => {
 
     const prop = await storage.getProperty(id);
     if (!prop) return res.status(404).json({ message: "Property not found" });
+    if (!hasListingShareAccess(req, prop)) return res.status(404).json({ message: "Property not found" });
 
     const streetNumber = prop.addressStreetNumber || "";
     const streetName = prop.addressStreetName || "";
@@ -457,6 +880,7 @@ router.get("/api/properties/:id/schools", async (req, res) => {
 
     const prop = await storage.getProperty(id);
     if (!prop) return res.status(404).json({ message: "Property not found" });
+    if (!hasListingShareAccess(req, prop)) return res.status(404).json({ message: "Property not found" });
 
     const lat = prop.lat ? parseFloat(prop.lat as string) : null;
     const lng = prop.lng ? parseFloat(prop.lng as string) : null;
@@ -491,6 +915,7 @@ router.get("/api/properties/:id/agent-mls", isAuthenticated, async (req: any, re
 
     const prop = await storage.getProperty(id);
     if (!prop) return res.status(404).json({ message: "Property not found" });
+    if (!hasListingShareAccess(req, prop)) return res.status(404).json({ message: "Property not found" });
 
     res.json({
       mlsNumber: prop.mlsNumber,
@@ -528,6 +953,7 @@ router.get("/api/properties/:id/zoning", async (req, res) => {
 
     const prop = await storage.getProperty(id);
     if (!prop) return res.status(404).json({ message: "Property not found" });
+    if (!hasListingShareAccess(req, prop)) return res.status(404).json({ message: "Property not found" });
 
     const streetNumber = prop.addressStreetNumber || "";
     const streetName = prop.addressStreetName || "";

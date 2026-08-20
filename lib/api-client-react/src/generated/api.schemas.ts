@@ -130,6 +130,74 @@ export interface TourInquiryInput {
   message?: string | null;
 }
 
+export interface ListingPhotoResponse {
+  photos: string[];
+  /** @nullable */
+  imageUrl: string | null;
+}
+
+export interface ListingPhotoUploadInput {
+  /**
+     * Binary listing photos sent as multipart form fields.
+     * @maxItems 20
+     */
+  photos: string[];
+}
+
+export interface RemoveListingPhotoInput {
+  photoUrl: string;
+}
+
+export interface ArchiveListingInput {
+  /** @maxLength 500 */
+  reason?: string;
+}
+
+export interface PropertyViewInput {
+  source?: string;
+  isMobile?: boolean;
+}
+
+export interface PropertyInquiryInput {
+  /**
+     * @minLength 2
+     * @maxLength 120
+     */
+  name: string;
+  /**
+     * @minLength 5
+     * @maxLength 320
+     */
+  contact: string;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  message?: string | null;
+  /** @maxLength 100 */
+  source?: string;
+}
+
+export type ListingAnalyticsByDayItem = {
+  date: string;
+  views: number;
+};
+
+export type ListingAnalyticsBySourceItem = {
+  source: string;
+  views: number;
+};
+
+export interface ListingAnalytics {
+  views: number;
+  uniqueVisitors: number;
+  mobileViews: number;
+  inquiries: number;
+  saves: number;
+  byDay: ListingAnalyticsByDayItem[];
+  bySource: ListingAnalyticsBySourceItem[];
+}
+
 export interface LinkAgentInput {
   agentUserId: string;
 }
@@ -164,6 +232,17 @@ export type CreateTourInquiry200 = {
   success: boolean;
   message: string;
 };
+
+export type TrackPropertyView200 = {
+  tracked: boolean;
+  reason?: string;
+};
+
+export type CreatePropertyInquiry201 = {
+  success: boolean;
+};
+
+export type ArchiveAgentListing200 = { [key: string]: unknown };
 
 export type SearchAgentsParams = {
 /**

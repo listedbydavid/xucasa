@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { verifyListingShareToken } from "../lib/listingShareAccess";
 import { once } from "node:events";
 import { createServer, request as httpRequest } from "node:http";
 import test, { after, before } from "node:test";
@@ -510,9 +511,15 @@ test("share URLs require listing ownership and ignore request-controlled hosts",
       },
     });
     assert.equal(allowed.response.status, 200);
-    assert.equal(
-      allowed.body.shareUrl,
-      `https://trusted.example/property/${propertyId}?agent=${IDS.agentA}`,
+    const shareUrl = new URL(allowed.body.shareUrl);
+    assert.equal(shareUrl.origin, "https://trusted.example");
+    assert.equal(shareUrl.pathname, `/property/${propertyId}`);
+    assert.equal(shareUrl.searchParams.get("agent"), IDS.agentA);
+    assert.ok(
+      verifyListingShareToken(
+        { id: propertyId, agentId: IDS.agentA },
+        shareUrl.searchParams.get("shareToken"),
+      ),
     );
 
     delete process.env.FRONTEND_ORIGIN;

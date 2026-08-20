@@ -142,7 +142,7 @@ export const UnregisterPushTokenResponse = zod.void()
  * @summary Get the agent contact card for a property
  */
 export const GetContactAgentParams = zod.object({
-  "id": zod.coerce.number().int()
+  "id": zod.coerce.number()
 })
 
 export const GetContactAgentResponse = zod.object({
@@ -182,6 +182,136 @@ export const CreateTourInquiryBody = zod.object({
 export const CreateTourInquiryResponse = zod.object({
   "success": zod.boolean(),
   "message": zod.string()
+})
+
+
+/**
+ * Owner-only. Accepts up to 20 JPG, PNG, WEBP, HEIC, or HEIF images, with a 10 MB limit per image.
+ * @summary Upload listing photos
+ */
+export const UploadListingPhotosParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const uploadListingPhotosBodyPhotosMax = 20;
+
+
+
+export const UploadListingPhotosBody = zod.object({
+  "photos": zod.array(zod.string()).max(uploadListingPhotosBodyPhotosMax).describe('Binary listing photos sent as multipart form fields.')
+})
+
+export const UploadListingPhotosResponse = zod.object({
+  "photos": zod.array(zod.string()),
+  "imageUrl": zod.string().nullable()
+})
+
+
+/**
+ * @summary Remove a listing photo
+ */
+export const RemoveListingPhotoParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RemoveListingPhotoBody = zod.object({
+  "photoUrl": zod.string()
+})
+
+export const RemoveListingPhotoResponse = zod.object({
+  "photos": zod.array(zod.string()),
+  "imageUrl": zod.string().nullable()
+})
+
+
+/**
+ * @summary Track a public property view
+ */
+export const TrackPropertyViewParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const TrackPropertyViewBody = zod.object({
+  "source": zod.string().optional(),
+  "isMobile": zod.boolean().optional()
+})
+
+export const TrackPropertyViewResponse = zod.object({
+  "tracked": zod.boolean(),
+  "reason": zod.string().optional()
+})
+
+
+/**
+ * @summary Submit a public listing inquiry
+ */
+export const CreatePropertyInquiryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const createPropertyInquiryBodyNameMin = 2;
+export const createPropertyInquiryBodyNameMax = 120;
+
+export const createPropertyInquiryBodyContactMin = 5;
+export const createPropertyInquiryBodyContactMax = 320;
+
+export const createPropertyInquiryBodyMessageMax = 2000;
+
+export const createPropertyInquiryBodySourceMax = 100;
+
+
+
+export const CreatePropertyInquiryBody = zod.object({
+  "name": zod.string().min(createPropertyInquiryBodyNameMin).max(createPropertyInquiryBodyNameMax),
+  "contact": zod.string().min(createPropertyInquiryBodyContactMin).max(createPropertyInquiryBodyContactMax),
+  "message": zod.string().max(createPropertyInquiryBodyMessageMax).nullish(),
+  "source": zod.string().max(createPropertyInquiryBodySourceMax).optional()
+})
+
+export const CreatePropertyInquiryResponse = zod.object({
+  "success": zod.boolean()
+})
+
+
+/**
+ * @summary Soft archive an owned listing
+ */
+export const ArchiveAgentListingParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const archiveAgentListingBodyReasonMax = 500;
+
+
+
+export const ArchiveAgentListingBody = zod.object({
+  "reason": zod.string().max(archiveAgentListingBodyReasonMax).optional()
+})
+
+export const ArchiveAgentListingResponse = zod.record(zod.string(), zod.unknown())
+
+
+/**
+ * @summary Get analytics for an owned listing
+ */
+export const GetListingAnalyticsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetListingAnalyticsResponse = zod.object({
+  "views": zod.number(),
+  "uniqueVisitors": zod.number(),
+  "mobileViews": zod.number(),
+  "inquiries": zod.number(),
+  "saves": zod.number(),
+  "byDay": zod.array(zod.object({
+  "date": zod.string(),
+  "views": zod.number()
+})),
+  "bySource": zod.array(zod.object({
+  "source": zod.string(),
+  "views": zod.number()
+}))
 })
 
 

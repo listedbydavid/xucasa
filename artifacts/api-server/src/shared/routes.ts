@@ -35,7 +35,7 @@ export const api = {
         maxHoaFee: z.coerce.number().optional(),
         isOffMarket: z.enum(['true', 'false']).optional(),
         propertyType: z.string().optional(),
-        status: z.enum(['active', 'pending', 'sold']).optional(),
+        status: z.enum(['active', 'coming_soon', 'pre_market', 'off_market', 'pending', 'sold', 'archived']).optional(),
         sort: z.enum(['newest', 'price_asc', 'price_desc', 'sqft_desc']).optional(),
         limit: z.coerce.number().optional(),
         offset: z.coerce.number().optional(),

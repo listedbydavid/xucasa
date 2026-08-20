@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, Component, type ReactNode, ty
 import { useParams, useLocation, Link } from "wouter";
 import { usePageMeta } from "@/hooks/use-page-meta";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useTrackPropertyView, useCreatePropertyInquiry } from "@workspace/api-client-react";
 import { useProperty, useProperties } from "@/hooks/use-properties";
 import { useSavedProperties, useToggleSavedProperty } from "@/hooks/use-saved";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -59,6 +60,9 @@ function formatPhone(phone: string) {
 }
 
 function ContactCard({
+  isAuthenticated,
+  showGuestInquiry,
+  setShowGuestInquiry,
   contactName,
   contactPhone,
   contactEmail,
@@ -79,6 +83,9 @@ function ContactCard({
   contactImage?: string | null;
   propertyAddress: string;
   propertyId?: number;
+  isAuthenticated?: boolean;
+  showGuestInquiry?: boolean;
+  setShowGuestInquiry?: (show: boolean) => void;
   onAskQuestion?: () => void;
   onRequestShowing?: () => void;
   onRequestInfo?: () => void;
@@ -139,6 +146,30 @@ function ContactCard({
         )}
 
         <div className="border-t border-border pt-3 mt-1 space-y-2">
+
+
+      {showGuestInquiry && setShowGuestInquiry ? (
+        <GuestInquiryForm
+          propertyId={propertyId || 0}
+          propertyAddress={propertyAddress}
+          onSuccess={() => setShowGuestInquiry(false)}
+          onCancel={() => setShowGuestInquiry(false)}
+        />
+      ) : !isAuthenticated && setShowGuestInquiry && (
+        <div className="bg-muted p-5 rounded-2xl border border-border mt-2">
+          <h3 className="font-display font-bold text-base mb-1">Want to learn more?</h3>
+          <p className="text-xs text-muted-foreground mb-3">You don't need an account to ask a question.</p>
+          <button
+            onClick={() => setShowGuestInquiry(true)}
+            className="w-full bg-primary text-primary-foreground py-2.5 px-4 rounded-xl font-semibold hover:bg-primary/90 transition-colors text-sm active:scale-[0.98]"
+            data-testid="button-open-guest-inquiry"
+          >
+            Contact as Guest
+          </button>
+        </div>
+      )}
+
+
           {onAskQuestion && (
             <button
               onClick={onAskQuestion}
@@ -1326,6 +1357,10 @@ export default function PropertyDetail() {
     description: property
       ? `${property.beds} bed, ${property.baths} bath home in ${property.addressCity}, ${property.addressState}. Listed at $${property.price?.toLocaleString()}.`
       : undefined,
+    noIndex: property?.isOffMarket
+      || property?.listingStatus === "off_market"
+      || property?.listingStatus === "pre_market"
+      || false,
   });
   const { data: savedProps = [] } = useSavedProperties();
   const { mutate: toggleSave, isPending: isSaving } = useToggleSavedProperty();
@@ -1347,6 +1382,14 @@ export default function PropertyDetail() {
     neighborhoodInfo: false,
     inspectionReports: false,
   });
+  const [showGuestInquiry, setShowGuestInquiry] = useState(false);
+  const trackView = useTrackPropertyView();
+
+  useEffect(() => {
+    if (property && id) {
+      trackView.mutate({ id: Number(id), data: { source: "web", isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) } });
+    }
+  }, [property?.id]); // Intentionally track once per property load
   const [requestInfoNote, setRequestInfoNote] = useState("");
   const { toast } = useToast();
 
@@ -2110,5 +2153,77 @@ export default function PropertyDetail() {
 
     </div>
     </>
+  );
+}
+
+function GuestInquiryForm({ propertyId, propertyAddress, onSuccess, onCancel }: { propertyId: number, propertyAddress: string, onSuccess: () => void, onCancel: () => void }) {
+  const { toast } = useToast();
+  const createInquiry = useCreatePropertyInquiry();
+  const [formData, setFormData] = useState({ name: "", contact: "", message: `I'm interested in the property at ${propertyAddress}. Please contact me with more information.` });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name.trim() || !formData.contact.trim()) {
+      toast({ title: "Please provide your name and contact info", variant: "destructive" });
+      return;
+    }
+
+    try {
+      await createInquiry.mutateAsync({
+        id: propertyId,
+        data: {
+          name: formData.name,
+          contact: formData.contact,
+          message: formData.message,
+          source: "guest_inquiry"
+        }
+      });
+      toast({ title: "Inquiry sent", description: "An agent will contact you shortly." });
+      onSuccess();
+    } catch (err) {
+      toast({ title: "Failed to send inquiry", description: "Please try again.", variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="bg-card border border-border rounded-xl p-4 mt-4 shadow-sm animate-in fade-in slide-in-from-top-2">
+      <h4 className="font-bold mb-3">Request Information</h4>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <input
+            type="text"
+            placeholder="Your Name"
+            value={formData.name}
+            onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+            className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary"
+            required
+          />
+        </div>
+        <div>
+          <input
+            type="text"
+            placeholder="Email or Phone Number"
+            value={formData.contact}
+            onChange={(e) => setFormData(prev => ({ ...prev, contact: e.target.value }))}
+            className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary"
+            required
+          />
+        </div>
+        <div>
+          <textarea
+            value={formData.message}
+            onChange={(e) => setFormData(prev => ({ ...prev, message: e.target.value }))}
+            rows={3}
+            className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary resize-none"
+          />
+        </div>
+        <div className="flex gap-2">
+          <button type="button" onClick={onCancel} className="flex-1 px-4 py-2 border border-border rounded-lg font-bold text-sm hover:bg-muted transition-colors">Cancel</button>
+          <button type="submit" disabled={createInquiry.isPending} className="flex-[2] bg-primary text-primary-foreground px-4 py-2 rounded-lg font-bold text-sm hover:bg-primary/90 transition-colors flex items-center justify-center">
+            {createInquiry.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send Request"}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

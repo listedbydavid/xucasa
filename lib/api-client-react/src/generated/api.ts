@@ -20,29 +20,39 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ArchiveAgentListing200,
+  ArchiveListingInput,
   AuthSession,
   BadRequestResponse,
   ContactAgentResponse,
+  CreatePropertyInquiry201,
   CreateTourInquiry200,
   GetListingShareUrl200,
   GetMyAgent200,
   HealthStatus,
   LinkAgent200,
   LinkAgentInput,
+  ListingAnalytics,
+  ListingPhotoResponse,
+  ListingPhotoUploadInput,
   LoginRequest,
   NotFoundResponse,
   NotificationPreferences,
   NotificationPreferencesUpdate,
   PriceDropAlertUpdate,
+  PropertyInquiryInput,
+  PropertyViewInput,
   PushTokenRegistration,
   RegisterPushToken200,
   RegisterRequest,
+  RemoveListingPhotoInput,
   SavedPropertyAlert,
   SearchAgents200,
   SearchAgentsParams,
   SendListing200,
   SendListingInput,
   TourInquiryInput,
+  TrackPropertyView200,
   UnauthorizedResponse
 } from './api.schemas';
 
@@ -144,6 +154,7 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+// End of generated API client.
 export const getLoginUrl = () => {
 
 
@@ -712,6 +723,13 @@ export function useGetContactAgent<TData = Awaited<ReturnType<typeof getContactA
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+
+
+
+
+
+
 export const getCreateTourInquiryUrl = (id: number,) => {
 
 
@@ -784,6 +802,446 @@ export const useCreateTourInquiry = <TError = ErrorType<BadRequestResponse | Not
       > => {
       return useMutation(getCreateTourInquiryMutationOptions(options));
     }
+
+export const getUploadListingPhotosUrl = (id: number,) => {
+
+
+
+
+  return `/api/properties/${id}/photos`
+}
+
+/**
+ * Owner-only. Accepts up to 20 JPG, PNG, WEBP, HEIC, or HEIF images, with a 10 MB limit per image.
+ * @summary Upload listing photos
+ */
+export const uploadListingPhotos = async (id: number,
+    listingPhotoUploadInput: ListingPhotoUploadInput, options?: Parameters<typeof customFetch>[1]): Promise<ListingPhotoResponse> => {
+    const formData = new FormData();
+listingPhotoUploadInput.photos.forEach(value => formData.append(`photos`, value));
+
+  return customFetch<ListingPhotoResponse>(getUploadListingPhotosUrl(id),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getUploadListingPhotosMutationOptions = <TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadListingPhotos>>, TError,{id: number;data: BodyType<ListingPhotoUploadInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadListingPhotos>>, TError,{id: number;data: BodyType<ListingPhotoUploadInput>}, TContext> => {
+
+const mutationKey = ['uploadListingPhotos'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadListingPhotos>>, {id: number;data: BodyType<ListingPhotoUploadInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  uploadListingPhotos(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadListingPhotosMutationResult = NonNullable<Awaited<ReturnType<typeof uploadListingPhotos>>>
+    export type UploadListingPhotosMutationBody = BodyType<ListingPhotoUploadInput>
+    export type UploadListingPhotosMutationError = ErrorType<BadRequestResponse | UnauthorizedResponse>
+
+    /**
+ * @summary Upload listing photos
+ */
+export const useUploadListingPhotos = <TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadListingPhotos>>, TError,{id: number;data: BodyType<ListingPhotoUploadInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadListingPhotos>>,
+        TError,
+        {id: number;data: BodyType<ListingPhotoUploadInput>},
+        TContext
+      > => {
+      return useMutation(getUploadListingPhotosMutationOptions(options));
+    }
+
+export const getRemoveListingPhotoUrl = (id: number,) => {
+
+
+
+
+  return `/api/properties/${id}/photos`
+}
+
+/**
+ * @summary Remove a listing photo
+ */
+export const removeListingPhoto = async (id: number,
+    removeListingPhotoInput: RemoveListingPhotoInput, options?: Parameters<typeof customFetch>[1]): Promise<ListingPhotoResponse> => {
+
+  return customFetch<ListingPhotoResponse>(getRemoveListingPhotoUrl(id),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(removeListingPhotoInput)
+  }
+);}
+
+
+
+
+
+export const getRemoveListingPhotoMutationOptions = <TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeListingPhoto>>, TError,{id: number;data: BodyType<RemoveListingPhotoInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeListingPhoto>>, TError,{id: number;data: BodyType<RemoveListingPhotoInput>}, TContext> => {
+
+const mutationKey = ['removeListingPhoto'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeListingPhoto>>, {id: number;data: BodyType<RemoveListingPhotoInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  removeListingPhoto(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveListingPhotoMutationResult = NonNullable<Awaited<ReturnType<typeof removeListingPhoto>>>
+    export type RemoveListingPhotoMutationBody = BodyType<RemoveListingPhotoInput>
+    export type RemoveListingPhotoMutationError = ErrorType<BadRequestResponse | UnauthorizedResponse>
+
+    /**
+ * @summary Remove a listing photo
+ */
+export const useRemoveListingPhoto = <TError = ErrorType<BadRequestResponse | UnauthorizedResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeListingPhoto>>, TError,{id: number;data: BodyType<RemoveListingPhotoInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeListingPhoto>>,
+        TError,
+        {id: number;data: BodyType<RemoveListingPhotoInput>},
+        TContext
+      > => {
+      return useMutation(getRemoveListingPhotoMutationOptions(options));
+    }
+
+export const getTrackPropertyViewUrl = (id: number,) => {
+
+
+
+
+  return `/api/properties/${id}/view`
+}
+
+/**
+ * @summary Track a public property view
+ */
+export const trackPropertyView = async (id: number,
+    propertyViewInput?: PropertyViewInput, options?: Parameters<typeof customFetch>[1]): Promise<TrackPropertyView200> => {
+
+  return customFetch<TrackPropertyView200>(getTrackPropertyViewUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(propertyViewInput)
+  }
+);}
+
+
+
+
+
+export const getTrackPropertyViewMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof trackPropertyView>>, TError,{id: number;data?: BodyType<PropertyViewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof trackPropertyView>>, TError,{id: number;data?: BodyType<PropertyViewInput>}, TContext> => {
+
+const mutationKey = ['trackPropertyView'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof trackPropertyView>>, {id: number;data?: BodyType<PropertyViewInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  trackPropertyView(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TrackPropertyViewMutationResult = NonNullable<Awaited<ReturnType<typeof trackPropertyView>>>
+    export type TrackPropertyViewMutationBody = BodyType<PropertyViewInput> | undefined
+    export type TrackPropertyViewMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Track a public property view
+ */
+export const useTrackPropertyView = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof trackPropertyView>>, TError,{id: number;data?: BodyType<PropertyViewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof trackPropertyView>>,
+        TError,
+        {id: number;data?: BodyType<PropertyViewInput>},
+        TContext
+      > => {
+      return useMutation(getTrackPropertyViewMutationOptions(options));
+    }
+
+export const getCreatePropertyInquiryUrl = (id: number,) => {
+
+
+
+
+  return `/api/properties/${id}/inquiry`
+}
+
+/**
+ * @summary Submit a public listing inquiry
+ */
+export const createPropertyInquiry = async (id: number,
+    propertyInquiryInput: PropertyInquiryInput, options?: Parameters<typeof customFetch>[1]): Promise<CreatePropertyInquiry201> => {
+
+  return customFetch<CreatePropertyInquiry201>(getCreatePropertyInquiryUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(propertyInquiryInput)
+  }
+);}
+
+
+
+
+
+export const getCreatePropertyInquiryMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPropertyInquiry>>, TError,{id: number;data: BodyType<PropertyInquiryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPropertyInquiry>>, TError,{id: number;data: BodyType<PropertyInquiryInput>}, TContext> => {
+
+const mutationKey = ['createPropertyInquiry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPropertyInquiry>>, {id: number;data: BodyType<PropertyInquiryInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createPropertyInquiry(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePropertyInquiryMutationResult = NonNullable<Awaited<ReturnType<typeof createPropertyInquiry>>>
+    export type CreatePropertyInquiryMutationBody = BodyType<PropertyInquiryInput>
+    export type CreatePropertyInquiryMutationError = ErrorType<BadRequestResponse | NotFoundResponse | void>
+
+    /**
+ * @summary Submit a public listing inquiry
+ */
+export const useCreatePropertyInquiry = <TError = ErrorType<BadRequestResponse | NotFoundResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPropertyInquiry>>, TError,{id: number;data: BodyType<PropertyInquiryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPropertyInquiry>>,
+        TError,
+        {id: number;data: BodyType<PropertyInquiryInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePropertyInquiryMutationOptions(options));
+    }
+
+export const getArchiveAgentListingUrl = (id: number,) => {
+
+
+
+
+  return `/api/properties/${id}/archive`
+}
+
+/**
+ * @summary Soft archive an owned listing
+ */
+export const archiveAgentListing = async (id: number,
+    archiveListingInput?: ArchiveListingInput, options?: Parameters<typeof customFetch>[1]): Promise<ArchiveAgentListing200> => {
+
+  return customFetch<ArchiveAgentListing200>(getArchiveAgentListingUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(archiveListingInput)
+  }
+);}
+
+
+
+
+
+export const getArchiveAgentListingMutationOptions = <TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveAgentListing>>, TError,{id: number;data?: BodyType<ArchiveListingInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof archiveAgentListing>>, TError,{id: number;data?: BodyType<ArchiveListingInput>}, TContext> => {
+
+const mutationKey = ['archiveAgentListing'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof archiveAgentListing>>, {id: number;data?: BodyType<ArchiveListingInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  archiveAgentListing(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ArchiveAgentListingMutationResult = NonNullable<Awaited<ReturnType<typeof archiveAgentListing>>>
+    export type ArchiveAgentListingMutationBody = BodyType<ArchiveListingInput> | undefined
+    export type ArchiveAgentListingMutationError = ErrorType<UnauthorizedResponse | NotFoundResponse>
+
+    /**
+ * @summary Soft archive an owned listing
+ */
+export const useArchiveAgentListing = <TError = ErrorType<UnauthorizedResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveAgentListing>>, TError,{id: number;data?: BodyType<ArchiveListingInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof archiveAgentListing>>,
+        TError,
+        {id: number;data?: BodyType<ArchiveListingInput>},
+        TContext
+      > => {
+      return useMutation(getArchiveAgentListingMutationOptions(options));
+    }
+
+export const getGetListingAnalyticsUrl = (id: number,) => {
+
+
+
+
+  return `/api/agent/listing-analytics/${id}`
+}
+
+/**
+ * @summary Get analytics for an owned listing
+ */
+export const getListingAnalytics = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<ListingAnalytics> => {
+
+  return customFetch<ListingAnalytics>(getGetListingAnalyticsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetListingAnalyticsQueryKey = (id: number,) => {
+    return [
+    `/api/agent/listing-analytics/${id}`
+    ] as const;
+    }
+
+
+export const getGetListingAnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getListingAnalytics>>, TError = ErrorType<UnauthorizedResponse | NotFoundResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getListingAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetListingAnalyticsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getListingAnalytics>>> = ({ signal }) => getListingAnalytics(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getListingAnalytics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetListingAnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getListingAnalytics>>>
+export type GetListingAnalyticsQueryError = ErrorType<UnauthorizedResponse | NotFoundResponse>
+
+
+/**
+ * @summary Get analytics for an owned listing
+ */
+
+export function useGetListingAnalytics<TData = Awaited<ReturnType<typeof getListingAnalytics>>, TError = ErrorType<UnauthorizedResponse | NotFoundResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getListingAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetListingAnalyticsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getSearchAgentsUrl = (params: SearchAgentsParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -862,6 +1320,13 @@ export function useSearchAgents<TData = Awaited<ReturnType<typeof searchAgents>>
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+
+
+
+
+
+
 export const getLinkAgentUrl = () => {
 
 
@@ -1003,6 +1468,13 @@ export function useGetMyAgent<TData = Awaited<ReturnType<typeof getMyAgent>>, TE
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+
+
+
+
+
+
 export const getSendListingUrl = () => {
 
 

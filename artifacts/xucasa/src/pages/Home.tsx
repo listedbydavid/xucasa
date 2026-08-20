@@ -17,6 +17,7 @@ export default function Home() {
   usePageMeta({ title: 'Find Your Home in San Diego', description: 'Search San Diego homes for sale. Swipe, save, and connect with an agent — without your data being sold.' });
   const [, setLocation] = useLocation();
   const { data: propertiesData, isLoading } = useProperties({ limit: 20 });
+  const { data: comingSoonData, isLoading: isComingSoonLoading } = useProperties({ limit: 8, status: "coming_soon" } as any);
   const currentQueryRef = useRef("");
   const sellAddressRef = useRef("");
   const estimateAddressRef = useRef("");
@@ -44,6 +45,7 @@ export default function Home() {
   };
 
   const featuredProperties = propertiesData?.properties?.filter(p => p.status === 'active').slice(0, 4) || [];
+  const comingSoonProperties = comingSoonData?.properties?.filter(p => p.status === 'coming_soon' || p.listingStatus === 'coming_soon').slice(0, 4) || [];
 
   const heroTabs = [
     { id: "buy" as HeroTab, label: "Buy", icon: HomeIcon },
@@ -372,6 +374,34 @@ export default function Home() {
                 <PropertyCard property={property} />
               </div>
             ))}
+          </div>
+        )}
+
+        {(!isComingSoonLoading && comingSoonProperties.length > 0) && (
+          <div className="mt-16 border-t border-border pt-12">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 gap-4">
+              <div>
+                <h2 className="text-3xl font-display font-bold text-foreground">
+                  Coming Soon
+                </h2>
+                <p className="text-muted-foreground mt-2">Get early access to properties before they hit the market.</p>
+              </div>
+              <button
+                onClick={() => setLocation("/search?status=coming_soon")}
+                className="text-primary font-semibold hover:underline hidden sm:flex items-center gap-1"
+              >
+                View all coming soon
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {comingSoonProperties.map((property, idx) => (
+                <div key={property.id} className="animate-in-delayed" style={{ animationDelay: `${idx * 100}ms` }}>
+                  <PropertyCard property={property} />
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

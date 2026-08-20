@@ -264,17 +264,28 @@ export function PropertyCard({ property }: PropertyCardProps) {
             <span
               className={`text-xs font-bold px-3 py-1.5 rounded-full shadow-lg ${
                 property.isOffMarket
-                  ? "bg-yellow-500/90 text-white"
-                  : property.status === "active"
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-yellow-100 text-yellow-800 border border-yellow-200"
+                  : property.status === "active" || property.listingStatus === "active"
+                  ? "bg-green-100 text-green-800 border border-green-200"
+                  : property.status === "coming_soon" || property.listingStatus === "coming_soon"
+                  ? "bg-purple-100 text-purple-800 border border-purple-200"
+                  : property.status === "pending"
+                  ? "bg-amber-100 text-amber-800 border border-amber-200"
+                  : property.status === "sold"
+                  ? "bg-red-100 text-red-800 border border-red-200"
                   : "bg-muted text-muted-foreground"
               }`}
             >
               {property.isOffMarket
                 ? "Private Listing"
-                : property.status === "active"
+                : property.status === "active" || property.listingStatus === "active"
                 ? "Active"
-                : property.status.toUpperCase()}
+                : property.status === "coming_soon" || property.listingStatus === "coming_soon"
+                ? "Coming Soon"
+                : property.status === "pending" ? "Pending"
+                : property.status === "sold" ? "Sold"
+                : property.status === "archived" ? "Archived"
+                : (property.status || "").replace("_", " ").toUpperCase()}
             </span>
           </div>
 

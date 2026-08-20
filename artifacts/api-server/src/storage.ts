@@ -592,6 +592,10 @@ export class DatabaseStorage implements IStorage {
     // misclassified rental can still have status='active'.
     conditions.push(sql`(${properties.status} IS NULL OR LOWER(${properties.status}) <> 'rental')`);
     conditions.push(sql`(${properties.propertyType} IS NULL OR LOWER(${properties.propertyType}) NOT IN ('rental', 'residential lease'))`);
+    conditions.push(sql`NOT (
+      LOWER(${properties.listingStatus}) IN ('archived', 'off_market')
+      OR ${properties.isOffMarket} = true
+    )`);
     // Also hide listings the IDX feed has dropped (status='removed'), unless
     // the caller asked for a specific status (e.g. status=removed for admin).
     if (!filters?.status) {
@@ -635,7 +639,12 @@ export class DatabaseStorage implements IStorage {
         }
       }
       if (filters.status) {
-        conditions.push(sql`LOWER(${properties.status}) = LOWER(${filters.status})`);
+        conditions.push(sql`LOWER(
+          CASE
+            WHEN ${properties.source} = 'idx' THEN ${properties.status}
+            ELSE ${properties.listingStatus}
+          END
+        ) = LOWER(${filters.status})`);
       }
       if (filters.source) {
         conditions.push(eq(properties.source, filters.source));

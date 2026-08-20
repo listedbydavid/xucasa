@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb, decimal, varchar, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, decimal, varchar, index, uniqueIndex, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -33,6 +33,20 @@ export const properties = pgTable("properties", {
   openHouseDate: timestamp("open_house_date"),
   openHouseTime: text("open_house_time"),
   status: text("status").default("active").notNull(),
+  listingStatus: text("listing_status").default("active").notNull(),
+  expectedMlsNumber: text("expected_mls_number"),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  archivedReason: text("archived_reason"),
+  linkedMlsPropertyId: integer("linked_mls_property_id").references((): AnyPgColumn => properties.id),
+  agentPhone: text("agent_phone"),
+  agentEmail: text("agent_email"),
+  expectedListDate: text("expected_list_date"),
+  preMarketNotes: text("pre_market_notes"),
+  yearBuilt: integer("year_built"),
+  conditionNotes: text("condition_notes"),
+  investorNotes: text("investor_notes"),
+  arv: integer("arv"),
+  estimatedRepairCost: integer("estimated_repair_cost"),
   // IDX / MLS sync fields
   source: text("source").default("manual").notNull(),   // 'manual' | 'idx'
   idxId: text("idx_id").unique(),                       // IDX Broker listingID
@@ -65,6 +79,34 @@ export const properties = pgTable("properties", {
   virtualTourUrl: text("virtual_tour_url"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const propertyAnalytics = pgTable("property_analytics", {
+  id: serial("id").primaryKey(),
+  propertyId: integer("property_id").references(() => properties.id, { onDelete: "cascade" }).notNull(),
+  viewedAt: timestamp("viewed_at", { withTimezone: true }).defaultNow().notNull(),
+  viewerUserId: varchar("viewer_user_id").references(() => users.id),
+  viewerIp: text("viewer_ip"),
+  referringAgentId: varchar("referring_agent_id").references(() => users.id),
+  source: text("source").default("direct").notNull(),
+  userAgent: text("user_agent"),
+  isMobile: boolean("is_mobile").default(false).notNull(),
+}, (table) => [
+  index("property_analytics_property_viewed_idx").on(table.propertyId, table.viewedAt),
+  index("property_analytics_property_ip_viewed_idx").on(table.propertyId, table.viewerIp, table.viewedAt),
+]);
+
+export const propertyInquiries = pgTable("property_inquiries", {
+  id: serial("id").primaryKey(),
+  propertyId: integer("property_id").references(() => properties.id, { onDelete: "cascade" }).notNull(),
+  agentId: varchar("agent_id").references(() => users.id),
+  name: text("name").notNull(),
+  contact: text("contact").notNull(),
+  message: text("message"),
+  source: text("source").default("inquiry").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("property_inquiries_property_created_idx").on(table.propertyId, table.createdAt),
+]);
 
 // Tracks each IDX sync run for admin visibility
 export const idxSyncLog = pgTable("idx_sync_log", {
@@ -426,6 +468,8 @@ export const contactTagAssignmentsRelations = relations(contactTagAssignments, (
 
 // Insert Schemas
 export const insertPropertySchema: z.ZodTypeAny = createInsertSchema(properties).omit({ id: true, createdAt: true });
+export const insertPropertyAnalyticsSchema: z.ZodTypeAny = createInsertSchema(propertyAnalytics).omit({ id: true, viewedAt: true });
+export const insertPropertyInquirySchema: z.ZodTypeAny = createInsertSchema(propertyInquiries).omit({ id: true, createdAt: true });
 export const insertSellLeadSchema: z.ZodTypeAny = createInsertSchema(sellLeads).omit({ id: true, createdAt: true });
 export const insertBuyerProfileSchema: z.ZodTypeAny = createInsertSchema(buyerProfiles).omit({ id: true, createdAt: true });
 export const insertBuyerMatchSchema: z.ZodTypeAny = createInsertSchema(buyerMatches).omit({ id: true, createdAt: true });
@@ -615,6 +659,10 @@ export type InsertShowingRequest = z.infer<typeof insertShowingRequestSchema>;
 // Types
 export type Property = typeof properties.$inferSelect;
 export type InsertProperty = z.infer<typeof insertPropertySchema>;
+export type PropertyAnalytics = typeof propertyAnalytics.$inferSelect;
+export type InsertPropertyAnalytics = z.infer<typeof insertPropertyAnalyticsSchema>;
+export type PropertyInquiry = typeof propertyInquiries.$inferSelect;
+export type InsertPropertyInquiry = z.infer<typeof insertPropertyInquirySchema>;
 export type FavoriteList = typeof favoriteLists.$inferSelect;
 export type InsertFavoriteList = z.infer<typeof insertFavoriteListSchema>;
 export type SavedProperty = typeof savedProperties.$inferSelect;

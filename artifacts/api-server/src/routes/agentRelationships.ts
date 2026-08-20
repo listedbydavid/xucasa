@@ -27,6 +27,8 @@ import { eq, and, or, ilike, sql } from "drizzle-orm";
 import { audit, executeWithAudit } from "../auditLog";
 import { authStorage } from "../replit_integrations/auth/storage";
 import { assignPlatformAgentIfNeeded } from "../lib/assignPlatformAgent";
+import { createListingShareToken } from "../lib/listingShareAccess";
+import { hasListingShareAccess } from "../lib/listingShareAccess";
 
 const router = Router();
 
@@ -64,6 +66,27 @@ export function getTrustedShareOrigin(): string | null {
     return parsed.protocol === "https:" || parsed.protocol === "http:"
       ? parsed.origin
       : null;
+  } catch {
+    return null;
+  }
+}
+
+function getTrustedShareBaseUrl(): URL | null {
+  const trustedDevelopmentUrl =
+    process.env.NODE_ENV !== "production" && process.env.REPLIT_DEV_DOMAIN
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}/`
+      : undefined;
+  const configuredUrl =
+    process.env.FRONTEND_ORIGIN ||
+    process.env.PUBLIC_ORIGIN ||
+    process.env.APP_URL ||
+    trustedDevelopmentUrl;
+  if (!configuredUrl) return null;
+  try {
+    const parsed = new URL(configuredUrl);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    if (!parsed.pathname.endsWith("/")) parsed.pathname += "/";
+    return parsed;
   } catch {
     return null;
   }
@@ -202,6 +225,10 @@ router.get("/api/properties/:id/contact-agent", async (req: any, res): Promise<v
       res.status(404).json({ message: "Property not found" });
       return;
     }
+    if (!hasListingShareAccess(req, prop)) {
+      res.status(404).json({ message: "Property not found" });
+      return;
+    }
 
     const resolution = await resolvePropertyContactAgent(req, prop, id);
     if (!resolution) {
@@ -253,6 +280,10 @@ router.post("/api/properties/:id/tour-inquiry", async (req: any, res): Promise<v
 
     const prop = await storage.getProperty(id);
     if (!prop) {
+      res.status(404).json({ message: "Property not found" });
+      return;
+    }
+    if (!hasListingShareAccess(req, prop)) {
       res.status(404).json({ message: "Property not found" });
       return;
     }
@@ -350,6 +381,10 @@ router.post("/api/agent/send-listing", isAuthenticated, async (req: any, res): P
       res.status(404).json({ message: "Property not found" });
       return;
     }
+    if (!hasListingShareAccess(req, prop)) {
+      res.status(404).json({ message: "Property not found" });
+      return;
+    }
 
     await executeWithAudit(
       {
@@ -433,13 +468,15 @@ router.get("/api/agent/listing-share-url/:propertyId", isAuthenticated, async (r
       return;
     }
 
-    const origin = getTrustedShareOrigin();
-    if (!origin) {
+    const shareBaseUrl = getTrustedShareBaseUrl();
+    if (!shareBaseUrl) {
       res.status(503).json({ message: "Listing share links are not configured" });
       return;
     }
 
-    const shareUrl = `${origin}/property/${propertyId}?agent=${agentUserId}`;
+    const shareUrl = new URL(`property/${propertyId}`, shareBaseUrl);
+    shareUrl.searchParams.set("agent", agentUserId);
+    shareUrl.searchParams.set("shareToken", createListingShareToken(prop));
 
     await audit({
       req,
@@ -447,10 +484,10 @@ router.get("/api/agent/listing-share-url/:propertyId", isAuthenticated, async (r
       outcome: "success",
       userId: agentUserId,
       propertyId,
-      metadata: { shareUrl },
+      metadata: { sharePath: `/property/${propertyId}`, includesPrivateAccessToken: true },
     });
 
-    res.json({ shareUrl });
+    res.json({ shareUrl: shareUrl.toString() });
   } catch (err) {
     req.log?.error({ event: "listing_share_url_error", error: (err as Error).message });
     res.status(500).json({ message: "Internal Server Error" });

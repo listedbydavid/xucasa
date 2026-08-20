@@ -26,16 +26,34 @@ export function useProperties(filters?: SearchCriteria & { isOffMarket?: 'true' 
   });
 }
 
+
+// GET /api/properties/mine
+export function useMyProperties() {
+  return useQuery<PropertyResponse[]>({
+    queryKey: ["/api/properties/mine"],
+    queryFn: async () => {
+      const res = await fetch("/api/properties/mine", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch my properties");
+      return res.json();
+    },
+  });
+}
+
 // GET /api/properties/:id
 export function useProperty(id: number | null, referringAgentId?: string | null) {
+  const shareToken = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("shareToken")
+    : null;
   return useQuery<PropertyResponse | null>({
-    queryKey: [api.properties.get.path, id, referringAgentId],
+    queryKey: [api.properties.get.path, id, referringAgentId, shareToken],
     queryFn: async () => {
       if (!id) return null;
       const baseUrl = buildUrl(api.properties.get.path, { id });
-      const url = referringAgentId
-        ? `${baseUrl}?${queryString.stringify({ agent: referringAgentId })}`
-        : baseUrl;
+      const query = queryString.stringify({
+        agent: referringAgentId || undefined,
+        shareToken: shareToken || undefined,
+      });
+      const url = query ? `${baseUrl}?${query}` : baseUrl;
       const res = await fetch(url, { credentials: "include" });
       if (res.status === 404) return null;
       if (!res.ok) throw new Error("Failed to fetch property");
@@ -70,6 +88,7 @@ export function useCreateProperty() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.properties.list.path] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties/mine"] });
       toast({ title: "Property Listed", description: "Your property is now live!" });
     },
     onError: (err: Error) => {
@@ -96,6 +115,7 @@ export function useUpdateProperty() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [api.properties.list.path] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties/mine"] });
       queryClient.invalidateQueries({ queryKey: [api.properties.get.path, variables.id] });
       toast({ title: "Property Updated", description: "Changes saved successfully." });
     },
@@ -121,6 +141,7 @@ export function useDeleteProperty() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.properties.list.path] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties/mine"] });
       toast({ title: "Property Deleted", description: "The listing has been removed." });
     },
     onError: (err: Error) => {
