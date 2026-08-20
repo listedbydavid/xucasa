@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { BedDouble, Bath, Maximize, MapPin, Heart, Sparkles, Building, Briefcase, ChevronLeft, ChevronRight, Phone, Mail, MessageSquare, Camera, Home, LandPlot, Clock, TrendingUp, CalendarDays, Activity, Calculator, ChevronDown, DollarSign, Percent, Share2, Printer, Check, Link2, School, Trees, Hospital, Bus, ShoppingCart, Navigation, View, ExternalLink, GraduationCap, BookOpen, Globe, Loader2, Send, X } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { MapView } from "@/components/MapView";
+import { DynamicContactCard } from "@/components/DynamicContactCard";
 import { PublicRecordsPanel } from "@/components/PublicRecordsPanel";
 import { ZoningPanel } from "@/components/ZoningPanel";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
@@ -1318,7 +1319,8 @@ function ListingActivitySection({ property, daysOnMarket }: { property: any; day
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const { data: property, isLoading } = useProperty(Number(id));
+  const referringAgentId = new URLSearchParams(window.location.search).get("agent");
+  const { data: property, isLoading } = useProperty(Number(id), referringAgentId);
   usePageMeta({
     title: property?.title ?? 'Property Details',
     description: property
@@ -2029,18 +2031,9 @@ export default function PropertyDetail() {
             </div>
 
             <div>
-              <ContactCard
-                contactName={contactName}
-                contactPhone={contactPhone}
-                contactEmail={contactEmail}
-                contactTitle={contactTitle}
-                contactBrokerage={contactBrokerage}
-                contactImage={contactImage}
-                propertyAddress={propertyAddress}
+              <DynamicContactCard
                 propertyId={property.id}
                 onAskQuestion={handleAskQuestion}
-                onRequestShowing={handleRequestShowing}
-                onRequestInfo={handleRequestInfo}
               />
 
               <SectionErrorBoundary name="MapView">
@@ -2115,15 +2108,6 @@ export default function PropertyDetail() {
         </div>
       </div>
 
-      <MobileContactBar
-        contactName={contactName}
-        contactPhone={contactPhone}
-        contactEmail={contactEmail}
-        propertyAddress={propertyAddress}
-        onAskQuestion={handleAskQuestion}
-        onRequestShowing={handleRequestShowing}
-        onRequestInfo={handleRequestInfo}
-      />
     </div>
     </>
   );

@@ -115,12 +115,29 @@ router.get("/api/properties/mine", isAuthenticated, async (req, res) => {
   }
 });
 
-router.get(api.properties.get.path, async (req, res) => {
+router.get(api.properties.get.path, async (req: any, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
   
   const prop = await storage.getProperty(id);
   if (!prop) return res.status(404).json({ message: "Property not found" });
+
+  // Persist verified referring agent from ?agent= query param into the session.
+  // This is used by GET /api/properties/:id/contact-agent to show the referring
+  // agent for unrepresented visitors. We only persist a verified agent.
+  const agentParam = req.query?.agent;
+  if (agentParam && typeof agentParam === "string" && agentParam.trim() && req.session) {
+    try {
+      const { authStorage: aStorage } = await import("../replit_integrations/auth/storage");
+      const referringAgent = await aStorage.getUser(agentParam.trim());
+      if (referringAgent && referringAgent.agentVerified && referringAgent.role === "agent") {
+        req.session.referringAgentId = referringAgent.id;
+        req.session.referredPropertyId = id;
+      }
+    } catch {
+      // non-fatal — just skip referral storage
+    }
+  }
   
   res.status(200).json(stripConfidentialFields(prop));
 });

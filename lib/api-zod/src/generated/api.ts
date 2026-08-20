@@ -135,3 +135,142 @@ export const UnregisterPushTokenParams = zod.object({
 })
 
 export const UnregisterPushTokenResponse = zod.void()
+
+
+/**
+ * Public. Returns the appropriate agent (buyer's agent, listing agent, or platform agent) for a property detail view.
+ * @summary Get the agent contact card for a property
+ */
+export const GetContactAgentParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const GetContactAgentResponse = zod.object({
+  "agentType": zod.enum(['buyers_agent', 'listing_agent', 'platform_agent']),
+  "agent": zod.object({
+  "id": zod.string().nullable(),
+  "firstName": zod.string().nullable(),
+  "lastName": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "phone": zod.string().nullable(),
+  "profileImageUrl": zod.string().nullable(),
+  "brokerageName": zod.string().nullable(),
+  "agentMlsId": zod.string().nullable()
+})
+})
+
+
+/**
+ * Public. Creates a sell_lead and notifies the displayed agent.
+ * @summary Submit a tour inquiry for a property
+ */
+export const CreateTourInquiryParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+
+
+
+export const CreateTourInquiryBody = zod.object({
+  "name": zod.string().min(1),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "preferredDate": zod.string().nullish(),
+  "message": zod.string().nullish()
+})
+
+export const CreateTourInquiryResponse = zod.object({
+  "success": zod.boolean(),
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Search verified agents
+ */
+export const searchAgentsQueryQMin = 2;
+
+
+
+export const SearchAgentsQueryParams = zod.object({
+  "q": zod.coerce.string().min(searchAgentsQueryQMin)
+})
+
+export const SearchAgentsResponse = zod.object({
+  "agents": zod.array(zod.object({
+  "id": zod.string().nullable(),
+  "firstName": zod.string().nullable(),
+  "lastName": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "phone": zod.string().nullable(),
+  "profileImageUrl": zod.string().nullable(),
+  "brokerageName": zod.string().nullable(),
+  "agentMlsId": zod.string().nullable()
+}))
+})
+
+
+/**
+ * @summary Link a verified agent as the buyer's agent
+ */
+export const LinkAgentBody = zod.object({
+  "agentUserId": zod.string()
+})
+
+export const LinkAgentResponse = zod.object({
+  "success": zod.boolean(),
+  "agent": zod.object({
+  "id": zod.string().nullable(),
+  "firstName": zod.string().nullable(),
+  "lastName": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "phone": zod.string().nullable(),
+  "profileImageUrl": zod.string().nullable(),
+  "brokerageName": zod.string().nullable(),
+  "agentMlsId": zod.string().nullable()
+})
+})
+
+
+/**
+ * @summary Get the buyer's assigned agent
+ */
+export const GetMyAgentResponse = zod.object({
+  "agent": zod.union([zod.object({
+  "id": zod.string().nullable(),
+  "firstName": zod.string().nullable(),
+  "lastName": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "phone": zod.string().nullable(),
+  "profileImageUrl": zod.string().nullable(),
+  "brokerageName": zod.string().nullable(),
+  "agentMlsId": zod.string().nullable()
+}),zod.null()])
+})
+
+
+/**
+ * @summary Agent sends a listing to a linked client
+ */
+export const SendListingBody = zod.object({
+  "clientUserId": zod.string(),
+  "propertyId": zod.number(),
+  "note": zod.string().nullish()
+})
+
+export const SendListingResponse = zod.object({
+  "success": zod.boolean(),
+  "message": zod.string()
+})
+
+
+/**
+ * @summary Get a shareable URL for a listing
+ */
+export const GetListingShareUrlParams = zod.object({
+  "propertyId": zod.coerce.number().int()
+})
+
+export const GetListingShareUrlResponse = zod.object({
+  "shareUrl": zod.string()
+})

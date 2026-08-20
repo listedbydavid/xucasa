@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict';
 import { buyerProfileCompleteness } from '../storage';
-import type { BuyerProfile } from '@shared/schema';
+import type { BuyerProfile } from '@workspace/db';
 
 type ProfileShape = Pick<
   BuyerProfile,

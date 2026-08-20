@@ -36,6 +36,7 @@ import { useGoogleMaps } from "@/hooks/use-google-maps";
 import { OpenHouseRoutePlanner } from "@/components/OpenHouseRoutePlanner";
 import { BuyerProfileModal } from "@/components/BuyerProfileModal";
 import { BuyerProfileNudge } from "@/components/BuyerProfileNudge";
+import { FindAgentModal } from "@/components/FindAgentModal";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { BuyerProfile } from "@/shared/schema";
@@ -1116,23 +1117,25 @@ function DemoStat({ label, value }: { label: string; value: string }) {
 // ── My Agent Section ───────────────────────────────────────────────────────────
 
 function MyAgentSection() {
-  const { data: link, isLoading } = useAgentInvite();
-  const { mutate: inviteAgent, isPending: isInviting } = useInviteAgent();
-  const { mutate: removeLink, isPending: isRemoving } = useRemoveAgentInvite();
-  const [email, setEmail] = useState("");
-  const [error, setError] = useState("");
+  const [showFindAgent, setShowFindAgent] = useState(false);
 
-  const handleInvite = () => {
-    setError("");
-    if (!email || !email.includes("@")) { setError("Please enter a valid email address."); return; }
-    inviteAgent(email, { onSuccess: () => setEmail("") });
-  };
+  const { data, isLoading } = useQuery<{ agent: any | null }>({
+    queryKey: ["/api/buyer/my-agent"],
+    queryFn: async () => {
+      const res = await fetch("/api/buyer/my-agent");
+      if (!res.ok) throw new Error("Failed to fetch agent");
+      return res.json();
+    }
+  });
+
+  const agent = data?.agent;
+  const isDavid = agent?.id === '55534280';
 
   return (
     <div className="space-y-6">
       <SectionHeader
         title="My Agent"
-        subtitle="Invite your agent to view your favorites and saved searches"
+        subtitle="Manage your agent connection"
       />
 
       {isLoading ? (
@@ -1145,37 +1148,42 @@ function MyAgentSection() {
             </div>
           </div>
         </div>
-      ) : link ? (
+      ) : !agent ? (
+        <div className="border rounded-xl p-6 bg-amber-50 dark:bg-amber-950/20 border-amber-200">
+          <h3 className="font-display font-bold text-lg mb-1">Working with an agent?</h3>
+          <p className="text-sm text-muted-foreground mb-4 max-w-md">
+            Link your agent so they can see your activity, send you listings,
+            and guide you through the process.
+          </p>
+          <button
+            className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-colors"
+            onClick={() => setShowFindAgent(true)}
+          >
+            <Search className="w-4 h-4" />
+            Find My Agent
+          </button>
+        </div>
+      ) : (
         <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-4">
+          <p className="text-xs font-bold text-muted-foreground tracking-wider uppercase mb-1">YOUR AGENT</p>
           <div className="flex items-center gap-4">
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
-              (link as any).status === "active" ? "bg-green-100 text-green-600" : "bg-amber-100 text-amber-600"
-            }`}>
-              {(link as any).status === "active" ? <CheckCircle2 className="w-6 h-6" /> : <Mail className="w-6 h-6" />}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-bold text-foreground">{(link as any).agentEmail}</p>
-              {(link as any).status === "active" ? (
-                <p className="text-sm text-green-600 font-medium flex items-center gap-1.5 mt-0.5">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Agent connected — they can see your favorites and saved searches
-                </p>
+            <div className="w-14 h-14 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 flex items-center justify-center font-bold text-xl flex-shrink-0 overflow-hidden">
+              {agent.profileImageUrl ? (
+                <img src={agent.profileImageUrl} alt="" className="w-full h-full object-cover" />
               ) : (
-                <p className="text-sm text-amber-600 font-medium flex items-center gap-1.5 mt-0.5">
-                  <AlertCircle className="w-3.5 h-3.5" /> Invitation sent — waiting for agent to create an account
-                </p>
+                agent.firstName?.[0]?.toUpperCase() || "?"
               )}
             </div>
-            <button
-              onClick={() => removeLink()}
-              disabled={isRemoving}
-              className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-              data-testid="button-remove-agent"
-              title="Remove agent"
-            >
-              {isRemoving ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
-            </button>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-foreground text-lg flex items-center gap-1.5">
+                {agent.firstName} {agent.lastName}
+                <BadgeCheck className="w-4 h-4 text-green-600 dark:text-green-500 flex-shrink-0" />
+              </p>
+              {agent.brokerageName && (
+                <p className="text-sm text-muted-foreground">{agent.brokerageName}</p>
+              )}
+            </div>
           </div>
-
           <div className="bg-muted/50 rounded-xl p-4 text-sm text-muted-foreground">
             <p className="font-bold text-foreground mb-1">What your agent can see:</p>
             <ul className="list-disc list-inside space-y-1">
@@ -1184,69 +1192,27 @@ function MyAgentSection() {
               <li>Upcoming open houses for your favorites</li>
             </ul>
           </div>
-
-          <div className="border-t border-border pt-4">
-            <p className="text-sm font-bold text-foreground mb-2">Change agent</p>
-            <div className="flex gap-2">
-              <input
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="New agent email..."
-                className="flex-1 bg-background border-2 border-border rounded-xl px-4 py-2.5 text-sm focus:border-primary outline-none"
-                data-testid="input-agent-email"
-              />
-              <button
-                onClick={handleInvite}
-                disabled={isInviting}
-                className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
-                data-testid="button-invite-agent"
-              >
-                {isInviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                Update
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-4">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
-              <UserPlus className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="font-bold text-foreground text-lg">Connect with your agent</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Enter your agent's email address and they'll be able to see your saved homes and searches — making it easy to collaborate on your home search.
+          {isDavid && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-900 dark:bg-amber-950/20">
+              <p className="font-bold text-foreground">Working with another agent?</p>
+              <p className="mt-1 text-muted-foreground">
+                Link your agent so they can see your activity, send you listings, and guide you through the process.
               </p>
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-xs font-bold text-muted-foreground">Agent's Email Address</label>
-            <div className="flex gap-2">
-              <input
-                value={email}
-                onChange={e => { setEmail(e.target.value); setError(""); }}
-                onKeyDown={e => e.key === "Enter" && handleInvite()}
-                placeholder="agent@example.com"
-                type="email"
-                className="flex-1 bg-background border-2 border-border rounded-xl px-4 py-2.5 text-sm focus:border-primary outline-none"
-                data-testid="input-agent-email"
-              />
-              <button
-                onClick={handleInvite}
-                disabled={isInviting}
-                className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
-                data-testid="button-invite-agent"
-              >
-                {isInviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                Invite Agent
-              </button>
-            </div>
-            {error && <p className="text-xs text-destructive font-medium">{error}</p>}
+          )}
+          <div className="border-t border-border pt-4">
+            <button
+              className="w-full sm:w-auto flex justify-center items-center gap-2 bg-background border-2 border-border text-foreground hover:bg-muted px-4 py-2.5 rounded-xl text-sm font-bold transition-colors"
+              onClick={() => setShowFindAgent(true)}
+            >
+              <UserPlus className="w-4 h-4" />
+              {isDavid ? "Find My Agent" : "Change Agent"}
+            </button>
           </div>
         </div>
       )}
+
+      <FindAgentModal isOpen={showFindAgent} onClose={() => setShowFindAgent(false)} />
     </div>
   );
 }

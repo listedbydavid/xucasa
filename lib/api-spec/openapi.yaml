@@ -16,6 +16,8 @@ tags:
     description: Notification preferences and push devices
   - name: saved-properties
     description: Saved-property alert settings
+  - name: agent-relationships
+    description: Agent contact resolution, listing sharing, and buyer-agent linking
 paths:
   /healthz:
     get:
@@ -182,6 +184,205 @@ paths:
           description: Token unregistered
         "400":
           $ref: "#/components/responses/BadRequest"
+  /properties/{id}/contact-agent:
+    get:
+      operationId: getContactAgent
+      tags: [agent-relationships]
+      summary: Get the agent contact card for a property
+      description: Public. Returns the appropriate agent (buyer's agent, listing agent, or platform agent) for a property detail view.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Agent contact info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContactAgentResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /properties/{id}/tour-inquiry:
+    post:
+      operationId: createTourInquiry
+      tags: [agent-relationships]
+      summary: Submit a tour inquiry for a property
+      description: Public. Creates a sell_lead and notifies the displayed agent.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TourInquiryInput"
+      responses:
+        "200":
+          description: Inquiry submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                required: [success, message]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /agents/search:
+    get:
+      operationId: searchAgents
+      tags: [agent-relationships]
+      summary: Search verified agents
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+      responses:
+        "200":
+          description: Matching verified agents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agents:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PublicAgent"
+                required: [agents]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /buyer/link-agent:
+    post:
+      operationId: linkAgent
+      tags: [agent-relationships]
+      summary: Link a verified agent as the buyer's agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkAgentInput"
+      responses:
+        "200":
+          description: Agent linked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  agent:
+                    $ref: "#/components/schemas/PublicAgent"
+                required: [success, agent]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Buyer already has a real agent linked
+  /buyer/my-agent:
+    get:
+      operationId: getMyAgent
+      tags: [agent-relationships]
+      summary: Get the buyer's assigned agent
+      responses:
+        "200":
+          description: Assigned agent or null
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agent:
+                    oneOf:
+                      - $ref: "#/components/schemas/PublicAgent"
+                      - type: "null"
+                required: [agent]
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /agent/send-listing:
+    post:
+      operationId: sendListing
+      tags: [agent-relationships]
+      summary: Agent sends a listing to a linked client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendListingInput"
+      responses:
+        "200":
+          description: Listing sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                required: [success, message]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Not a verified agent or client not linked
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /agent/listing-share-url/{propertyId}:
+    get:
+      operationId: getListingShareUrl
+      tags: [agent-relationships]
+      summary: Get a shareable URL for a listing
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Shareable URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  shareUrl:
+                    type: string
+                required: [shareUrl]
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Not a verified agent or not the listing owner
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: Trusted public frontend origin is not configured
 components:
   responses:
     BadRequest:
@@ -312,4 +513,64 @@ components:
           type: string
           enum: [ios, android]
       required: [token]
+    PublicAgent:
+      type: object
+      properties:
+        id:
+          type: ["string", "null"]
+        firstName:
+          type: ["string", "null"]
+        lastName:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        profileImageUrl:
+          type: ["string", "null"]
+        brokerageName:
+          type: ["string", "null"]
+        agentMlsId:
+          type: ["string", "null"]
+      required: [id, firstName, lastName, email, phone, profileImageUrl, brokerageName, agentMlsId]
+    ContactAgentResponse:
+      type: object
+      properties:
+        agentType:
+          type: string
+          enum: [buyers_agent, listing_agent, platform_agent]
+        agent:
+          $ref: "#/components/schemas/PublicAgent"
+      required: [agentType, agent]
+    TourInquiryInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        preferredDate:
+          type: ["string", "null"]
+        message:
+          type: ["string", "null"]
+      required: [name]
+    LinkAgentInput:
+      type: object
+      properties:
+        agentUserId:
+          type: string
+      required: [agentUserId]
+    SendListingInput:
+      type: object
+      properties:
+        clientUserId:
+          type: string
+        propertyId:
+          type: number
+        note:
+          type: ["string", "null"]
+      required: [clientUserId, propertyId]
 

@@ -19,4 +19,14 @@ declare global {
   }
 }
 
+// Extend express-session to support referral tracking fields
+declare module "express-session" {
+  interface SessionData {
+    /** Verified referring agent ID stored when a visitor lands via ?agent= link */
+    referringAgentId?: string;
+    /** The property ID that was viewed with the referral link */
+    referredPropertyId?: number;
+  }
+}
+
 export {};

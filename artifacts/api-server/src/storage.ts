@@ -23,7 +23,6 @@ import {
   type SearchHistory,
   type UserHome,
   type InsertUserHome,
-  type ClientAgentLink,
   type SellLead,
   type InsertSellLead,
   type BuyerProfile,
@@ -84,7 +83,7 @@ import {
   type PartnerInquiry,
   type InsertPartnerInquiry,
 } from "@workspace/db";
-import { eq, and, desc, asc, sql, gte, gt, count, inArray, isNull } from "drizzle-orm";
+import { eq, and, or, desc, asc, sql, gte, gt, count, inArray, isNull } from "drizzle-orm";
 import { authStorage } from "./replit_integrations/auth/storage";
 
 // ── Property type alias map for buyer matching ────────────────────────────────
@@ -227,7 +226,7 @@ export interface AgentResolutionResult {
 // tests can pass a plain object mock without needing the whole IStorage.
 export interface AgentResolutionStorage {
   getUser(id: string): Promise<any>;
-  assignAgent(buyerUserId: string, agentUserId: string): Promise<void>;
+  assignAgent(buyerUserId: string, agentUserId: string): Promise<boolean>;
   resolveAndAssignAgent(buyerUserId: string): Promise<any>;
 }
 
@@ -242,8 +241,14 @@ export async function resolveBuyerAgent(
   }
   const david = await storageImpl.getUser(DAVID_USER_ID);
   if (david) {
-    await storageImpl.assignAgent(buyerUserId, david.id);
-    return { agent: david, assignmentType: "platform_default" };
+    const assigned = await storageImpl.assignAgent(buyerUserId, david.id);
+    if (assigned) return { agent: david, assignmentType: "platform_default" };
+
+    const buyerAfterRace = await storageImpl.getUser(buyerUserId);
+    if (buyerAfterRace?.assignedAgentUserId) {
+      const concurrentAgent = await storageImpl.getUser(buyerAfterRace.assignedAgentUserId);
+      if (concurrentAgent) return { agent: concurrentAgent, assignmentType: "existing" };
+    }
   }
   const fallback = await storageImpl.resolveAndAssignAgent(buyerUserId);
   return { agent: fallback || null, assignmentType: fallback ? "fallback" : null };
@@ -386,11 +391,15 @@ export interface IStorage {
   updateUserHome(id: number, userId: string, updates: Partial<InsertUserHome>): Promise<UserHome>;
   deleteUserHome(id: number, userId: string): Promise<void>;
 
-  // Client-Agent Links
-  getClientAgentLink(clientId: string): Promise<ClientAgentLink | undefined>;
-  upsertClientAgentLink(clientId: string, agentEmail: string): Promise<ClientAgentLink>;
-  deleteClientAgentLink(clientId: string): Promise<void>;
-  getAgentClients(agentEmail: string): Promise<(ClientAgentLink & { client: any })[]>;
+  // Agent Clients
+  getAgentClients(agentUserId: string): Promise<Array<{
+    clientId: string;
+    agentEmail: string;
+    agentId: string;
+    status: "active";
+    createdAt: Date | null;
+    client: any;
+  }>>;
 
   // Open Houses
   getUpcomingOpenHouses(): Promise<(Property & { agent: any })[]>;
@@ -534,7 +543,7 @@ export interface IStorage {
 
   // Agent Assignment
   getAssignedAgent(buyerUserId: string): Promise<any | null>;
-  assignAgent(buyerUserId: string, agentUserId: string): Promise<void>;
+  assignAgent(buyerUserId: string, agentUserId: string): Promise<boolean>;
   lookupAssignedAgent(buyerUserId: string): Promise<any>;
   resolveAndAssignAgent(buyerUserId: string): Promise<any>;
 
@@ -835,31 +844,27 @@ export class DatabaseStorage implements IStorage {
     await db.delete(userHomes).where(and(eq(userHomes.id, id), eq(userHomes.userId, userId)));
   }
 
-  async getClientAgentLink(clientId: string): Promise<ClientAgentLink | undefined> {
-    const rows = await db.select().from(clientAgentLinks).where(eq(clientAgentLinks.clientId, clientId)).limit(1);
-    return rows[0];
-  }
+  async getAgentClients(agentUserId: string) {
+    const [agent] = await db
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, agentUserId))
+      .limit(1);
+    if (!agent?.email) return [];
 
-  async upsertClientAgentLink(clientId: string, agentEmail: string): Promise<ClientAgentLink> {
-    await db.delete(clientAgentLinks).where(eq(clientAgentLinks.clientId, clientId));
-    const agentUser = await db.select().from(users).where(eq(users.email, agentEmail)).limit(1);
-    const agentId = agentUser[0]?.id ?? null;
-    const status = agentId ? "active" : "pending";
-    const [link] = await db.insert(clientAgentLinks).values({ clientId, agentEmail, agentId, status }).returning();
-    return link;
-  }
+    const assignedClients = await db
+      .select()
+      .from(users)
+      .where(eq(users.assignedAgentUserId, agentUserId));
 
-  async deleteClientAgentLink(clientId: string): Promise<void> {
-    await db.delete(clientAgentLinks).where(eq(clientAgentLinks.clientId, clientId));
-  }
-
-  async getAgentClients(agentEmail: string): Promise<(ClientAgentLink & { client: any })[]> {
-    const results = await db
-      .select({ link: clientAgentLinks, client: users })
-      .from(clientAgentLinks)
-      .innerJoin(users, eq(clientAgentLinks.clientId, users.id))
-      .where(eq(clientAgentLinks.agentEmail, agentEmail));
-    return results.map(r => ({ ...r.link, client: r.client ? safeUser(r.client as any) : null }));
+    return assignedClients.map(client => ({
+      clientId: client.id,
+      agentEmail: agent.email!,
+      agentId: agentUserId,
+      status: "active" as const,
+      createdAt: client.updatedAt ?? client.createdAt ?? null,
+      client: safeUser(client as any),
+    }));
   }
 
   async getUpcomingOpenHouses(): Promise<(Property & { agent: any })[]> {
@@ -1291,7 +1296,10 @@ export class DatabaseStorage implements IStorage {
       .from(propertyOffers)
       .innerJoin(properties, eq(propertyOffers.propertyId, properties.id))
       .leftJoin(users, eq(propertyOffers.buyerUserId, users.id))
-      .where(sql`${propertyOffers.listingAgentId} = ${agentId} OR ${propertyOffers.buyerAgentId} = ${agentId}`)
+      .where(or(
+        eq(propertyOffers.listingAgentId, agentId),
+        eq(users.assignedAgentUserId, agentId),
+      ))
       .orderBy(desc(propertyOffers.createdAt));
     return rows.map(r => ({ ...r.offer, property: r.property, buyer: r.buyer ? safeUser(r.buyer as any) : null }));
   }
@@ -1723,12 +1731,16 @@ export class DatabaseStorage implements IStorage {
   async getBuyerInterestForAgent(agentUserId: string): Promise<(BuyerInterest & { property: Property; buyer: any })[]> {
     const rows = await db.select().from(buyerInterest)
       .innerJoin(properties, eq(buyerInterest.propertyId, properties.id))
-      .where(eq(buyerInterest.assignedAgentUserId, agentUserId))
+      .innerJoin(users, eq(buyerInterest.buyerUserId, users.id))
+      .where(eq(users.assignedAgentUserId, agentUserId))
       .orderBy(desc(buyerInterest.lastActivityAt));
     const results: (BuyerInterest & { property: Property; buyer: any })[] = [];
     for (const row of rows) {
-      const buyer = await this.getUser(row.buyer_interest.buyerUserId);
-      results.push({ ...row.buyer_interest, property: row.properties, buyer });
+      results.push({
+        ...row.buyer_interest,
+        property: row.properties,
+        buyer: row.users,
+      });
     }
     return results;
   }
@@ -1751,8 +1763,40 @@ export class DatabaseStorage implements IStorage {
     return null;
   }
 
-  async assignAgent(buyerUserId: string, agentUserId: string): Promise<void> {
-    await db.update(users).set({ assignedAgentUserId: agentUserId, updatedAt: new Date() }).where(eq(users.id, buyerUserId));
+  async assignAgent(buyerUserId: string, agentUserId: string): Promise<boolean> {
+    return db.transaction(async (tx) => {
+      const [agent] = await tx
+        .select({ email: users.email })
+        .from(users)
+        .where(eq(users.id, agentUserId))
+        .limit(1);
+
+      if (!agent?.email) return false;
+
+      const [assigned] = await tx
+        .update(users)
+        .set({ assignedAgentUserId: agentUserId, updatedAt: new Date() })
+        .where(and(
+          eq(users.id, buyerUserId),
+          or(
+            isNull(users.assignedAgentUserId),
+            eq(users.assignedAgentUserId, DAVID_USER_ID),
+          ),
+        ))
+        .returning({ id: users.id });
+
+      if (!assigned) return false;
+
+      await tx.delete(clientAgentLinks).where(eq(clientAgentLinks.clientId, buyerUserId));
+      await tx.insert(clientAgentLinks).values({
+        clientId: buyerUserId,
+        agentEmail: agent.email,
+        agentId: agentUserId,
+        status: "active",
+      });
+
+      return true;
+    });
   }
 
   async lookupAssignedAgent(buyerUserId: string): Promise<any> {
@@ -1761,20 +1805,6 @@ export class DatabaseStorage implements IStorage {
       const agent = await this.getUser(user.assignedAgentUserId);
       if (agent) return agent;
     }
-    const link = await this.getClientAgentLink(buyerUserId);
-    if (link?.agentId) {
-      const agent = await this.getUser(link.agentId);
-      if (agent) return agent;
-    }
-    const adminEmail = process.env.ADMIN_EMAIL;
-    if (adminEmail) {
-      const admins = await db.select().from(users).where(eq(users.email, adminEmail)).limit(1);
-      if (admins.length > 0) return admins[0];
-    }
-    const fallbackAdmins = await db.select().from(users)
-      .where(sql`${users.role} = 'admin' OR (${users.role} = 'agent' AND ${users.agentVerified} = true)`)
-      .limit(1);
-    if (fallbackAdmins.length > 0) return fallbackAdmins[0];
     return null;
   }
 
@@ -1784,28 +1814,24 @@ export class DatabaseStorage implements IStorage {
       const agent = await this.getUser(user.assignedAgentUserId);
       if (agent) return agent;
     }
-    const link = await this.getClientAgentLink(buyerUserId);
-    if (link?.agentId) {
-      const agent = await this.getUser(link.agentId);
-      if (agent) {
-        await this.assignAgent(buyerUserId, link.agentId);
-        return agent;
-      }
-    }
     const adminEmail = process.env.ADMIN_EMAIL;
     if (adminEmail) {
       const admins = await db.select().from(users).where(eq(users.email, adminEmail)).limit(1);
       if (admins.length > 0) {
-        await this.assignAgent(buyerUserId, admins[0].id);
-        return admins[0];
+        const assigned = await this.assignAgent(buyerUserId, admins[0].id);
+        if (assigned) return admins[0];
+        const concurrentAgent = await this.getAssignedAgent(buyerUserId);
+        if (concurrentAgent) return concurrentAgent;
       }
     }
     const fallbackAdmins = await db.select().from(users)
       .where(sql`${users.role} = 'admin' OR (${users.role} = 'agent' AND ${users.agentVerified} = true)`)
       .limit(1);
     if (fallbackAdmins.length > 0) {
-      await this.assignAgent(buyerUserId, fallbackAdmins[0].id);
-      return fallbackAdmins[0];
+      const assigned = await this.assignAgent(buyerUserId, fallbackAdmins[0].id);
+      if (assigned) return fallbackAdmins[0];
+      const concurrentAgent = await this.getAssignedAgent(buyerUserId);
+      if (concurrentAgent) return concurrentAgent;
     }
     return null;
   }
@@ -1877,12 +1903,36 @@ export class DatabaseStorage implements IStorage {
     const isBuyerRole = userRole?.role === 'user';
 
     let whereClause;
-    if (type) {
-      whereClause = sql`(${conversations.buyerUserId} = ${userId} OR ${conversations.agentUserId} = ${userId}) AND ${conversations.type} = ${type}`;
-    } else if (isBuyerRole) {
+    if (isBuyerRole) {
       whereClause = sql`${conversations.buyerUserId} = ${userId} AND ${conversations.type} = 'buyer'`;
+    } else if (userRole?.role === "admin") {
+      whereClause = type
+        ? and(
+            or(eq(conversations.buyerUserId, userId), eq(conversations.agentUserId, userId)),
+            eq(conversations.type, type),
+          )
+        : or(eq(conversations.buyerUserId, userId), eq(conversations.agentUserId, userId));
     } else {
-      whereClause = sql`${conversations.buyerUserId} = ${userId} OR ${conversations.agentUserId} = ${userId}`;
+      const assignedBuyerIds = db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.assignedAgentUserId, userId));
+      const currentAuthority = or(
+        and(
+          eq(conversations.type, "buyer"),
+          inArray(conversations.buyerUserId, assignedBuyerIds),
+        ),
+        and(
+          eq(conversations.type, "agent_coordination"),
+          or(
+            inArray(conversations.relatedBuyerUserId, assignedBuyerIds),
+            eq(properties.agentId, userId),
+          ),
+        ),
+      );
+      whereClause = type
+        ? and(currentAuthority, eq(conversations.type, type))
+        : currentAuthority;
     }
 
     const rows = await db.select().from(conversations)
@@ -2032,13 +2082,21 @@ export class DatabaseStorage implements IStorage {
     const listingAgentVisibleStatuses = ['sent_to_listing_agent', 'confirmed', 'alternate_proposed', 'declined', 'completed'];
     const rows = await db.select().from(showingRequests)
       .innerJoin(properties, eq(showingRequests.propertyId, properties.id))
-      .where(sql`${showingRequests.buyerUserId} = ${userId} OR ${showingRequests.agentUserId} = ${userId} OR (${properties.agentId} = ${userId} AND ${showingRequests.status} IN (${sql.join(listingAgentVisibleStatuses.map(s => sql`${s}`), sql`, `)}))`)
+      .innerJoin(users, eq(showingRequests.buyerUserId, users.id))
+      .where(sql`${showingRequests.buyerUserId} = ${userId} OR ${users.assignedAgentUserId} = ${userId} OR (${properties.agentId} = ${userId} AND ${showingRequests.status} IN (${sql.join(listingAgentVisibleStatuses.map(s => sql`${s}`), sql`, `)}))`)
       .orderBy(desc(showingRequests.createdAt));
     const results: (ShowingRequest & { property: Property; buyer: any; agent: any })[] = [];
     for (const row of rows) {
-      const buyer = await this.getUser(row.showing_requests.buyerUserId);
-      const agent = await this.getUser(row.showing_requests.agentUserId);
-      results.push({ ...row.showing_requests, property: row.properties, buyer, agent });
+      const buyer = row.users;
+      const agent = buyer.assignedAgentUserId
+        ? await this.getUser(buyer.assignedAgentUserId)
+        : null;
+      results.push({
+        ...row.showing_requests,
+        property: row.properties,
+        buyer,
+        agent,
+      });
     }
     return results;
   }

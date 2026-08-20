@@ -75,8 +75,11 @@ router.post("/api/property-offers", isAuthenticated, async (req: any, res) => {
     }
 
     const buyerProfile = await storage.getUserBuyerProfile(buyerUserId);
-    const buyerLink = await storage.getClientAgentLink(buyerUserId);
-    const buyerAgentId = buyerProfile?.agentId || buyerLink?.agentId || null;
+    const assignedAgent = await storage.resolveAndAssignAgent(buyerUserId);
+    if (!assignedAgent) {
+      throw new Error("Unable to assign a buyer agent");
+    }
+    const buyerAgentId = assignedAgent.id;
 
     const offer = await storage.createPropertyOffer({
       propertyId,
@@ -107,7 +110,6 @@ router.post("/api/property-offers", isAuthenticated, async (req: any, res) => {
       await storage.updateSwipeNotificationStatus(swipeNotificationId, "offer_created", offer.id);
     }
 
-    const assignedAgent = await storage.resolveAndAssignAgent(buyerUserId);
     if (assignedAgent) {
       await storage.upsertBuyerInterest(propertyId, buyerUserId, "reverse_offer", assignedAgent.id, prop.agentId ?? undefined);
       const creatorName = creator?.firstName ? `${creator.firstName} ${creator.lastName || ""}`.trim() : "Listing Agent";
@@ -206,9 +208,23 @@ router.get("/api/property-offers/statuses", isAuthenticated, async (req: any, re
     const ids = idsParam.split(",").map(Number).filter(n => !isNaN(n));
     if (ids.length === 0) return res.json({});
     const rows = await db.select().from(propertyOffers).where(inArray(propertyOffers.id, ids));
+    const buyerIds = [...new Set(rows.map(offer => offer.buyerUserId).filter(Boolean))];
+    const buyerAssignments = buyerIds.length > 0
+      ? await db
+          .select({ id: users.id, assignedAgentUserId: users.assignedAgentUserId })
+          .from(users)
+          .where(inArray(users.id, buyerIds))
+      : [];
+    const currentAgentByBuyer = new Map(
+      buyerAssignments.map(buyer => [buyer.id, buyer.assignedAgentUserId]),
+    );
     const results: Record<number, string> = {};
     for (const offer of rows) {
-      if (offer.buyerUserId === userId || offer.listingAgentId === userId || offer.buyerAgentId === userId) {
+      if (
+        offer.buyerUserId === userId
+        || offer.listingAgentId === userId
+        || currentAgentByBuyer.get(offer.buyerUserId) === userId
+      ) {
         results[offer.id] = offer.status;
       }
     }

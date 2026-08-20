@@ -27,12 +27,15 @@ export function useProperties(filters?: SearchCriteria & { isOffMarket?: 'true' 
 }
 
 // GET /api/properties/:id
-export function useProperty(id: number | null) {
+export function useProperty(id: number | null, referringAgentId?: string | null) {
   return useQuery<PropertyResponse | null>({
-    queryKey: [api.properties.get.path, id],
+    queryKey: [api.properties.get.path, id, referringAgentId],
     queryFn: async () => {
       if (!id) return null;
-      const url = buildUrl(api.properties.get.path, { id });
+      const baseUrl = buildUrl(api.properties.get.path, { id });
+      const url = referringAgentId
+        ? `${baseUrl}?${queryString.stringify({ agent: referringAgentId })}`
+        : baseUrl;
       const res = await fetch(url, { credentials: "include" });
       if (res.status === 404) return null;
       if (!res.ok) throw new Error("Failed to fetch property");

@@ -6,7 +6,7 @@ import { Router } from "express";
   import { resolveUserDestination } from "../shared/routing";
   import { authStorage } from "../replit_integrations/auth/storage";
   import { db } from "../db";
-  import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, clientAgentLinks, propertyOffers, swipeNotifications, propertyReviews, errorReports, notifications, buyerInterest, sellerConcessions, insertSellerConcessionSchema } from "@workspace/db";
+  import { buyerMatches, buyerProfiles, sellLeads, users, savedProperties, savedSearches, searchHistory, userHomes, favoriteLists, sellerPitches, properties, propertyOffers, swipeNotifications, propertyReviews, errorReports, notifications, buyerInterest, sellerConcessions, insertSellerConcessionSchema } from "@workspace/db";
   import { eq, desc, sql, or, and, ilike, inArray, count } from "drizzle-orm";
   import { api } from "../shared/routes";
   import { z } from "zod";
@@ -92,80 +92,6 @@ router.post("/api/agent/submit-info", isAuthenticated, async (req: any, res) => 
   } catch (err: any) {
     await audit({ req, event: "agent_info_submitted", outcome: "failure", userId: req.user?.claims?.sub, errorMessage: err.message });
     res.status(500).json({ message: "Failed to save agent information" });
-  }
-});
-
-router.get("/api/agent-invite", isAuthenticated, async (req: any, res) => {
-  try {
-    const link = await storage.getClientAgentLink(req.user.sub);
-    res.json(link ?? null);
-  } catch (err: any) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-router.post("/api/agent-invite", isAuthenticated, async (req: any, res) => {
-  try {
-    const parsedInvite = z.object({ agentEmail: z.string().email().max(200) }).safeParse(req.body);
-    if (!parsedInvite.success) return res.status(400).json({ message: "agentEmail required", errors: parsedInvite.error.flatten() });
-    const agentEmail = parsedInvite.data.agentEmail;
-    const link = await storage.upsertClientAgentLink(req.user.sub, agentEmail.trim().toLowerCase());
-    await audit({ req, event: "agent_invite_created", outcome: "success", userId: req.user.sub, metadata: { agentEmail: agentEmail.trim().toLowerCase() } });
-    res.json(link);
-  } catch (err: any) {
-    await audit({ req, event: "agent_invite_created", outcome: "failure", userId: req.user?.sub, errorMessage: err.message });
-    res.status(500).json({ message: err.message });
-  }
-});
-
-router.delete("/api/agent-invite", isAuthenticated, async (req: any, res) => {
-  try {
-    await storage.deleteClientAgentLink(req.user.sub);
-    await audit({ req, event: "agent_invite_deleted", outcome: "success", userId: req.user.sub });
-    res.json({ message: "Removed" });
-  } catch (err: any) {
-    await audit({ req, event: "agent_invite_deleted", outcome: "failure", userId: req.user?.sub, errorMessage: err.message });
-    res.status(500).json({ message: err.message });
-  }
-});
-
-router.get("/api/agent-clients", isAuthenticated, async (req: any, res) => {
-  try {
-    const { email } = req.user as any;
-    const clients = await storage.getAgentClients(email);
-    res.json(clients);
-  } catch (err: any) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-router.get("/api/agent-clients/:clientId/favorites", isAuthenticated, async (req: any, res) => {
-  try {
-    const { clientId } = req.params;
-    const agentEmail = req.user.email;
-    const clients = await storage.getAgentClients(agentEmail);
-    if (!clients.find(c => c.clientId === clientId)) {
-      return res.status(403).json({ message: "Not authorized to view this client" });
-    }
-    const saved = await storage.getSavedProperties(clientId);
-    res.json(saved.map(s => ({ ...s, property: stripConfidentialFields(s.property) })));
-  } catch (err: any) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-router.get("/api/agent-clients/:clientId/searches", isAuthenticated, async (req: any, res) => {
-  try {
-    const { clientId } = req.params;
-    const agentEmail = req.user.email;
-    const clients = await storage.getAgentClients(agentEmail);
-    if (!clients.find(c => c.clientId === clientId)) {
-      return res.status(403).json({ message: "Not authorized to view this client" });
-    }
-    const searches = await storage.getSavedSearches(clientId);
-    res.json(searches);
-  } catch (err: any) {
-    res.status(500).json({ message: err.message });
   }
 });
 

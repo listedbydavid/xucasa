@@ -38,6 +38,7 @@ function makeMockStorage(opts: {
       calls.push({ fn: 'assignAgent', args: [buyerUserId, agentUserId] });
       // Mirror the real DB side-effect so subsequent getUser sees the link.
       if (users[buyerUserId]) users[buyerUserId].assignedAgentUserId = agentUserId;
+      return !!users[buyerUserId];
     },
     async resolveAndAssignAgent(buyerUserId: string) {
       calls.push({ fn: 'resolveAndAssignAgent', args: [buyerUserId] });

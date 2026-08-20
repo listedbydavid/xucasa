@@ -84,6 +84,63 @@ export interface PushTokenRegistration {
   platform?: PushTokenRegistrationPlatform;
 }
 
+export interface PublicAgent {
+  /** @nullable */
+  id: string | null;
+  /** @nullable */
+  firstName: string | null;
+  /** @nullable */
+  lastName: string | null;
+  /** @nullable */
+  email: string | null;
+  /** @nullable */
+  phone: string | null;
+  /** @nullable */
+  profileImageUrl: string | null;
+  /** @nullable */
+  brokerageName: string | null;
+  /** @nullable */
+  agentMlsId: string | null;
+}
+
+export type ContactAgentResponseAgentType = typeof ContactAgentResponseAgentType[keyof typeof ContactAgentResponseAgentType];
+
+
+export const ContactAgentResponseAgentType = {
+  buyers_agent: 'buyers_agent',
+  listing_agent: 'listing_agent',
+  platform_agent: 'platform_agent',
+} as const;
+
+export interface ContactAgentResponse {
+  agentType: ContactAgentResponseAgentType;
+  agent: PublicAgent;
+}
+
+export interface TourInquiryInput {
+  /** @minLength 1 */
+  name: string;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  preferredDate?: string | null;
+  /** @nullable */
+  message?: string | null;
+}
+
+export interface LinkAgentInput {
+  agentUserId: string;
+}
+
+export interface SendListingInput {
+  clientUserId: string;
+  propertyId: number;
+  /** @nullable */
+  note?: string | null;
+}
+
 /**
  * Invalid request
  */
@@ -101,4 +158,38 @@ export type NotFoundResponse = Error;
 
 export type RegisterPushToken200 = {
   registered: true;
+};
+
+export type CreateTourInquiry200 = {
+  success: boolean;
+  message: string;
+};
+
+export type SearchAgentsParams = {
+/**
+ * @minLength 2
+ */
+q: string;
+};
+
+export type SearchAgents200 = {
+  agents: PublicAgent[];
+};
+
+export type LinkAgent200 = {
+  success: boolean;
+  agent: PublicAgent;
+};
+
+export type GetMyAgent200 = {
+  agent: PublicAgent | null;
+};
+
+export type SendListing200 = {
+  success: boolean;
+  message: string;
+};
+
+export type GetListingShareUrl200 = {
+  shareUrl: string;
 };

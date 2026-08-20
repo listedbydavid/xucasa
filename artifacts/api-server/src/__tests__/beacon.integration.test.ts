@@ -238,9 +238,14 @@ before(async () => {
   ];
 
   for (const seed of excludedSeeds) {
+    const values = {
+      ...baseQualified,
+      userId: seed.userId,
+      ...seed.overrides,
+    } as InsertBuyerProfile;
     const [row] = await db
       .insert(buyerProfiles)
-      .values({ ...baseQualified, userId: seed.userId, ...seed.overrides })
+      .values(values)
       .returning();
     excludedProfileIds[seed.key] = row.id;
   }

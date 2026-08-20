@@ -21,6 +21,7 @@ import { Router } from "express";
   import { logger } from "../logger";
   import { stripConfidentialFields, CONFIDENTIAL_MLS_FIELDS } from "../lib/mlsHelpers";
   import { runAgentVerificationFlow } from "../lib/agentVerification";
+  import { assignPlatformAgentIfNeeded } from "../lib/assignPlatformAgent";
 
   const ERROR_ARCHIVE_PATH = path.join(process.cwd(), "data", "error-archive.json");
   
@@ -44,6 +45,9 @@ router.post("/api/swipe-interest", isAuthenticated, async (req: any, res) => {
   const parsedSwipe = z.object({ propertyId: z.number().int().positive() }).safeParse(req.body);
   if (!parsedSwipe.success) return res.status(400).json({ message: "propertyId required", errors: parsedSwipe.error.flatten() });
   const { propertyId } = parsedSwipe.data;
+
+  // Trigger 3a — swipe: silently assign platform agent if needed (fire-and-forget)
+  assignPlatformAgentIfNeeded(buyerUserId, req, "swipe").catch(() => {});
 
   try {
     const result = await executeWithAudit<any>(
@@ -290,6 +294,9 @@ router.post("/api/buyer-interest", isAuthenticated, async (req: any, res) => {
   if (!parsedInterest.success) return res.status(400).json({ message: "propertyId required", errors: parsedInterest.error.flatten() });
   const { propertyId, source } = parsedInterest.data;
 
+  // Trigger 3b — buyer-interest / swipe: silently assign platform agent if needed
+  assignPlatformAgentIfNeeded(userId, req, "buyer_interest").catch(() => {});
+
   try {
     const result = await executeWithAudit(
       { req, event: "buyer_interest_upserted", userId, propertyId, metadata: { source: source || "swipe" } },
@@ -392,7 +399,8 @@ router.patch("/api/buyer-interest/:id", isAuthenticated, async (req: any, res) =
   const existing = await db.select().from(buyerInterest).where(eq(buyerInterest.id, id)).limit(1);
   if (!existing.length) return res.status(404).json({ message: "Not found" });
 
-  const isAssignedAgent = existing[0].assignedAgentUserId === userId;
+  const buyer = await storage.getUser(existing[0].buyerUserId);
+  const isAssignedAgent = buyer?.assignedAgentUserId === userId;
   if (!isAssignedAgent && existing[0].buyerUserId !== userId) {
     return res.status(403).json({ message: "Access denied" });
   }

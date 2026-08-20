@@ -21,6 +21,7 @@ import { Router } from "express";
   import { logger } from "../logger";
   import { stripConfidentialFields, CONFIDENTIAL_MLS_FIELDS } from "../lib/mlsHelpers";
   import { runAgentVerificationFlow } from "../lib/agentVerification";
+  import { assignPlatformAgentIfNeeded } from "../lib/assignPlatformAgent";
 
   const ERROR_ARCHIVE_PATH = path.join(process.cwd(), "data", "error-archive.json");
   
@@ -40,6 +41,10 @@ router.post(api.savedProperties.create.path, isAuthenticated, async (req: any, r
   try {
     const user = req.user.claims;
     const input = api.savedProperties.create.input.parse(req.body);
+
+    // Trigger 2 — first save: silently assign platform agent if needed
+    assignPlatformAgentIfNeeded(user.sub, req, "save").catch(() => {});
+
     const saved = await storage.saveProperty(user.sub, input.propertyId, input.listId);
     res.status(201).json(saved);
   } catch (err) {

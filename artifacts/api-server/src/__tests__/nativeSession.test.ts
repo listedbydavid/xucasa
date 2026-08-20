@@ -76,14 +76,15 @@ test("issues a token only to native clients and restores their session", async (
   await withSessionServer(async (baseUrl) => {
     const browserResponse = await fetch(`${baseUrl}/mint`, { method: "POST" });
     assert.equal(browserResponse.status, 200);
-    assert.equal((await browserResponse.json()).sessionToken, undefined);
+    const browserBody = await browserResponse.json() as { sessionToken?: string };
+    assert.equal(browserBody.sessionToken, undefined);
 
     const nativeResponse = await fetch(`${baseUrl}/mint`, {
       method: "POST",
       headers: { "X-Xucasa-Client": "native" },
     });
     assert.equal(nativeResponse.status, 200);
-    const { sessionToken } = await nativeResponse.json();
+    const { sessionToken } = await nativeResponse.json() as { sessionToken: string };
     assert.equal(typeof sessionToken, "string");
 
     const protectedResponse = await fetch(`${baseUrl}/protected`, {
@@ -99,7 +100,7 @@ test("rejects a tampered bearer and invalidates a destroyed session", async () =
       method: "POST",
       headers: { "X-Xucasa-Client": "native" },
     });
-    const { sessionToken } = await nativeResponse.json();
+    const { sessionToken } = await nativeResponse.json() as { sessionToken: string };
 
     const validResponse = await fetch(`${baseUrl}/protected`, {
       headers: bearer(sessionToken),

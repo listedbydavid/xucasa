@@ -21,7 +21,7 @@ import {
   checkForgotPasswordRateLimit,
 } from "../../authMiddleware";
 import { audit, executeWithAudit } from "../../auditLog";
-import { storage } from "../../storage";
+import { storage, DAVID_USER_ID } from "../../storage";
 import { sendPasswordResetEmail } from "../../emailService";
 import { z } from "zod";
 import {
@@ -29,6 +29,11 @@ import {
   mobileBearerSession,
   sessionCookieName,
 } from "./nativeSession";
+import { db } from "../../db";
+import { users } from "@workspace/db";
+import { eq } from "drizzle-orm";
+
+export { isAuthenticated } from "./authGuard";
 
 function createAuthSessionResponse(req: Request, user: any) {
   const response: Record<string, unknown> = {
@@ -72,7 +77,6 @@ export function getSession() {
     },
   });
 }
-
 async function upsertUser(profile: {
   id: string;
   email: string;
@@ -87,6 +91,36 @@ async function upsertUser(profile: {
     lastName: profile.lastName,
     profileImageUrl: profile.profileImageUrl,
   });
+}
+async function assignAgentOnRegistration(userId: string, req: Request): Promise<void> {
+  const sessionRef = req.session?.referringAgentId;
+  let agentId = DAVID_USER_ID;
+  let assignmentType: "referral_link" | "platform_default" = "platform_default";
+
+  if (sessionRef && sessionRef !== DAVID_USER_ID) {
+    const referringAgent = await authStorage.getUser(sessionRef);
+    if (referringAgent?.agentVerified && referringAgent.role === "agent") {
+      agentId = referringAgent.id;
+      assignmentType = "referral_link";
+    }
+  }
+
+  const assigned = await storage.assignAgent(userId, agentId);
+
+  if (assigned) {
+    await audit({
+      req,
+      event: "platform_agent_assigned",
+      outcome: "success",
+      userId,
+      metadata: { assignmentType, agentId, trigger: "registration" },
+    });
+  }
+
+  if (req.session) {
+    delete req.session.referringAgentId;
+    delete req.session.referredPropertyId;
+  }
 }
 
 function getCallbackUrl(req: any): string {
@@ -116,8 +150,9 @@ export async function setupAuth(app: Express) {
           callbackURL: "/api/auth/google/callback",
           scope: ["openid", "email", "profile"],
           proxy: true,
+          passReqToCallback: true,
         },
-        async (_accessToken, _refreshToken, profile, done) => {
+        async (req: Request, _accessToken, _refreshToken, profile, done) => {
           try {
             const email = profile.emails?.[0]?.value || "";
             const firstName = profile.name?.givenName || "";
@@ -142,6 +177,10 @@ export async function setupAuth(app: Express) {
               lastName,
               profileImageUrl,
             });
+
+            if (!existingUser) {
+              await assignAgentOnRegistration(user.id, req);
+            }
 
             const sessionUser = {
               claims: {
@@ -241,6 +280,13 @@ export async function setupAuth(app: Express) {
         passwordHash,
         accountSource: "real",
       });
+
+      try {
+        await assignAgentOnRegistration(user.id, req);
+      } catch {
+        // Non-fatal — registration succeeds even if agent assignment fails
+      }
+
       const sessionUser = {
         claims: {
           sub: user.id,
@@ -482,11 +528,3 @@ export async function setupAuth(app: Express) {
     });
   });
 }
-
-export const isAuthenticated: RequestHandler = async (req, res, next) => {
-  if (!req.isAuthenticated() || !(req.user as any)?.claims?.sub) {
-    audit({ req, event: "authorization_denied", outcome: "failure", metadata: { reason: "unauthenticated", route: req.originalUrl } });
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-  return next();
-};

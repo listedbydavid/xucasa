@@ -3,8 +3,10 @@ import { useLocation } from "wouter";
 import { usePageMeta } from "@/hooks/use-page-meta";
 import { useAuth } from "@/hooks/use-auth";
 import { useProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
-import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar, Send, Eye, ContactRound, MessageSquare, AlertCircle, Loader2, BadgeCheck, Tag } from "lucide-react";
+import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar, Send, Eye, ContactRound, MessageSquare, AlertCircle, Loader2, BadgeCheck, Tag, Share2 } from "lucide-react";
 import { ConcessionForm } from "@/components/ConcessionForm";
+import { SendListingModal } from "@/components/SendListingModal";
+import { ShareListingModal } from "@/components/ShareListingModal";
 import { ReverseOfferForm } from "@/components/ReverseOfferForm";
 import { IdxSyncPanel } from "@/components/IdxSyncPanel";
 import type { PropertyResponse, CreatePropertyRequest } from "@/shared/schema";
@@ -40,6 +42,7 @@ export default function AgentDashboard() {
   const [editingProperty, setEditingProperty] = useState<PropertyResponse | null>(null);
   const [activeTab, setActiveTab] = useState<AgentTab>("listings");
   const [concessionPropertyId, setConcessionPropertyId] = useState<number | null>(null);
+  const [sharePropertyId, setSharePropertyId] = useState<number | null>(null);
 
   const myProperties = properties.filter(p => p.agentId === user?.id) || properties;
 
@@ -191,6 +194,15 @@ export default function AgentDashboard() {
                       </td>
                       <td className="p-4 text-right">
                         <button
+                          onClick={() => setSharePropertyId(property.id)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 mr-2 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded-full text-xs font-bold hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors border border-amber-200 dark:border-amber-800"
+                          data-testid={`button-share-${property.id}`}
+                          aria-label={`Share listing ${property.title}`}
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                          Share
+                        </button>
+                        <button
                           onClick={() => setConcessionPropertyId(property.id)}
                           className="inline-flex items-center gap-1 px-3 py-1.5 mr-2 bg-amber-500 text-white rounded-full text-xs font-bold hover:bg-amber-600 transition-colors"
                           data-testid={`button-add-terms-${property.id}`}
@@ -249,6 +261,11 @@ export default function AgentDashboard() {
           isPending={isCreating || isUpdating}
         />
       )}
+      <ShareListingModal
+        propertyId={sharePropertyId}
+        isOpen={sharePropertyId !== null}
+        onClose={() => setSharePropertyId(null)}
+      />
       <SpotlightTour pageKey="agent" isAuthenticated={isAuthenticated} />
     </div>
   );
@@ -1077,6 +1094,7 @@ function BuyerClientForm({ initialData, onSubmit, onCancel, isPending }: {
 function ClientCard({ client, expanded, onToggle }: { client: any; expanded: boolean; onToggle: () => void }) {
   const { data: favorites = [], isLoading: favLoading } = useClientFavorites(expanded ? client.clientId : null);
   const { data: searches = [], isLoading: searchLoading } = useClientSearches(expanded ? client.clientId : null);
+  const [showSendModal, setShowSendModal] = useState(false);
 
   const initials = [client.client?.firstName, client.client?.lastName]
     .filter(Boolean)
@@ -1085,30 +1103,44 @@ function ClientCard({ client, expanded, onToggle }: { client: any; expanded: boo
 
   return (
     <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center gap-4 p-4 hover:bg-muted/30 transition-colors text-left"
-        data-testid={`button-client-${client.clientId}`}
-      >
-        <div className="w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-lg flex-shrink-0">
-          {initials}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="font-bold text-foreground">
-            {client.client?.firstName || client.client?.lastName
-              ? `${client.client.firstName || ""} ${client.client.lastName || ""}`.trim()
-              : client.client?.email}
-          </p>
-          <p className="text-sm text-muted-foreground truncate">{client.client?.email}</p>
-        </div>
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+      <div className="w-full flex items-center gap-4 p-4 hover:bg-muted/30 transition-colors">
+        <button onClick={onToggle} className="flex-1 flex items-center gap-4 text-left" data-testid={`button-client-${client.clientId}`}>
+          <div className="w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-lg flex-shrink-0">
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-foreground">
+              {client.client?.firstName || client.client?.lastName
+                ? `${client.client.firstName || ""} ${client.client.lastName || ""}`.trim()
+                : client.client?.email}
+            </p>
+            <p className="text-sm text-muted-foreground truncate">{client.client?.email}</p>
+          </div>
+          <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground mr-4">
             <span className="flex items-center gap-1"><Heart className="w-3.5 h-3.5" /> favorites</span>
             <span className="flex items-center gap-1"><BookmarkCheck className="w-3.5 h-3.5" /> searches</span>
           </div>
-          {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={() => setShowSendModal(true)}
+            className="flex items-center gap-1.5 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors border border-amber-200 dark:border-amber-800"
+          >
+            <Send className="w-3.5 h-3.5" />
+            Send Listing
+          </button>
+          <button onClick={onToggle} className="p-2 -mr-2 text-muted-foreground hover:bg-muted rounded-full">
+            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
         </div>
-      </button>
+      </div>
+
+      <SendListingModal
+        isOpen={showSendModal}
+        onClose={() => setShowSendModal(false)}
+        clientUserId={client.clientId}
+        clientFirstName={client.client?.firstName || "Client"}
+      />
 
       {expanded && (
         <div className="border-t border-border bg-muted/20">

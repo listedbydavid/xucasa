@@ -25,7 +25,7 @@ type Step = "intent" | "buyer" | "homeowner" | "agent" | "lender";
 const INTENT_CARDS: { id: Intent; title: string; desc: string; icon: typeof Search; color: string }[] = [
   { id: "buyer", title: "I'm looking to buy", desc: "Find your dream home in San Diego", icon: Search, color: "text-blue-500 bg-blue-500/10" },
   { id: "homeowner", title: "I own a home", desc: "Track your home's value and explore selling", icon: Home, color: "text-green-500 bg-green-500/10" },
-  { id: "agent", title: "I'm a real estate agent", desc: "Manage listings and connect with clients", icon: Briefcase, color: "text-purple-500 bg-purple-500/10" },
+  { id: "agent", title: "I'm a real estate agent", desc: "Keep your clients. No lead selling. No competing agents.", icon: Briefcase, color: "text-purple-500 bg-purple-500/10" },
   { id: "lender", title: "I'm a lender", desc: "Connect with buyers and agents as a mortgage professional", icon: Building2, color: "text-indigo-500 bg-indigo-500/10" },
   { id: "explorer", title: "Just exploring", desc: "Browse homes and learn about the market", icon: Compass, color: "text-amber-500 bg-amber-500/10" },
 ];
@@ -73,6 +73,7 @@ export default function Onboarding() {
   const [yearBuilt, setYearBuilt] = useState<number | undefined>();
   const [sellingIntent, setSellingIntent] = useState("");
 
+  const [agentWizardStep, setAgentWizardStep] = useState<number>(0);
   const [licenseNumber, setLicenseNumber] = useState("");
   const [licenseState, setLicenseState] = useState("CA");
   const [brokerageName, setBrokerageName] = useState("");
@@ -270,14 +271,14 @@ export default function Onboarding() {
             {step === "intent" && `Welcome${user?.firstName ? `, ${user.firstName}` : ""}!`}
             {step === "buyer" && "Tell us about your home search"}
             {step === "homeowner" && "Tell us about your home"}
-            {step === "agent" && "Set up your agent profile"}
+            {step === "agent" && agentWizardStep === 1 && "Set up your agent profile"}
             {step === "lender" && "Set up your lender profile"}
           </h1>
           <p className="text-muted-foreground mt-2">
             {step === "intent" && "What brings you to xucasa?"}
             {step === "buyer" && "We'll match you with the right homes"}
             {step === "homeowner" && "We'll help you track your home's value"}
-            {step === "agent" && "Get verified to manage listings"}
+            {step === "agent" && agentWizardStep === 1 && "Get verified to manage listings"}
             {step === "lender" && "Connect with buyers and agents"}
           </p>
         </div>
@@ -692,7 +693,45 @@ export default function Onboarding() {
           </div>
         )}
 
-        {step === "agent" && (
+        {step === "agent" && agentWizardStep === 0 && (
+          <div className="flex flex-col gap-5 py-2">
+            <div className="text-center">
+              <div className="text-4xl mb-3">🏡</div>
+              <h2 className="text-xl font-semibold">Built for agents, not against you</h2>
+              <p className="text-sm text-muted-foreground mt-2 max-w-xs mx-auto">
+                The only platform where your clients stay yours — always.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              {[
+                { icon: '🔒', title: 'Your clients stay yours', desc: 'We never sell leads or route your buyers to competing agents.' },
+                { icon: '📊', title: 'Prove demand before you list', desc: 'Beacon shows how many active buyers match an upcoming listing.' },
+                { icon: '💬', title: 'Every conversation goes through you', desc: 'Buyers contact their agent. You stay in every deal.' },
+                { icon: '📋', title: 'Agent-only MLS details', desc: 'Confidential remarks, showing instructions, lockbox info — only you see it.' },
+                { icon: '📤', title: 'Send listings directly to clients', desc: 'Share a property and it lands in your client\'s saved homes instantly.' },
+              ].map(item => (
+                <div key={item.title} className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+                  <span className="text-xl shrink-0">{item.icon}</span>
+                  <div>
+                    <div className="font-medium text-sm">{item.title}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{item.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              className="flex items-center justify-center bg-amber-500 hover:bg-amber-600 text-white w-full py-3 rounded-xl font-bold transition-colors"
+              onClick={() => setAgentWizardStep(1)}
+            >
+              Get started — it's free
+            </button>
+            <p className="text-xs text-muted-foreground text-center -mt-2">
+              San Diego agents only · License verification required · 2 minutes
+            </p>
+          </div>
+        )}
+
+        {step === "agent" && agentWizardStep === 1 && (
           <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-5" data-testid="agent-wizard" data-tour="onboarding-form">
             <div>
               <label className="text-sm font-bold text-foreground mb-1 flex items-center gap-2">

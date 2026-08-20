@@ -23,6 +23,8 @@ import errorsRouter from "./errors";
 import adminRouter from "./admin";
 import toursRouter from "./tours";
 import vendorsRouter from "./vendors";
+import agentRelationshipsRouter from "./agentRelationships";
+import agentClientsRouter from "./agentClients";
 import { seedChangelog } from "../lib/changelogSeed";
 
 export async function registerRoutes(
@@ -54,25 +56,27 @@ export async function registerRoutes(
   // /api/... paths (preserved from the original monolithic routes.ts).
   // Registration order matters when routes overlap (more-specific paths must
   // be on routers registered before catch-all routers).
-  app.use(adminRouter);          // /api/admin/* — registered first to win over property/etc fallbacks
-  app.use(toursRouter);          // /api/tours/*, /api/tips/*, /api/changelog/*
-  app.use(vendorsRouter);        // /api/vendors/*, /api/admin/vendors/*, /api/partners/*
-  app.use(concessionsRouter);    // /api/concessions/*, /api/properties/:id/concessions
-  app.use(reviewsRouter);        // /api/properties/:id/reviews
-  app.use(beaconRouter);         // /api/beacon/*
-  app.use(marketplaceRouter);    // /api/buyer-matches/*, /api/seller-pitches/*
-  app.use(idxRouter);            // /api/idx/*, /api/email-status, /api/test-email
-  app.use(profileRouter);        // /api/profile/*, /api/auth/user PATCH
-  app.use(errorsRouter);         // /api/error-reports/*
-  app.use(notificationsRouter);  // /api/notifications/*
-  app.use(conversationsRouter);  // /api/conversations/*, /api/messages/*, /api/showing-requests/*
-  app.use(offersRouter);         // /api/property-offers/*, /api/swipe-notifications/*
-  app.use(buyerRouter);          // /api/buyer-interest/*, /api/buyer-profile/*, /api/swipe-interest, /api/assigned-agent
-  app.use(onboardingRouter);     // /api/onboarding/*
-  app.use(agentRouter);          // /api/agent/*, /api/agent-invite, /api/agent-clients/*
-  app.use(homeownerRouter);      // /api/home-report/*, /api/my-homes/*, /api/property-lookup
-  app.use(savedRouter);          // /api/saved-properties/*, /api/favorite-lists/*, /api/saved-searches/*, /api/search-history
-  app.use(propertiesRouter);     // /api/properties/* (catch-all — must be last among property-prefixed)
+  app.use(adminRouter);                // /api/admin/* — registered first to win over property/etc fallbacks
+  app.use(toursRouter);                // /api/tours/*, /api/tips/*, /api/changelog/*
+  app.use(vendorsRouter);              // /api/vendors/*, /api/admin/vendors/*, /api/partners/*
+  app.use(concessionsRouter);          // /api/concessions/*, /api/properties/:id/concessions
+  app.use(reviewsRouter);              // /api/properties/:id/reviews
+  app.use(beaconRouter);               // /api/beacon/*
+  app.use(marketplaceRouter);          // /api/buyer-matches/*, /api/seller-pitches/*
+  app.use(idxRouter);                  // /api/idx/*, /api/email-status, /api/test-email
+  app.use(profileRouter);              // /api/profile/*, /api/auth/user PATCH
+  app.use(errorsRouter);               // /api/error-reports/*
+  app.use(notificationsRouter);        // /api/notifications/*
+  app.use(conversationsRouter);        // /api/conversations/*, /api/messages/*, /api/showing-requests/*
+  app.use(offersRouter);               // /api/property-offers/*, /api/swipe-notifications/*
+  app.use(agentRelationshipsRouter);   // /api/properties/:id/contact-agent, /api/agent/send-listing, /api/agents/search, /api/buyer/*
+  app.use(agentClientsRouter);         // /api/agent-invite, /api/agent-clients/*
+  app.use(buyerRouter);                // /api/buyer-interest/*, /api/buyer-profile/*, /api/swipe-interest, /api/assigned-agent
+  app.use(onboardingRouter);           // /api/onboarding/*
+  app.use(agentRouter);                // /api/agent/*
+  app.use(homeownerRouter);            // /api/home-report/*, /api/my-homes/*, /api/property-lookup
+  app.use(savedRouter);                // /api/saved-properties/*, /api/favorite-lists/*, /api/saved-searches/*, /api/search-history
+  app.use(propertiesRouter);           // /api/properties/* (catch-all — must be last among property-prefixed)
 
   // Seed the database in dev (skipped in production).
   if (process.env.NODE_ENV === "production") {

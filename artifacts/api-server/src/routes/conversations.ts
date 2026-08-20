@@ -29,30 +29,64 @@ const router = Router();
 import { trySendNotificationEmail } from "../lib/notificationHelpers";
 
 async function validateConversationAccess(convo: any, userId: string): Promise<{ allowed: boolean; reason?: string }> {
-  if (convo.buyerUserId !== userId && convo.agentUserId !== userId) {
-    return { allowed: false, reason: "You are not a participant in this conversation" };
-  }
   const callerUser = await storage.getUser(userId);
   const callerRole = callerUser?.role || "user";
+  if (callerRole === "admin") return { allowed: true };
+
   if (convo.type === "agent_coordination" && callerRole === "user") {
     return { allowed: false, reason: "Buyers cannot access agent coordination threads" };
   }
-  if (convo.type === "buyer") {
-    const otherUserId = convo.buyerUserId === userId ? convo.agentUserId : convo.buyerUserId;
-    const otherUser = await storage.getUser(otherUserId);
-    if (callerRole === "user" && otherUser?.role === "user") {
-      return { allowed: false, reason: "Buyer-to-buyer conversations are not allowed" };
+  if (convo.type === "agent_coordination") {
+    const relatedBuyer = convo.relatedBuyerUserId
+      ? await storage.getUser(convo.relatedBuyerUserId)
+      : null;
+    const isCurrentBuyerAgent = relatedBuyer?.assignedAgentUserId === userId;
+    const isCurrentListingAgent = convo.property?.agentId === userId;
+    if (!isCurrentBuyerAgent && !isCurrentListingAgent) {
+      return { allowed: false, reason: "You are not authorized for this coordination thread" };
     }
+    return { allowed: true };
+  }
+
+  if (convo.type === "buyer") {
     if (callerRole === "user") {
+      if (convo.buyerUserId !== userId) {
+        return { allowed: false, reason: "You are not a participant in this conversation" };
+      }
       if (!callerUser?.assignedAgentUserId) {
         return { allowed: false, reason: "No agent assigned. Please contact support before messaging." };
       }
-      if (callerUser.assignedAgentUserId !== otherUserId) {
-        return { allowed: false, reason: "You can only communicate with your assigned agent" };
-      }
+      return { allowed: true };
     }
+
+    const buyer = await storage.getUser(convo.buyerUserId);
+    if (buyer?.assignedAgentUserId !== userId) {
+      return { allowed: false, reason: "You are not the buyer's current assigned agent" };
+    }
+    return { allowed: true };
   }
-  return { allowed: true };
+
+  return { allowed: false, reason: "Unsupported conversation type" };
+}
+
+async function resolveConversationRecipient(convo: any, senderUserId: string): Promise<string | null> {
+  if (convo.type === "buyer") {
+    if (senderUserId !== convo.buyerUserId) return convo.buyerUserId;
+    const buyer = await storage.getUser(convo.buyerUserId);
+    return buyer?.assignedAgentUserId ?? null;
+  }
+
+  if (convo.type === "agent_coordination") {
+    const relatedBuyer = convo.relatedBuyerUserId
+      ? await storage.getUser(convo.relatedBuyerUserId)
+      : null;
+    const currentBuyerAgentId = relatedBuyer?.assignedAgentUserId ?? null;
+    const currentListingAgentId = convo.property?.agentId ?? null;
+    if (senderUserId === currentBuyerAgentId) return currentListingAgentId;
+    if (senderUserId === currentListingAgentId) return currentBuyerAgentId;
+  }
+
+  return null;
 }
 
 function sanitizeConversationForCaller(convo: any, callerUserId: string, callerRole: string): any {
@@ -301,7 +335,10 @@ router.post("/api/conversations/:id/messages", isAuthenticated, async (req: any,
         const role = convo.buyerUserId === userId ? 'buyer' : 'agent';
         await storage.updateConversationReadAt(conversationId, userId, role);
 
-        const recipientId = convo.buyerUserId === userId ? convo.agentUserId : convo.buyerUserId;
+        const recipientId = await resolveConversationRecipient(convo, userId);
+        if (!recipientId) {
+          throw new Error("Conversation recipient is no longer available");
+        }
         const sender = await storage.getUser(userId);
         const senderName = sender?.firstName ? `${sender.firstName} ${sender.lastName || ""}`.trim() : "Someone";
         await storage.createNotification({
@@ -430,13 +467,18 @@ router.patch("/api/showing-requests/:id", isAuthenticated, async (req: any, res)
   if (!existing) return res.status(404).json({ message: "Showing request not found" });
 
   const prop = await storage.getProperty(existing.propertyId);
-  const isAssignedAgent = existing.agentUserId === userId;
+  const buyer = await storage.getUser(existing.buyerUserId);
+  const currentBuyerAgentId = buyer?.assignedAgentUserId ?? null;
+  const isAssignedAgent = currentBuyerAgentId === userId;
   const isBuyerUser = existing.buyerUserId === userId;
   const isListingAgent = prop?.agentId === userId;
 
   if (!isAssignedAgent && !isBuyerUser && !isListingAgent) {
     audit({ req, event: "authorization_denied", outcome: "failure", userId, resourceType: "showing_request", resourceId: String(id), metadata: { reason: "not_participant" } });
     return res.status(403).json({ message: "Access denied" });
+  }
+  if (isListingAgent && !isAssignedAgent && !currentBuyerAgentId) {
+    return res.status(409).json({ message: "The buyer has no current assigned agent" });
   }
 
   const currentStatus = existing.status;
@@ -569,7 +611,7 @@ router.patch("/api/showing-requests/:id", isAuthenticated, async (req: any, res)
           const notifMsg = confirmedDate ? `Confirmed for ${new Date(confirmedDate).toLocaleDateString()}` : `Showing has been ${(status || "").replace(/_/g, " ")}`;
 
           await storage.createNotification({
-            userId: updated.agentUserId,
+            userId: currentBuyerAgentId!,
             type: notificationType,
             title: `${notifTitle} by ${senderName}`,
             message: notifMsg,
@@ -579,13 +621,13 @@ router.patch("/api/showing-requests/:id", isAuthenticated, async (req: any, res)
             archived: false,
           });
           if (coordConvoId) {
-            trySendNotificationEmail(updated.agentUserId, notificationType, `${notifTitle} by ${senderName}`, notifMsg, `/conversations/${coordConvoId}`, updated.propertyId, coordConvoId);
+            trySendNotificationEmail(currentBuyerAgentId!, notificationType, `${notifTitle} by ${senderName}`, notifMsg, `/conversations/${coordConvoId}`, updated.propertyId, coordConvoId);
           }
 
           if (buyerConvoId && ["confirmed", "declined", "completed"].includes(status)) {
             await storage.createMessage({
               conversationId: buyerConvoId,
-              senderUserId: updated.agentUserId,
+              senderUserId: currentBuyerAgentId!,
               type: "system",
               content: statusMsg,
             });
@@ -610,7 +652,12 @@ router.patch("/api/showing-requests/:id", isAuthenticated, async (req: any, res)
               content: statusMsg,
             });
           }
-          const recipientId = updated.buyerUserId === userId ? updated.agentUserId : updated.buyerUserId;
+          const recipientId = updated.buyerUserId === userId
+            ? currentBuyerAgentId
+            : updated.buyerUserId;
+          if (!recipientId) {
+            throw new Error("The buyer has no current assigned agent");
+          }
           const sender = await storage.getUser(userId);
           const senderName = sender?.firstName || "Agent";
           const notificationType = status === "confirmed" ? "showing_confirmed" : status === "declined" ? "showing_declined" : "showing_update";

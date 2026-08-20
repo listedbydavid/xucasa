@@ -22,7 +22,13 @@ import type {
 import type {
   AuthSession,
   BadRequestResponse,
+  ContactAgentResponse,
+  CreateTourInquiry200,
+  GetListingShareUrl200,
+  GetMyAgent200,
   HealthStatus,
+  LinkAgent200,
+  LinkAgentInput,
   LoginRequest,
   NotFoundResponse,
   NotificationPreferences,
@@ -32,6 +38,11 @@ import type {
   RegisterPushToken200,
   RegisterRequest,
   SavedPropertyAlert,
+  SearchAgents200,
+  SearchAgentsParams,
+  SendListing200,
+  SendListingInput,
+  TourInquiryInput,
   UnauthorizedResponse
 } from './api.schemas';
 
@@ -133,13 +144,6 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
   return withQueryKey(query, queryOptions.queryKey);
 }
-
-
-
-
-
-
-
 export const getLoginUrl = () => {
 
 
@@ -424,13 +428,6 @@ export function useGetNotificationPreferences<TData = Awaited<ReturnType<typeof 
 
   return withQueryKey(query, queryOptions.queryKey);
 }
-
-
-
-
-
-
-
 export const getUpdateNotificationPreferencesUrl = () => {
 
 
@@ -643,3 +640,507 @@ export const useUnregisterPushToken = <TError = ErrorType<BadRequestResponse>,
       > => {
       return useMutation(getUnregisterPushTokenMutationOptions(options));
     }
+
+export const getGetContactAgentUrl = (id: number,) => {
+
+
+
+
+  return `/api/properties/${id}/contact-agent`
+}
+
+/**
+ * Public. Returns the appropriate agent (buyer's agent, listing agent, or platform agent) for a property detail view.
+ * @summary Get the agent contact card for a property
+ */
+export const getContactAgent = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<ContactAgentResponse> => {
+
+  return customFetch<ContactAgentResponse>(getGetContactAgentUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetContactAgentQueryKey = (id: number,) => {
+    return [
+    `/api/properties/${id}/contact-agent`
+    ] as const;
+    }
+
+
+export const getGetContactAgentQueryOptions = <TData = Awaited<ReturnType<typeof getContactAgent>>, TError = ErrorType<NotFoundResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getContactAgent>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetContactAgentQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getContactAgent>>> = ({ signal }) => getContactAgent(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getContactAgent>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetContactAgentQueryResult = NonNullable<Awaited<ReturnType<typeof getContactAgent>>>
+export type GetContactAgentQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Get the agent contact card for a property
+ */
+
+export function useGetContactAgent<TData = Awaited<ReturnType<typeof getContactAgent>>, TError = ErrorType<NotFoundResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getContactAgent>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetContactAgentQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+export const getCreateTourInquiryUrl = (id: number,) => {
+
+
+
+
+  return `/api/properties/${id}/tour-inquiry`
+}
+
+/**
+ * Public. Creates a sell_lead and notifies the displayed agent.
+ * @summary Submit a tour inquiry for a property
+ */
+export const createTourInquiry = async (id: number,
+    tourInquiryInput: TourInquiryInput, options?: Parameters<typeof customFetch>[1]): Promise<CreateTourInquiry200> => {
+
+  return customFetch<CreateTourInquiry200>(getCreateTourInquiryUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(tourInquiryInput)
+  }
+);}
+
+
+
+
+
+export const getCreateTourInquiryMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTourInquiry>>, TError,{id: number;data: BodyType<TourInquiryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTourInquiry>>, TError,{id: number;data: BodyType<TourInquiryInput>}, TContext> => {
+
+const mutationKey = ['createTourInquiry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTourInquiry>>, {id: number;data: BodyType<TourInquiryInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createTourInquiry(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTourInquiryMutationResult = NonNullable<Awaited<ReturnType<typeof createTourInquiry>>>
+    export type CreateTourInquiryMutationBody = BodyType<TourInquiryInput>
+    export type CreateTourInquiryMutationError = ErrorType<BadRequestResponse | NotFoundResponse>
+
+    /**
+ * @summary Submit a tour inquiry for a property
+ */
+export const useCreateTourInquiry = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTourInquiry>>, TError,{id: number;data: BodyType<TourInquiryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createTourInquiry>>,
+        TError,
+        {id: number;data: BodyType<TourInquiryInput>},
+        TContext
+      > => {
+      return useMutation(getCreateTourInquiryMutationOptions(options));
+    }
+
+export const getSearchAgentsUrl = (params: SearchAgentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/agents/search?${stringifiedParams}` : `/api/agents/search`
+}
+
+/**
+ * @summary Search verified agents
+ */
+export const searchAgents = async (params: SearchAgentsParams, options?: Parameters<typeof customFetch>[1]): Promise<SearchAgents200> => {
+
+  return customFetch<SearchAgents200>(getSearchAgentsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getSearchAgentsQueryKey = (params?: SearchAgentsParams,) => {
+    return [
+    `/api/agents/search`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getSearchAgentsQueryOptions = <TData = Awaited<ReturnType<typeof searchAgents>>, TError = ErrorType<BadRequestResponse | UnauthorizedResponse>>(params: SearchAgentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof searchAgents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getSearchAgentsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof searchAgents>>> = ({ signal }) => searchAgents(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof searchAgents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type SearchAgentsQueryResult = NonNullable<Awaited<ReturnType<typeof searchAgents>>>
+export type SearchAgentsQueryError = ErrorType<BadRequestResponse | UnauthorizedResponse>
+
+
+/**
+ * @summary Search verified agents
+ */
+
+export function useSearchAgents<TData = Awaited<ReturnType<typeof searchAgents>>, TError = ErrorType<BadRequestResponse | UnauthorizedResponse>>(
+ params: SearchAgentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof searchAgents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getSearchAgentsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+export const getLinkAgentUrl = () => {
+
+
+
+
+  return `/api/buyer/link-agent`
+}
+
+/**
+ * @summary Link a verified agent as the buyer's agent
+ */
+export const linkAgent = async (linkAgentInput: LinkAgentInput, options?: Parameters<typeof customFetch>[1]): Promise<LinkAgent200> => {
+
+  return customFetch<LinkAgent200>(getLinkAgentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(linkAgentInput)
+  }
+);}
+
+
+
+
+
+export const getLinkAgentMutationOptions = <TError = ErrorType<BadRequestResponse | UnauthorizedResponse | NotFoundResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof linkAgent>>, TError,{data: BodyType<LinkAgentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof linkAgent>>, TError,{data: BodyType<LinkAgentInput>}, TContext> => {
+
+const mutationKey = ['linkAgent'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof linkAgent>>, {data: BodyType<LinkAgentInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  linkAgent(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LinkAgentMutationResult = NonNullable<Awaited<ReturnType<typeof linkAgent>>>
+    export type LinkAgentMutationBody = BodyType<LinkAgentInput>
+    export type LinkAgentMutationError = ErrorType<BadRequestResponse | UnauthorizedResponse | NotFoundResponse | void>
+
+    /**
+ * @summary Link a verified agent as the buyer's agent
+ */
+export const useLinkAgent = <TError = ErrorType<BadRequestResponse | UnauthorizedResponse | NotFoundResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof linkAgent>>, TError,{data: BodyType<LinkAgentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof linkAgent>>,
+        TError,
+        {data: BodyType<LinkAgentInput>},
+        TContext
+      > => {
+      return useMutation(getLinkAgentMutationOptions(options));
+    }
+
+export const getGetMyAgentUrl = () => {
+
+
+
+
+  return `/api/buyer/my-agent`
+}
+
+/**
+ * @summary Get the buyer's assigned agent
+ */
+export const getMyAgent = async ( options?: Parameters<typeof customFetch>[1]): Promise<GetMyAgent200> => {
+
+  return customFetch<GetMyAgent200>(getGetMyAgentUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMyAgentQueryKey = () => {
+    return [
+    `/api/buyer/my-agent`
+    ] as const;
+    }
+
+
+export const getGetMyAgentQueryOptions = <TData = Awaited<ReturnType<typeof getMyAgent>>, TError = ErrorType<UnauthorizedResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyAgent>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMyAgentQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyAgent>>> = ({ signal }) => getMyAgent({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMyAgent>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMyAgentQueryResult = NonNullable<Awaited<ReturnType<typeof getMyAgent>>>
+export type GetMyAgentQueryError = ErrorType<UnauthorizedResponse>
+
+
+/**
+ * @summary Get the buyer's assigned agent
+ */
+
+export function useGetMyAgent<TData = Awaited<ReturnType<typeof getMyAgent>>, TError = ErrorType<UnauthorizedResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyAgent>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMyAgentQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+export const getSendListingUrl = () => {
+
+
+
+
+  return `/api/agent/send-listing`
+}
+
+/**
+ * @summary Agent sends a listing to a linked client
+ */
+export const sendListing = async (sendListingInput: SendListingInput, options?: Parameters<typeof customFetch>[1]): Promise<SendListing200> => {
+
+  return customFetch<SendListing200>(getSendListingUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(sendListingInput)
+  }
+);}
+
+
+
+
+
+export const getSendListingMutationOptions = <TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendListing>>, TError,{data: BodyType<SendListingInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendListing>>, TError,{data: BodyType<SendListingInput>}, TContext> => {
+
+const mutationKey = ['sendListing'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendListing>>, {data: BodyType<SendListingInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  sendListing(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendListingMutationResult = NonNullable<Awaited<ReturnType<typeof sendListing>>>
+    export type SendListingMutationBody = BodyType<SendListingInput>
+    export type SendListingMutationError = ErrorType<BadRequestResponse | UnauthorizedResponse | void | NotFoundResponse>
+
+    /**
+ * @summary Agent sends a listing to a linked client
+ */
+export const useSendListing = <TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendListing>>, TError,{data: BodyType<SendListingInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendListing>>,
+        TError,
+        {data: BodyType<SendListingInput>},
+        TContext
+      > => {
+      return useMutation(getSendListingMutationOptions(options));
+    }
+
+export const getGetListingShareUrlUrl = (propertyId: number,) => {
+
+
+
+
+  return `/api/agent/listing-share-url/${propertyId}`
+}
+
+/**
+ * @summary Get a shareable URL for a listing
+ */
+export const getListingShareUrl = async (propertyId: number, options?: Parameters<typeof customFetch>[1]): Promise<GetListingShareUrl200> => {
+
+  return customFetch<GetListingShareUrl200>(getGetListingShareUrlUrl(propertyId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetListingShareUrlQueryKey = (propertyId: number,) => {
+    return [
+    `/api/agent/listing-share-url/${propertyId}`
+    ] as const;
+    }
+
+
+export const getGetListingShareUrlQueryOptions = <TData = Awaited<ReturnType<typeof getListingShareUrl>>, TError = ErrorType<UnauthorizedResponse | void | NotFoundResponse>>(propertyId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getListingShareUrl>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetListingShareUrlQueryKey(propertyId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getListingShareUrl>>> = ({ signal }) => getListingShareUrl(propertyId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: propertyId !== null && propertyId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getListingShareUrl>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetListingShareUrlQueryResult = NonNullable<Awaited<ReturnType<typeof getListingShareUrl>>>
+export type GetListingShareUrlQueryError = ErrorType<UnauthorizedResponse | void | NotFoundResponse>
+
+
+/**
+ * @summary Get a shareable URL for a listing
+ */
+
+export function useGetListingShareUrl<TData = Awaited<ReturnType<typeof getListingShareUrl>>, TError = ErrorType<UnauthorizedResponse | void | NotFoundResponse>>(
+ propertyId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getListingShareUrl>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetListingShareUrlQueryOptions(propertyId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
