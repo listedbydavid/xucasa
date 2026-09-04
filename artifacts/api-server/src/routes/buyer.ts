@@ -28,6 +28,7 @@ import { Router } from "express";
 const router = Router();
 
 import { checkFairHousing } from "../lib/notificationHelpers";
+import { canViewProperty, isDraftProperty } from "../lib/propertyVisibility";
 
 function redactBuyerProfile(profile: any) {
   const {
@@ -40,21 +41,30 @@ function redactBuyerProfile(profile: any) {
   return safe;
 }
 
+function sanitizeInterestRows(rows: any[], userId: string) {
+  return rows
+    .filter(row => canViewProperty(row.property, userId))
+    .map(row => ({
+      ...row,
+      property: row.property?.agentId === userId
+        ? row.property
+        : stripConfidentialFields(row.property),
+    }));
+}
+
 router.post("/api/swipe-interest", isAuthenticated, async (req: any, res) => {
   const buyerUserId = req.user.claims.sub;
   const parsedSwipe = z.object({ propertyId: z.number().int().positive() }).safeParse(req.body);
   if (!parsedSwipe.success) return res.status(400).json({ message: "propertyId required", errors: parsedSwipe.error.flatten() });
   const { propertyId } = parsedSwipe.data;
 
-  // Trigger 3a — swipe: silently assign platform agent if needed (fire-and-forget)
-  assignPlatformAgentIfNeeded(buyerUserId, req, "swipe").catch(() => {});
-
   try {
     const result = await executeWithAudit<any>(
       { req, event: "swipe_interest_created", userId: buyerUserId, propertyId },
       async () => {
         const prop = await storage.getProperty(propertyId);
-        if (!prop) throw new Error("Property not found");
+        if (!prop || isDraftProperty(prop)) throw new Error("Property not found");
+        assignPlatformAgentIfNeeded(buyerUserId, req, "swipe").catch(() => {});
 
         const { agent: assignedAgent, assignmentType } = await resolveBuyerAgent(buyerUserId, storage);
         await storage.upsertBuyerInterest(propertyId, buyerUserId, "swipe", assignedAgent?.id ?? undefined, prop?.agentId ?? undefined);
@@ -294,14 +304,13 @@ router.post("/api/buyer-interest", isAuthenticated, async (req: any, res) => {
   if (!parsedInterest.success) return res.status(400).json({ message: "propertyId required", errors: parsedInterest.error.flatten() });
   const { propertyId, source } = parsedInterest.data;
 
-  // Trigger 3b — buyer-interest / swipe: silently assign platform agent if needed
-  assignPlatformAgentIfNeeded(userId, req, "buyer_interest").catch(() => {});
-
   try {
     const result = await executeWithAudit(
       { req, event: "buyer_interest_upserted", userId, propertyId, metadata: { source: source || "swipe" } },
       async () => {
         const prop = await storage.getProperty(propertyId);
+        if (!prop || isDraftProperty(prop)) throw new Error("Property not found");
+        assignPlatformAgentIfNeeded(userId, req, "buyer_interest").catch(() => {});
         const { agent: assignedAgent, assignmentType } = await resolveBuyerAgent(userId, storage);
         const bi = await storage.upsertBuyerInterest(
           propertyId, userId, source || "swipe",
@@ -330,6 +339,7 @@ router.post("/api/buyer-interest", isAuthenticated, async (req: any, res) => {
     );
     res.status(201).json(result);
   } catch (err) {
+    if ((err as Error).message === "Property not found") return res.status(404).json({ message: "Property not found" });
     res.status(500).json({ message: "Internal Server Error", requestId: req.requestId });
   }
 });
@@ -359,10 +369,10 @@ router.get("/api/buyer-interest", isAuthenticated, async (req: any, res) => {
     const role = req.query.role;
     if (role === "agent") {
       const interests = await storage.getBuyerInterestForAgent(userId);
-      res.json(interests);
+      res.json(sanitizeInterestRows(interests, userId));
     } else {
       const interests = await storage.getBuyerInterestForBuyer(userId);
-      res.json(interests);
+      res.json(sanitizeInterestRows(interests, userId));
     }
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
@@ -373,7 +383,7 @@ router.get("/api/buyer-interest/agent", isAuthenticated, async (req: any, res) =
   try {
     const userId = req.user.claims.sub;
     const interests = await storage.getBuyerInterestForAgent(userId);
-    res.json(interests);
+    res.json(sanitizeInterestRows(interests, userId));
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
   }
@@ -383,7 +393,7 @@ router.get("/api/buyer-interest/mine", isAuthenticated, async (req: any, res) =>
   try {
     const userId = req.user.claims.sub;
     const interests = await storage.getBuyerInterestForBuyer(userId);
-    res.json(interests);
+    res.json(sanitizeInterestRows(interests, userId));
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
   }
@@ -398,6 +408,8 @@ router.patch("/api/buyer-interest/:id", isAuthenticated, async (req: any, res) =
 
   const existing = await db.select().from(buyerInterest).where(eq(buyerInterest.id, id)).limit(1);
   if (!existing.length) return res.status(404).json({ message: "Not found" });
+  const property = await storage.getProperty(existing[0].propertyId);
+  if (!property || !canViewProperty(property, userId)) return res.status(404).json({ message: "Not found" });
 
   const buyer = await storage.getUser(existing[0].buyerUserId);
   const isAssignedAgent = buyer?.assignedAgentUserId === userId;

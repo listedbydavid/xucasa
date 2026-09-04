@@ -29,8 +29,17 @@ import { authStorage } from "../replit_integrations/auth/storage";
 import { assignPlatformAgentIfNeeded } from "../lib/assignPlatformAgent";
 import { createListingShareToken } from "../lib/listingShareAccess";
 import { hasListingShareAccess } from "../lib/listingShareAccess";
+import { isDraftProperty } from "../lib/propertyVisibility";
+import { rateLimit } from "express-rate-limit";
 
 const router = Router();
+const guestLeadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many inquiries. Please try again later." },
+});
 
 // ── Safe public agent shape ──────────────────────────────────────────────────
 
@@ -221,7 +230,7 @@ router.get("/api/properties/:id/contact-agent", async (req: any, res): Promise<v
     }
 
     const prop = await storage.getProperty(id);
-    if (!prop) {
+    if (!prop || isDraftProperty(prop)) {
       res.status(404).json({ message: "Property not found" });
       return;
     }
@@ -249,7 +258,7 @@ router.get("/api/properties/:id/contact-agent", async (req: any, res): Promise<v
 // ── POST /api/properties/:id/tour-inquiry ────────────────────────────────────
 // Public — no auth required. Creates a sell_lead and notifies the displayed agent.
 
-router.post("/api/properties/:id/tour-inquiry", async (req: any, res): Promise<void> => {
+router.post("/api/properties/:id/tour-inquiry", guestLeadLimiter, async (req: any, res): Promise<void> => {
   try {
     const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
     if (isNaN(id)) {
@@ -279,7 +288,7 @@ router.post("/api/properties/:id/tour-inquiry", async (req: any, res): Promise<v
     }
 
     const prop = await storage.getProperty(id);
-    if (!prop) {
+    if (!prop || isDraftProperty(prop)) {
       res.status(404).json({ message: "Property not found" });
       return;
     }
@@ -334,6 +343,74 @@ router.post("/api/properties/:id/tour-inquiry", async (req: any, res): Promise<v
   }
 });
 
+// Public basic question form. Guests can contact the displayed agent without
+// creating an account; account-only conversation messaging remains protected.
+router.post("/api/properties/:id/question-inquiry", guestLeadLimiter, async (req: any, res): Promise<void> => {
+  try {
+    const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+    if (isNaN(id)) {
+      res.status(400).json({ message: "Invalid property ID" });
+      return;
+    }
+    const parsed = z.object({
+      name: z.string().trim().min(1, "Name is required").max(200),
+      email: z.string().trim().email().max(200).optional().nullable(),
+      phone: z.string().trim().max(30).optional().nullable(),
+      message: z.string().trim().min(1, "Question is required").max(2000),
+    }).safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid request" });
+      return;
+    }
+    if (!parsed.data.email && !parsed.data.phone) {
+      res.status(400).json({ message: "Please provide an email address or phone number" });
+      return;
+    }
+    const prop = await storage.getProperty(id);
+    if (!prop || isDraftProperty(prop) || !hasListingShareAccess(req, prop)) {
+      res.status(404).json({ message: "Property not found" });
+      return;
+    }
+    const propAddress = prop.title ?? prop.location ?? `Property #${id}`;
+    await storage.createSellLead({
+      name: parsed.data.name,
+      email: parsed.data.email ?? `noemail+${Date.now()}@xucasa.com`,
+      phone: parsed.data.phone ?? null,
+      fullAddress: propAddress,
+      agentNote: `Listing question for: ${propAddress}\n${parsed.data.message}`,
+    } as any);
+    const resolution = await resolvePropertyContactAgent(req, prop, id);
+    const notifyAgent = resolution?.notificationAgent;
+    if (notifyAgent?.id) {
+      await storage.createNotification({
+        userId: notifyAgent.id,
+        type: "listing_question",
+        title: `Listing question from ${parsed.data.name}`,
+        message: `${parsed.data.message}${parsed.data.email ? ` · ${parsed.data.email}` : ""}${parsed.data.phone ? ` · ${parsed.data.phone}` : ""}`,
+        propertyId: id,
+        linkUrl: `/property/${id}`,
+        read: false,
+        archived: false,
+      });
+    }
+    await audit({
+      req,
+      event: "listing_question_created",
+      outcome: "success",
+      propertyId: id,
+      metadata: {
+        hasEmail: !!parsed.data.email,
+        hasPhone: !!parsed.data.phone,
+        agentId: notifyAgent?.id ?? null,
+      },
+    });
+    res.json({ success: true, message: "Your question was sent to the agent." });
+  } catch (err) {
+    req.log?.error({ event: "listing_question_error", error: (err as Error).message });
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 // ── POST /api/agent/send-listing ─────────────────────────────────────────────
 // Verified agent sends a listing to a linked client.
 
@@ -379,6 +456,10 @@ router.post("/api/agent/send-listing", isAuthenticated, async (req: any, res): P
     const prop = await storage.getProperty(propertyId);
     if (!prop) {
       res.status(404).json({ message: "Property not found" });
+      return;
+    }
+    if (isDraftProperty(prop)) {
+      res.status(409).json({ message: "Publish this draft before sending it to a client" });
       return;
     }
     if (!hasListingShareAccess(req, prop)) {
@@ -460,9 +541,15 @@ router.get("/api/agent/listing-share-url/:propertyId", isAuthenticated, async (r
       res.status(404).json({ message: "Property not found" });
       return;
     }
+    if (isDraftProperty(prop)) {
+      res.status(409).json({ message: "Publish this draft before sharing it" });
+      return;
+    }
 
     const ownsListing = prop.agentId === agentUserId
-      || (!!agentUser.email && prop.listingAgentEmail === agentUser.email);
+      || (!!agentUser.email && !!prop.listingAgentEmail
+        && prop.listingAgentEmail.toLowerCase() === agentUser.email.toLowerCase())
+      || (!!agentUser.agentMlsId && prop.listingAgentMlsId === agentUser.agentMlsId);
     if (!ownsListing) {
       res.status(403).json({ message: "You can only create share links for your own listings" });
       return;

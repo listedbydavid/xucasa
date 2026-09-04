@@ -29,13 +29,15 @@ import { Router } from "express";
   import { notifySavedPropertyPriceDrops } from "../lib/priceDropNotifications";
   import { deleteListingPhoto, getListingPhoto, uploadListingPhoto } from "../lib/listingPhotoStorage";
   import { hasListingShareAccess, isPrivateListing } from "../lib/listingShareAccess";
+  import { isDraftProperty } from "../lib/propertyVisibility";
 
   const ERROR_ARCHIVE_PATH = path.join(process.cwd(), "data", "error-archive.json");
   
 const router = Router();
 
-const listingStatuses = ["active", "coming_soon", "pre_market", "off_market", "pending", "sold", "archived"] as const;
+const listingStatuses = ["draft", "active", "coming_soon", "pre_market", "off_market", "pending", "sold", "archived"] as const;
 const listingStatusSchema = z.enum(listingStatuses);
+const manualListingStatuses = new Set(["draft", "active", "coming_soon", "pre_market", "off_market", "pending"]);
 const optionalText = (max: number) => z.string().trim().max(max).nullable().optional();
 
 const listingInputSchema = z.object({
@@ -71,8 +73,13 @@ const listingInputSchema = z.object({
   isOffMarket: z.boolean().optional(),
   lat: z.union([z.string(), z.number()]).nullable().optional(),
   lng: z.union([z.string(), z.number()]).nullable().optional(),
-  openHouseDate: z.string().datetime().nullable().optional(),
+  openHouseDate: z.string().trim().max(40).nullable().optional(),
   openHouseTime: optionalText(100),
+  listDate: z.string().trim().max(40).nullable().optional(),
+  virtualTourUrl: optionalText(2_000),
+  confidentialRemarks: optionalText(10_000),
+  showingInstructions: optionalText(5_000),
+  accessInstructions: optionalText(5_000),
   source: z.enum(["manual", "coming_soon", "pre_market", "off_market"]).optional(),
 }).strict();
 
@@ -107,25 +114,35 @@ function normaliseListingWrite(input: z.infer<typeof listingUpdateSchema>) {
   const requestedStatus = input.listingStatus ?? input.status;
   const updates: Record<string, unknown> = { ...input };
   delete updates.source;
-  delete updates.isOffMarket;
   if (requestedStatus) {
     updates.listingStatus = requestedStatus;
     updates.status = requestedStatus;
-    updates.isOffMarket = requestedStatus === "off_market";
-    updates.source = requestedStatus === "active" ? "manual" : requestedStatus;
   }
+  updates.source = "manual";
   if (input.baths !== undefined) updates.baths = String(input.baths);
   if (input.lat !== undefined && input.lat !== null) updates.lat = String(input.lat);
   if (input.lng !== undefined && input.lng !== null) updates.lng = String(input.lng);
   if (input.openHouseDate !== undefined) {
     updates.openHouseDate = input.openHouseDate ? new Date(input.openHouseDate) : null;
   }
+  if (input.listDate !== undefined) {
+    updates.listDate = input.listDate ? new Date(input.listDate) : null;
+  }
   return updates;
 }
 
 async function requireListingOwner(propertyId: number, userId: string) {
-  const property = await storage.getProperty(propertyId);
-  if (!property || property.agentId !== userId) return null;
+  const [property, agent] = await Promise.all([
+    storage.getProperty(propertyId),
+    authStorage.getUser(userId),
+  ]);
+  if (
+    !property
+    || property.agentId !== userId
+    || property.source !== "manual"
+    || agent?.role !== "agent"
+    || agent.agentVerified !== true
+  ) return null;
   return property;
 }
 
@@ -231,6 +248,8 @@ router.get(api.properties.get.path, async (req: any, res) => {
   const prop = await storage.getProperty(id);
   if (!prop) return res.status(404).json({ message: "Property not found" });
   if (!hasListingShareAccess(req, prop)) return res.status(404).json({ message: "Property not found" });
+  const viewerId = req.user?.claims?.sub;
+  const isOwner = !!viewerId && prop.agentId === viewerId;
   if (isPrivateListing(prop)) res.set("X-Robots-Tag", "noindex, nofollow");
 
   // Persist verified referring agent from ?agent= query param into the session.
@@ -250,7 +269,7 @@ router.get(api.properties.get.path, async (req: any, res) => {
     }
   }
   
-  res.status(200).json(stripConfidentialFields(prop));
+  res.status(200).json(isOwner ? prop : stripConfidentialFields(prop));
 });
 
 router.post(api.properties.create.path, isAuthenticated, async (req: any, res) => {
@@ -269,9 +288,9 @@ router.post(api.properties.create.path, isAuthenticated, async (req: any, res) =
     }
     const listingStatus = input.listingStatus
       ?? input.status
-      ?? (input.isOffMarket ? "off_market" : "active");
-    if (!["active", "coming_soon", "pre_market", "off_market"].includes(listingStatus)) {
-      return res.status(400).json({ message: "New listings must be active, coming soon, pre-market, or off-market" });
+      ?? "draft";
+    if (!manualListingStatuses.has(listingStatus)) {
+      return res.status(400).json({ message: "Invalid listing status", field: "status" });
     }
     const location = input.location
       || [input.addressCity, input.addressState].filter(Boolean).join(", ");
@@ -289,10 +308,17 @@ router.post(api.properties.create.path, isAuthenticated, async (req: any, res) =
       agentId: userId,
       agentPhone: agent.phone ?? null,
       agentEmail: agent.email ?? null,
+      listingAgentName: `${agent.firstName || ""} ${agent.lastName || ""}`.trim() || "Listing Agent",
+      listingAgentEmail: agent.email ?? null,
+      listingAgentPhone: agent.phone ?? null,
+      listingBrokerage: agent.brokerageName ?? null,
+      listingAgentLicenseNumber: agent.licenseNumber ?? null,
       listingStatus,
       status: listingStatus,
-      source: listingStatus === "active" ? "manual" : listingStatus,
-      isOffMarket: listingStatus === "off_market",
+      source: "manual",
+      photos: [],
+      isOffMarket: input.isOffMarket ?? false,
+      listDate: normalized.listDate ?? (listingStatus === "draft" ? null : new Date()),
     } as any);
     res.status(201).json(prop);
 
@@ -306,6 +332,10 @@ router.post(api.properties.create.path, isAuthenticated, async (req: any, res) =
     if (err instanceof z.ZodError) {
       res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
     } else {
+      logger.error({
+        event: "manual_listing_create_failed",
+        error: err instanceof Error ? err.message : String(err),
+      });
       res.status(500).json({ message: "Internal Server Error" });
     }
   }
@@ -323,14 +353,30 @@ router.put(api.properties.update.path, isAuthenticated, async (req: any, res) =>
     if (prop.agentId !== userId) {
       return res.status(403).json({ message: "You can only edit your own properties" });
     }
+    const agent = await authStorage.getUser(userId);
+    if (!agent || agent.role !== "agent" || agent.agentVerified !== true) {
+      return res.status(403).json({ message: "Verified agent access required" });
+    }
+    if (prop.source !== "manual") {
+      return res.status(403).json({ message: "MLS listings are managed by the IDX feed" });
+    }
 
     const input = listingUpdateSchema.parse(withoutServerOwnedAgentFields(req.body));
-    if (input.listingStatus === "archived" || input.status === "archived") {
-      return res.status(400).json({ message: "Use the archive action to archive a listing" });
+    const requestedStatus = input.listingStatus ?? input.status;
+    if (requestedStatus && !manualListingStatuses.has(requestedStatus)) {
+      return res.status(400).json({
+        message: requestedStatus === "archived"
+          ? "Use the archive action to archive a listing"
+          : "Invalid listing status",
+        field: "status",
+      });
     }
     const priceChanged = typeof input.price === "number" && input.price !== prop.price;
     const updatedProp = await storage.updateProperty(id, {
       ...normaliseListingWrite(input),
+      ...(prop.status === "draft" && requestedStatus && requestedStatus !== "draft" && !prop.listDate
+        ? { listDate: new Date() }
+        : {}),
       ...(priceChanged ? { priceUpdatedAt: new Date() } : {}),
     } as any);
     res.status(200).json(updatedProp);
@@ -378,10 +424,27 @@ router.delete(api.properties.delete.path, isAuthenticated, async (req: any, res)
     
     const user = req.user.claims;
     if (prop.agentId !== user.sub) {
-      return res.status(401).json({ message: "Unauthorized: You can only delete your own properties" });
+      return res.status(403).json({ message: "You can only delete your own properties" });
+    }
+    const agent = await authStorage.getUser(user.sub);
+    if (!agent || agent.role !== "agent" || agent.agentVerified !== true) {
+      return res.status(403).json({ message: "Verified agent access required" });
+    }
+    if (prop.source !== "manual") {
+      return res.status(403).json({ message: "MLS listings are managed by the IDX feed" });
     }
 
     await storage.deleteProperty(id);
+    const photoPrefix = `/api/listing-photos/${id}/`;
+    const photoResults = await Promise.allSettled(
+      (prop.photos || [])
+        .filter(photoUrl => photoUrl.startsWith(photoPrefix))
+        .map(photoUrl => deleteListingPhoto(id, photoUrl.slice(photoPrefix.length))),
+    );
+    const failedPhotos = photoResults.filter(result => result.status === "rejected").length;
+    if (failedPhotos > 0) {
+      logger.warn({ event: "listing_photo_cleanup_incomplete", propertyId: id, failedPhotos });
+    }
     res.status(204).end();
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
@@ -400,7 +463,10 @@ router.get("/api/listing-photos/:propertyId/:fileName", async (req, res) => {
     if (!file) return res.status(404).json({ message: "Photo not found" });
     const [metadata] = await file.getMetadata();
     res.setHeader("Content-Type", metadata.contentType || "image/webp");
-    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.setHeader(
+      "Cache-Control",
+      isPrivateListing(property) ? "private, no-store" : "public, max-age=31536000, immutable",
+    );
     file.createReadStream()
       .on("error", () => {
         if (!res.headersSent) res.status(500).json({ message: "Unable to read photo" });
@@ -465,20 +531,32 @@ router.post("/api/properties/:id/photos", isAuthenticated, (req: any, res) => {
 router.delete("/api/properties/:id/photos", isAuthenticated, async (req: any, res) => {
   try {
     const id = Number(req.params.id);
-    const body = z.object({ photoUrl: z.string().min(1) }).strict().parse(req.body);
+    const body = z.object({
+      photoUrl: z.string().min(1).optional(),
+      url: z.string().min(1).optional(),
+    }).strict().refine(value => !!(value.photoUrl || value.url), {
+      message: "Photo URL is required",
+    }).parse(req.body);
     const property = await requireListingOwner(id, req.user.claims.sub);
     if (!property) return res.status(403).json({ message: "You can only remove photos from your own listings" });
+    const photoUrl = body.photoUrl || body.url!;
     const expectedPrefix = `/api/listing-photos/${id}/`;
-    if (!body.photoUrl.startsWith(expectedPrefix) || !(property.photos || []).includes(body.photoUrl)) {
+    if (!photoUrl.startsWith(expectedPrefix) || !(property.photos || []).includes(photoUrl)) {
       return res.status(400).json({ message: "Photo does not belong to this listing" });
     }
-    const fileName = body.photoUrl.slice(expectedPrefix.length);
-    await deleteListingPhoto(id, fileName);
-    const photos = (property.photos || []).filter(photo => photo !== body.photoUrl);
+    const fileName = photoUrl.slice(expectedPrefix.length);
+    const photos = (property.photos || []).filter(photo => photo !== photoUrl);
     const updated = await storage.updateProperty(id, {
       photos,
-      imageUrl: property.imageUrl === body.photoUrl ? (photos[0] || null) : property.imageUrl,
+      imageUrl: property.imageUrl === photoUrl ? (photos[0] || null) : property.imageUrl,
     } as any);
+    await deleteListingPhoto(id, fileName).catch(error => {
+      logger.warn({
+        event: "listing_photo_delete_incomplete",
+        propertyId: id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
     res.json({ photos: updated.photos, imageUrl: updated.imageUrl });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -546,6 +624,7 @@ router.post("/api/properties/:id/inquiry", inquiryRateLimit, async (req: any, re
     const property = await storage.getProperty(id);
     if (!property) return res.status(404).json({ message: "Property not found" });
     if (!hasListingShareAccess(req, property)) return res.status(404).json({ message: "Property not found" });
+    if (isDraftProperty(property)) return res.status(404).json({ message: "Property not found" });
 
     let agentId: string | null = null;
     const buyerId = req.user?.claims?.sub;
@@ -809,6 +888,11 @@ router.get("/api/recently-sold", async (req, res) => {
           AND ${properties.price} IS NOT NULL
           AND ${properties.price} > 10000
           AND ${properties.imageUrl} IS NOT NULL
+          AND LOWER(COALESCE(
+            CASE WHEN ${properties.source} = 'idx' THEN ${properties.status} ELSE ${properties.listingStatus} END,
+            ${properties.status},
+            ''
+          )) NOT IN ('draft', 'archived')
           AND (
             3959 * acos(
               cos(radians(${lat})) * cos(radians(CAST(${properties.lat} AS double precision)))
@@ -916,6 +1000,9 @@ router.get("/api/properties/:id/agent-mls", isAuthenticated, async (req: any, re
     const prop = await storage.getProperty(id);
     if (!prop) return res.status(404).json({ message: "Property not found" });
     if (!hasListingShareAccess(req, prop)) return res.status(404).json({ message: "Property not found" });
+    if (prop.source === "manual" && prop.agentId !== req.user.claims.sub) {
+      return res.status(403).json({ message: "Confidential details are visible only to the listing owner" });
+    }
 
     res.json({
       mlsNumber: prop.mlsNumber,
@@ -983,7 +1070,7 @@ router.get("/api/properties/:id/zoning", async (req, res) => {
 router.get("/api/open-houses", async (_req, res) => {
   try {
     const openHouses = await storage.getUpcomingOpenHouses();
-    res.json(openHouses);
+    res.json(openHouses.map(stripConfidentialFields));
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }

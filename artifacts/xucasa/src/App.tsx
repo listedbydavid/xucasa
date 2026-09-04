@@ -65,6 +65,8 @@ import RestartButton from "@/components/tours/RestartButton";
 import { AppDownloadBanner } from "@/components/AppDownloadBanner";
 import CreateListing from "@/pages/CreateListing";
 import EditListing from "@/pages/EditListing";
+import CreateListingPage from "@/pages/CreateListingPage";
+import EditListingPage from "@/pages/EditListingPage";
 import AgentDirectory from "@/pages/AgentDirectory";
 import AgentProfilePage from "@/pages/AgentProfilePage";
 import AgentProfileSettings from "@/pages/AgentProfileSettings";
@@ -79,6 +81,8 @@ function Router() {
       <Route path="/search" component={Search} />
       <Route path="/create-listing">{() => <ProtectedRoute component={CreateListing} />}</Route>
       <Route path="/edit-listing/:id">{() => <ProtectedRoute component={EditListing} />}</Route>
+      <Route path="/agent/listings/new">{() => <ProtectedRoute component={CreateListingPage} />}</Route>
+      <Route path="/agent/listings/:id/edit">{() => <ProtectedRoute component={EditListingPage} />}</Route>
       <Route path="/sell">{() => <ProtectedRoute component={Sell} />}</Route>
       <Route path="/home-report">{() => <ProtectedRoute component={HomeReport} />}</Route>
       <Route path="/swipe" component={Swipe} />

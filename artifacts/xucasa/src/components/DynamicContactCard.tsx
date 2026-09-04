@@ -89,6 +89,17 @@ export function DynamicContactCard({
             <div className="text-xs text-muted-foreground truncate">{agent.brokerageName || "Agent"}</div>
           </div>
         </div>
+        {!isBuyersAgent && (
+          <button
+            type="button"
+            onClick={onAskQuestion}
+            className="mt-2 w-full flex items-center justify-center gap-2 border border-border bg-muted/60 hover:bg-muted py-2 rounded-lg text-sm font-bold transition-colors"
+            data-testid="button-guest-question"
+          >
+            <MessageSquare className="w-4 h-4" />
+            Ask a question
+          </button>
+        )}
         
         <div className="flex gap-2">
           {isBuyersAgent ? (
@@ -140,6 +151,17 @@ export function DynamicContactCard({
             {isBuyersAgent ? <MessageSquare className="w-4 h-4" /> : null}
             {isBuyersAgent ? `Message ${agent.firstName}` : "Schedule a Tour"}
           </button>
+          {!isBuyersAgent && (
+            <button
+              type="button"
+              onClick={onAskQuestion}
+              className="flex items-center justify-center gap-2 bg-muted text-foreground py-3 px-4 rounded-xl font-semibold border border-border active:scale-[0.98]"
+              aria-label="Ask a question"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Ask
+            </button>
+          )}
           {agent.phone && (
             <a
               href={`tel:${agent.phone.replace(/\D/g, "")}`}

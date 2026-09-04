@@ -230,6 +230,20 @@ export function PropertyCard({ property }: PropertyCardProps) {
           </div>
 
           <div className="absolute top-4 left-4 flex flex-col gap-2 pointer-events-none">
+            {property.status && property.status !== "active" && (
+              <span className={`text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg ${
+                property.status === "coming_soon" ? "bg-blue-600"
+                  : property.status === "pre_market" ? "bg-violet-600"
+                  : property.status === "pending" ? "bg-amber-500"
+                  : "bg-zinc-800"
+              }`} data-testid={`badge-status-${property.id}`}>
+                {property.status === "coming_soon" ? "Coming Soon"
+                  : property.status === "pre_market" ? "Pre-Market"
+                  : property.status === "off_market" ? "Off Market"
+                  : property.status === "pending" ? "Pending"
+                  : property.status.replace(/_/g, " ")}
+              </span>
+            )}
             {hasConcession && (
               <span
                 className="bg-amber-500 text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-lg"

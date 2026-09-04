@@ -21,6 +21,7 @@ import { Router } from "express";
   import { logger } from "../logger";
   import { stripConfidentialFields, CONFIDENTIAL_MLS_FIELDS } from "../lib/mlsHelpers";
   import { runAgentVerificationFlow } from "../lib/agentVerification";
+  import { canViewProperty, isDraftProperty } from "../lib/propertyVisibility";
 
   const ERROR_ARCHIVE_PATH = path.join(process.cwd(), "data", "error-archive.json");
   
@@ -30,6 +31,10 @@ router.get("/api/properties/:id/reviews", async (req, res) => {
   try {
     const propertyId = parseInt(req.params.id);
     if (isNaN(propertyId)) return res.status(400).json({ message: "Invalid ID" });
+    const property = await storage.getProperty(propertyId);
+    if (!property || !canViewProperty(property, req.user?.claims?.sub)) {
+      return res.status(404).json({ message: "Property not found" });
+    }
     const reviews = await storage.getPropertyReviews(propertyId);
     const publicReviews = reviews
       .filter(r => r.isPublic)
@@ -65,7 +70,7 @@ router.get("/api/properties/:id/reviews/all", isAuthenticated, async (req: any, 
     }
 
     const prop = await storage.getProperty(propertyId);
-    if (!prop) return res.status(404).json({ message: "Property not found" });
+    if (!prop || isDraftProperty(prop)) return res.status(404).json({ message: "Property not found" });
 
     if (!isAdmin && prop.agentId !== userId) {
       return res.status(403).json({ message: "Only the listing agent or admin can view all reviews" });
@@ -127,7 +132,7 @@ router.post("/api/properties/:id/reviews", isAuthenticated, async (req: any, res
     const { rating, comment } = parsedReview.data;
 
     const prop = await storage.getProperty(propertyId);
-    if (!prop) return res.status(404).json({ message: "Property not found" });
+    if (!prop || isDraftProperty(prop)) return res.status(404).json({ message: "Property not found" });
 
     const review = await storage.createPropertyReview({
       propertyId,

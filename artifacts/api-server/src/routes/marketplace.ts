@@ -27,6 +27,18 @@ import { Router } from "express";
 const router = Router();
 
 import { trySendNotificationEmail, checkFairHousing } from "../lib/notificationHelpers";
+import { canViewProperty, isDraftProperty } from "../lib/propertyVisibility";
+
+function sanitizeBuyerMatches(matches: any[], viewerUserId: string) {
+  return matches
+    .filter(match => canViewProperty(match.property, viewerUserId))
+    .map(match => ({
+      ...match,
+      property: match.property.agentId === viewerUserId
+        ? match.property
+        : stripConfidentialFields(match.property),
+    }));
+}
 
 router.post("/api/seller-pitches", async (req: any, res) => {
   try {
@@ -66,6 +78,7 @@ router.post("/api/buyer-matches", isAuthenticated, async (req, res) => {
     if (parsed.data.propertyId) {
       const property = await storage.getProperty(parsed.data.propertyId);
       if (!property) return res.status(404).json({ message: "Property not found" });
+      if (isDraftProperty(property)) return res.status(409).json({ message: "Publish this listing before sharing it" });
       if (property.agentId !== userId) {
         const user = await storage.getUser(userId);
         const isAdmin = !!(process.env.ADMIN_EMAIL && user?.email && user.email.toLowerCase() === process.env.ADMIN_EMAIL.toLowerCase());
@@ -150,7 +163,7 @@ router.get("/api/buyer-matches/profile/:profileId", isAuthenticated, async (req,
       return res.status(403).json({ message: "Access denied" });
     }
     const matches = await storage.getBuyerMatchesForProfile(profileId);
-    res.json(matches);
+    res.json(sanitizeBuyerMatches(matches, req.user!.claims.sub));
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }
@@ -158,8 +171,9 @@ router.get("/api/buyer-matches/profile/:profileId", isAuthenticated, async (req,
 
 router.get("/api/buyer-matches/sent", isAuthenticated, async (req, res) => {
   try {
-    const matches = await storage.getBuyerMatchesForSender(req.user!.claims.sub);
-    res.json(matches);
+    const userId = req.user!.claims.sub;
+    const matches = await storage.getBuyerMatchesForSender(userId);
+    res.json(sanitizeBuyerMatches(matches, userId));
   } catch (err: any) {
     res.status(500).json({ message: err.message });
   }

@@ -53,6 +53,7 @@ router.get("/api/property-lookup", async (req, res) => {
     }
     const conditions = [
       ilike(properties.addressCity, city.trim()),
+       sql`${properties.status} IS DISTINCT FROM 'draft'`,
     ];
     if (streetNumber) {
       conditions.push(eq(properties.addressStreetNumber, streetNumber.trim()));

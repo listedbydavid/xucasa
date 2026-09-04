@@ -2,11 +2,10 @@ import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { usePageMeta } from "@/hooks/use-page-meta";
 import { useAuth } from "@/hooks/use-auth";
-import { useMyProperties, useCreateProperty, useUpdateProperty, useDeleteProperty } from "@/hooks/use-properties";
+import { useMyProperties } from "@/hooks/use-properties";
 import { Plus, Edit3, Trash2, Home, X, Search, Camera, ImageOff, CheckCircle2, Link, Users, CalendarDays, ChevronDown, ChevronUp, Heart, BookmarkCheck, ShieldCheck, Radar, Send, Eye, ContactRound, MessageSquare, AlertCircle, Loader2, BadgeCheck, Tag, Share2, BarChart3 } from "lucide-react";
 import { ConcessionForm } from "@/components/ConcessionForm";
 import { SendListingModal } from "@/components/SendListingModal";
-import { ShareListingModal } from "@/components/ShareListingModal";
 import { ReverseOfferForm } from "@/components/ReverseOfferForm";
 import { IdxSyncPanel } from "@/components/IdxSyncPanel";
 import type { PropertyResponse, CreatePropertyRequest } from "@/shared/schema";
@@ -20,6 +19,7 @@ import { BeaconTab } from "@/components/BeaconReport";
 import SpotlightTour from "@/components/tours/SpotlightTour";
 import { OpenHouseRoutePlanner } from "@/components/OpenHouseRoutePlanner";
 import { AgentContactsSection } from "@/components/AgentContacts";
+import { AgentListingsSection as ManagedAgentListingsSection } from "@/components/AgentListingsSection";
 
 type AgentTab = "listings" | "clients" | "contacts" | "openhouses" | "beacon" | "idx" | "buyerinterest";
 
@@ -33,17 +33,10 @@ export default function AgentDashboard() {
   usePageMeta({ title: 'Agent Portal', noIndex: true });
   const { user, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
-  const { data: myProperties, isLoading } = useMyProperties();
+  const { data: myProperties } = useMyProperties();
   const properties = myProperties || [];
-  const { mutate: createProperty, isPending: isCreating } = useCreateProperty();
-  const { mutate: updateProperty, isPending: isUpdating } = useUpdateProperty();
-  const { mutate: deleteProperty } = useDeleteProperty();
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingProperty, setEditingProperty] = useState<PropertyResponse | null>(null);
   const [activeTab, setActiveTab] = useState<AgentTab>("listings");
-  const [concessionPropertyId, setConcessionPropertyId] = useState<number | null>(null);
-  const [sharePropertyId, setSharePropertyId] = useState<number | null>(null);
 
   const agentListings = properties;
 
@@ -57,17 +50,7 @@ export default function AgentDashboard() {
   }
 
   const openNew = () => {
-    setLocation("/create-listing");
-  };
-
-  const openEdit = (p: PropertyResponse) => {
-    setLocation(`/edit-listing/${p.id}`);
-  };
-
-  const handleDelete = (id: number) => {
-    if (confirm("Are you sure you want to delete this listing?")) {
-      deleteProperty(id);
-    }
+    setLocation("/agent/listings/new");
   };
 
   return (
@@ -110,7 +93,7 @@ export default function AgentDashboard() {
               </div>
             )}
           </div>
-          {activeTab === "listings" && (
+          {activeTab === "listings" && user?.agentVerified && (
             <button
               onClick={openNew}
               className="flex items-center gap-2 bg-foreground text-background px-6 py-3 rounded-xl font-bold hover:bg-primary hover:text-white transition-all shadow-lg active:scale-95"
@@ -159,7 +142,15 @@ export default function AgentDashboard() {
         </div>
 
         {/* Listings Tab */}
-        {activeTab === "listings" && <AgentListingsSection myProperties={agentListings} openNew={openNew} openEdit={openEdit} setSharePropertyId={setSharePropertyId} setConcessionPropertyId={setConcessionPropertyId} handleDelete={handleDelete} isLoading={isLoading} />}
+        {activeTab === "listings" && (
+          user?.agentVerified
+            ? <ManagedAgentListingsSection />
+            : (
+              <div className="rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">
+                Verify your agent account to create and manage listings.
+              </div>
+            )
+        )}
         {/* Clients Tab */}
         {activeTab === "clients" && <AgentClientsSection />}
 
@@ -181,11 +172,6 @@ export default function AgentDashboard() {
         )}
       </div>
 
-      <ShareListingModal
-        propertyId={sharePropertyId}
-        isOpen={sharePropertyId !== null}
-        onClose={() => setSharePropertyId(null)}
-      />
       <SpotlightTour pageKey="agent" isAuthenticated={isAuthenticated} />
     </div>
   );

@@ -4,6 +4,7 @@ type ShareableProperty = {
   id: number;
   agentId?: string | null;
   listingStatus?: string | null;
+  status?: string | null;
   isOffMarket?: boolean | null;
 };
 
@@ -12,9 +13,11 @@ function getSecret(): string | null {
 }
 
 export function isPrivateListing(property: ShareableProperty): boolean {
+  const status = (property.listingStatus || property.status || "").toLowerCase();
   return property.isOffMarket === true
-    || property.listingStatus === "off_market"
-    || property.listingStatus === "pre_market";
+    || status === "draft"
+    || status === "off_market"
+    || status === "pre_market";
 }
 
 export function createListingShareToken(property: ShareableProperty): string {
@@ -36,8 +39,14 @@ export function verifyListingShareToken(property: ShareableProperty, token: unkn
 }
 
 export function hasListingShareAccess(req: any, property: ShareableProperty): boolean {
+  const status = (property.listingStatus || property.status || "").toLowerCase();
+  const isOwner = !!req.user?.claims?.sub && req.user.claims.sub === property.agentId;
+
+  // Drafts are never share-token or session accessible. Only the exact
+  // server-owned listing agent may view them.
+  if (status === "draft") return isOwner;
   if (!isPrivateListing(property)) return true;
-  if (req.user?.claims?.sub && req.user.claims.sub === property.agentId) return true;
+  if (isOwner) return true;
 
   const token = req.query?.shareToken;
   if (verifyListingShareToken(property, token)) {

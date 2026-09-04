@@ -21,25 +21,37 @@ import { Router } from "express";
   import { logger } from "../logger";
   import { stripConfidentialFields, CONFIDENTIAL_MLS_FIELDS } from "../lib/mlsHelpers";
   import { runAgentVerificationFlow } from "../lib/agentVerification";
+  import { canViewProperty } from "../lib/propertyVisibility";
 
   const ERROR_ARCHIVE_PATH = path.join(process.cwd(), "data", "error-archive.json");
   
 const router = Router();
 
-router.get("/api/concessions/active", async (_req, res) => {
+router.get("/api/concessions/active", async (req: any, res) => {
   try {
-    const rows = await db.select().from(sellerConcessions)
+    const rows = await db
+      .select({ concession: sellerConcessions, property: properties })
+      .from(sellerConcessions)
+      .innerJoin(properties, eq(sellerConcessions.propertyId, properties.id))
       .where(eq(sellerConcessions.isActive, true));
-    res.json({ concessions: rows });
+    res.json({
+      concessions: rows
+        .filter(row => canViewProperty(row.property, req.user?.claims?.sub))
+        .map(row => row.concession),
+    });
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
 
-router.get("/api/properties/:id/concessions", async (req, res) => {
+router.get("/api/properties/:id/concessions", async (req: any, res) => {
   try {
     const propertyId = parseInt(req.params.id);
     if (!Number.isFinite(propertyId)) return res.status(400).json({ message: "Invalid id" });
+    const property = await storage.getProperty(propertyId);
+    if (!property || !canViewProperty(property, req.user?.claims?.sub)) {
+      return res.status(404).json({ message: "Property not found" });
+    }
     const rows = await db.select().from(sellerConcessions)
       .where(and(eq(sellerConcessions.propertyId, propertyId), eq(sellerConcessions.isActive, true)))
       .orderBy(desc(sellerConcessions.createdAt))
@@ -58,6 +70,9 @@ router.post("/api/properties/:id/concessions", isAuthenticated, async (req: any,
   try {
     const property = await storage.getProperty(propertyId);
     if (!property) return res.status(404).json({ message: "Property not found" });
+    if (!canViewProperty(property, userId)) {
+      return res.status(404).json({ message: "Property not found" });
+    }
 
     const caller = await storage.getUser(userId);
     if (!caller) return res.status(401).json({ message: "Unauthorized" });
@@ -111,6 +126,10 @@ router.delete("/api/properties/:id/concessions", isAuthenticated, async (req: an
   if (!Number.isFinite(propertyId)) return res.status(400).json({ message: "Invalid id" });
 
   try {
+    const property = await storage.getProperty(propertyId);
+    if (!property || !canViewProperty(property, userId)) {
+      return res.status(404).json({ message: "Property not found" });
+    }
     const caller = await storage.getUser(userId);
     const isAdmin = caller?.role === "admin";
 

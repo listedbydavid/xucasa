@@ -4,6 +4,7 @@ import { DAVID_USER_ID, storage } from "../storage";
 import { authStorage } from "../replit_integrations/auth/storage";
 import { isAuthenticated } from "../replit_integrations/auth/authGuard";
 import { stripConfidentialFields } from "../lib/mlsHelpers";
+import { canViewProperty } from "../lib/propertyVisibility";
 import { audit } from "../auditLog";
 
 const router = Router();
@@ -149,10 +150,16 @@ router.get("/api/agent-clients/:clientId/favorites", isAuthenticated, async (req
       return res.status(403).json({ message: "Not authorized to view this client" });
     }
     const saved = await storage.getSavedProperties(req.params.clientId);
-    return res.json(saved.map(item => ({
-      ...item,
-      property: stripConfidentialFields(item.property),
-    })));
+    return res.json(
+      saved
+        .filter(item => canViewProperty(item.property, agentUserId))
+        .map(item => ({
+          ...item,
+          property: item.property.agentId === agentUserId
+            ? item.property
+            : stripConfidentialFields(item.property),
+        })),
+    );
   } catch (err: any) {
     return res.status(500).json({ message: err.message });
   }

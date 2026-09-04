@@ -27,6 +27,18 @@ import { Router } from "express";
 const router = Router();
 
 import { trySendNotificationEmail } from "../lib/notificationHelpers";
+import { canViewProperty, isDraftProperty } from "../lib/propertyVisibility";
+
+function sanitizePropertyRows(rows: any[], userId: string) {
+  return rows
+    .filter(row => canViewProperty(row.property, userId))
+    .map(row => ({
+      ...row,
+      property: row.property?.agentId === userId
+        ? row.property
+        : stripConfidentialFields(row.property),
+    }));
+}
 
 router.post("/api/property-offers", isAuthenticated, async (req: any, res) => {
   const creatorId = req.user.claims.sub;
@@ -65,7 +77,7 @@ router.post("/api/property-offers", isAuthenticated, async (req: any, res) => {
       { req, event: "reverse_offer_created", userId: creatorId, propertyId, metadata: { buyerUserId, offerPrice } },
       async () => {
     const prop = await storage.getProperty(propertyId);
-    if (!prop) throw new Error("Property not found");
+    if (!prop || isDraftProperty(prop)) throw new Error("Property not found");
 
     const creator = await storage.getUser(creatorId);
     const isAdmin = creator?.email === process.env.ADMIN_EMAIL;
@@ -246,7 +258,7 @@ router.get("/api/property-offers/incoming", isAuthenticated, async (req: any, re
     const user = await storage.getUser(userId);
     if (user?.role === "agent" || user?.role === "admin") {
       const offers = await storage.getPropertyOffersForAgent(userId);
-      res.json(offers);
+      res.json(sanitizePropertyRows(offers, userId));
     } else {
       res.status(403).json({ message: "Offer details are communicated through your assigned agent" });
     }
@@ -259,7 +271,7 @@ router.get("/api/property-offers/agent", isAuthenticated, async (req: any, res) 
   try {
     const agentId = req.user.claims.sub;
     const offers = await storage.getPropertyOffersForAgent(agentId);
-    res.json(offers);
+    res.json(sanitizePropertyRows(offers, agentId));
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
   }
@@ -269,7 +281,7 @@ router.get("/api/swipe-notifications/agent", isAuthenticated, async (req: any, r
   try {
     const userId = req.user.claims.sub;
     const notifications = await storage.getSwipeNotificationsForUser(userId);
-    res.json(notifications);
+    res.json(sanitizePropertyRows(notifications, userId));
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
   }
@@ -420,6 +432,8 @@ router.post("/api/property-offers/:id/buyer-response", isAuthenticated, async (r
     const offers = await db.select().from(propertyOffers).where(eq(propertyOffers.id, id));
     const offer = offers[0];
     if (!offer) throw new Error("Offer not found");
+    const property = await storage.getProperty(offer.propertyId);
+    if (!property || isDraftProperty(property)) throw new Error("Offer not found");
 
     if (offer.buyerUserId !== userId) {
       throw new Error("Only the buyer can respond to this offer");

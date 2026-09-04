@@ -58,6 +58,10 @@ import {
   conversations,
   messages,
   showingRequests,
+  sellerConcessions,
+  propertyAnalytics,
+  propertyInquiries,
+  priceDropNotificationDeliveries,
   type BuyerInterest,
   type InsertBuyerInterest,
   type Conversation,
@@ -438,7 +442,7 @@ export interface IStorage {
   // Buyer Matches
   createBuyerMatch(match: InsertBuyerMatch): Promise<BuyerMatch>;
   getBuyerMatchesForProfile(profileId: number): Promise<(BuyerMatch & { property: Property | null; sender: any })[]>;
-  getBuyerMatchesForSender(senderId: string): Promise<(BuyerMatch & { buyerProfile: BuyerProfile })[]>;
+  getBuyerMatchesForSender(senderId: string): Promise<(BuyerMatch & { buyerProfile: BuyerProfile; property: Property | null })[]>;
 
   // Seller Pitches
   createSellerPitch(pitch: InsertSellerPitch): Promise<SellerPitch>;
@@ -592,10 +596,14 @@ export class DatabaseStorage implements IStorage {
     // misclassified rental can still have status='active'.
     conditions.push(sql`(${properties.status} IS NULL OR LOWER(${properties.status}) <> 'rental')`);
     conditions.push(sql`(${properties.propertyType} IS NULL OR LOWER(${properties.propertyType}) NOT IN ('rental', 'residential lease'))`);
-    conditions.push(sql`NOT (
-      LOWER(${properties.listingStatus}) IN ('archived', 'off_market')
-      OR ${properties.isOffMarket} = true
-    )`);
+    conditions.push(sql`LOWER(COALESCE(
+      CASE
+        WHEN ${properties.source} = 'idx' THEN ${properties.status}
+        ELSE ${properties.listingStatus}
+      END,
+      ${properties.status},
+      ''
+    )) NOT IN ('draft', 'archived')`);
     // Also hide listings the IDX feed has dropped (status='removed'), unless
     // the caller asked for a specific status (e.g. status=removed for admin).
     if (!filters?.status) {
@@ -639,12 +647,19 @@ export class DatabaseStorage implements IStorage {
         }
       }
       if (filters.status) {
-        conditions.push(sql`LOWER(
+        const effectiveStatus = sql`LOWER(COALESCE(
           CASE
             WHEN ${properties.source} = 'idx' THEN ${properties.status}
             ELSE ${properties.listingStatus}
-          END
-        ) = LOWER(${filters.status})`);
+          END,
+          ${properties.status},
+          ''
+        ))`;
+        if (filters.status === "coming_soon") {
+          conditions.push(sql`${effectiveStatus} IN ('coming_soon', 'pre_market')`);
+        } else {
+          conditions.push(sql`${effectiveStatus} = LOWER(${filters.status})`);
+        }
       }
       if (filters.source) {
         conditions.push(eq(properties.source, filters.source));
@@ -736,7 +751,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteProperty(id: number): Promise<void> {
-    await db.delete(properties).where(eq(properties.id, id));
+    await db.transaction(async tx => {
+      const propertyConversations = await tx
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(eq(conversations.propertyId, id));
+      const conversationIds = propertyConversations.map(conversation => conversation.id);
+
+      await tx.delete(showingRequests).where(eq(showingRequests.propertyId, id));
+      await tx.delete(buyerInterest).where(eq(buyerInterest.propertyId, id));
+      await tx.delete(buyerMatches).where(eq(buyerMatches.propertyId, id));
+      await tx.delete(swipeNotifications).where(eq(swipeNotifications.propertyId, id));
+      await tx.delete(propertyOffers).where(eq(propertyOffers.propertyId, id));
+      await tx.delete(savedProperties).where(eq(savedProperties.propertyId, id));
+      await tx.delete(propertyReviews).where(eq(propertyReviews.propertyId, id));
+      await tx.delete(sellerConcessions).where(eq(sellerConcessions.propertyId, id));
+      await tx.delete(notifications).where(eq(notifications.propertyId, id));
+      await tx.delete(priceDropNotificationDeliveries)
+        .where(eq(priceDropNotificationDeliveries.propertyId, id));
+      if (conversationIds.length > 0) {
+        await tx.delete(messages).where(inArray(messages.conversationId, conversationIds));
+      }
+      await tx.delete(conversations).where(eq(conversations.propertyId, id));
+      await tx.delete(propertyAnalytics).where(eq(propertyAnalytics.propertyId, id));
+      await tx.delete(propertyInquiries).where(eq(propertyInquiries.propertyId, id));
+      await tx.delete(properties).where(eq(properties.id, id));
+    });
   }
 
   async getFavoriteLists(userId: string): Promise<FavoriteList[]> {
@@ -882,7 +922,14 @@ export class DatabaseStorage implements IStorage {
       .select({ property: properties, agent: users })
       .from(properties)
       .leftJoin(users, eq(properties.agentId, users.id))
-      .where(gte(properties.openHouseDate, now));
+      .where(and(
+        gte(properties.openHouseDate, now),
+        sql`LOWER(COALESCE(
+          CASE WHEN ${properties.source} = 'idx' THEN ${properties.status} ELSE ${properties.listingStatus} END,
+          ${properties.status},
+          ''
+        )) NOT IN ('draft', 'archived')`,
+      ));
     return results.map(r => ({ ...r.property, agent: r.agent ? safeUser(r.agent as any) : null }));
   }
 
@@ -905,7 +952,13 @@ export class DatabaseStorage implements IStorage {
         count: count(),
       })
       .from(properties)
-      .where(sql`${properties.addressCity} ILIKE ${q} AND ${properties.addressCity} IS NOT NULL`)
+      .where(sql`${properties.addressCity} ILIKE ${q}
+        AND ${properties.addressCity} IS NOT NULL
+        AND LOWER(COALESCE(
+          CASE WHEN ${properties.source} = 'idx' THEN ${properties.status} ELSE ${properties.listingStatus} END,
+          ${properties.status},
+          ''
+        )) NOT IN ('draft', 'archived')`)
       .groupBy(properties.addressCity, properties.addressState)
       .orderBy(desc(count()))
       .limit(limit);
@@ -926,7 +979,13 @@ export class DatabaseStorage implements IStorage {
         count: count(),
       })
       .from(properties)
-      .where(sql`${properties.addressCounty} ILIKE ${q} AND ${properties.addressCounty} IS NOT NULL`)
+      .where(sql`${properties.addressCounty} ILIKE ${q}
+        AND ${properties.addressCounty} IS NOT NULL
+        AND LOWER(COALESCE(
+          CASE WHEN ${properties.source} = 'idx' THEN ${properties.status} ELSE ${properties.listingStatus} END,
+          ${properties.status},
+          ''
+        )) NOT IN ('draft', 'archived')`)
       .groupBy(properties.addressCounty, properties.addressState)
       .orderBy(desc(count()))
       .limit(limit);
@@ -965,6 +1024,11 @@ export class DatabaseStorage implements IStorage {
         OR ${fullAddr} ILIKE ${q}
       )
       AND (${properties.status} IS NULL OR LOWER(${properties.status}) NOT IN ('rental', 'removed'))
+      AND LOWER(COALESCE(
+        CASE WHEN ${properties.source} = 'idx' THEN ${properties.status} ELSE ${properties.listingStatus} END,
+        ${properties.status},
+        ''
+      )) NOT IN ('draft', 'archived')
       AND (${properties.propertyType} IS NULL OR LOWER(${properties.propertyType}) NOT IN ('rental', 'residential lease'))`)
       .orderBy(desc(properties.price))
       .limit(limit);
@@ -998,7 +1062,11 @@ export class DatabaseStorage implements IStorage {
     const allProps = await db.select().from(properties)
       .where(and(
         eq(properties.isOffMarket, false),
-        sql`(${properties.status} IS NULL OR LOWER(${properties.status}) NOT IN ('rental', 'removed'))`,
+        sql`LOWER(COALESCE(
+          CASE WHEN ${properties.source} = 'idx' THEN ${properties.status} ELSE ${properties.listingStatus} END,
+          ${properties.status},
+          ''
+        )) NOT IN ('draft', 'archived', 'rental', 'removed')`,
         sql`(${properties.propertyType} IS NULL OR LOWER(${properties.propertyType}) NOT IN ('rental', 'residential lease'))`,
       ));
 
@@ -1231,14 +1299,15 @@ export class DatabaseStorage implements IStorage {
     return results.map(r => ({ ...r.match, property: r.property, sender: r.sender ? safeUser(r.sender as any) : null }));
   }
 
-  async getBuyerMatchesForSender(senderId: string): Promise<(BuyerMatch & { buyerProfile: BuyerProfile })[]> {
+  async getBuyerMatchesForSender(senderId: string): Promise<(BuyerMatch & { buyerProfile: BuyerProfile; property: Property | null })[]> {
     const results = await db
-      .select({ match: buyerMatches, buyerProfile: buyerProfiles })
+      .select({ match: buyerMatches, buyerProfile: buyerProfiles, property: properties })
       .from(buyerMatches)
       .innerJoin(buyerProfiles, eq(buyerMatches.buyerProfileId, buyerProfiles.id))
+      .leftJoin(properties, eq(buyerMatches.propertyId, properties.id))
       .where(eq(buyerMatches.senderId, senderId))
       .orderBy(desc(buyerMatches.createdAt));
-    return results.map(r => ({ ...r.match, buyerProfile: r.buyerProfile }));
+    return results.map(r => ({ ...r.match, buyerProfile: r.buyerProfile, property: r.property }));
   }
 
   async createSellerPitch(pitch: InsertSellerPitch): Promise<SellerPitch> {

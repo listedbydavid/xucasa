@@ -297,6 +297,7 @@ export default function Search() {
           >
             <option value="">Status</option>
             <option value="active">Active</option>
+            <option value="coming_soon">Coming Soon & Pre-Market</option>
             <option value="pending">Pending</option>
             <option value="sold">Sold</option>
           </select>

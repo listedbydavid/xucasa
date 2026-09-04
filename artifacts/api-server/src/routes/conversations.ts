@@ -27,8 +27,12 @@ import { Router } from "express";
 const router = Router();
 
 import { trySendNotificationEmail } from "../lib/notificationHelpers";
+import { canViewProperty, isDraftProperty } from "../lib/propertyVisibility";
 
 async function validateConversationAccess(convo: any, userId: string): Promise<{ allowed: boolean; reason?: string }> {
+  if (convo.property && !canViewProperty(convo.property, userId)) {
+    return { allowed: false, reason: "Conversation not found" };
+  }
   const callerUser = await storage.getUser(userId);
   const callerRole = callerUser?.role || "user";
   if (callerRole === "admin") return { allowed: true };
@@ -90,12 +94,20 @@ async function resolveConversationRecipient(convo: any, senderUserId: string): P
 }
 
 function sanitizeConversationForCaller(convo: any, callerUserId: string, callerRole: string): any {
+  const safeConvo = convo.property
+    ? {
+        ...convo,
+        property: convo.property.agentId === callerUserId
+          ? convo.property
+          : stripConfidentialFields(convo.property),
+      }
+    : convo;
   const isListingAgent = convo.type === "agent_coordination" && convo.agentUserId === callerUserId && callerRole !== "admin";
   if (isListingAgent) {
-    const { relatedBuyerUserId, ...sanitized } = convo;
+    const { relatedBuyerUserId, ...sanitized } = safeConvo;
     return sanitized;
   }
-  return convo;
+  return safeConvo;
 }
 
 router.get("/api/conversations", isAuthenticated, async (req: any, res) => {
@@ -109,7 +121,9 @@ router.get("/api/conversations", isAuthenticated, async (req: any, res) => {
     }
     const type = isBuyerRole ? "buyer" : (req.query.type as string | undefined);
     const convos = await storage.getConversationsForUser(userId, type);
-    const sanitized = convos.map(c => sanitizeConversationForCaller(c, userId, callerRole));
+    const sanitized = convos
+      .filter(c => canViewProperty(c.property, userId))
+      .map(c => sanitizeConversationForCaller(c, userId, callerRole));
     res.json(sanitized);
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
@@ -124,7 +138,9 @@ router.get("/api/conversations/unread-count", isAuthenticated, async (req: any, 
       return res.json({ unreadCount: 0 });
     }
     const convos = await storage.getConversationsForUser(userId);
-    const total = convos.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+    const total = convos
+      .filter(c => canViewProperty(c.property, userId))
+      .reduce((sum, c) => sum + (c.unreadCount || 0), 0);
     res.json({ unreadCount: total });
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
@@ -161,7 +177,7 @@ router.post("/api/conversations", isAuthenticated, async (req: any, res) => {
     const { propertyId, buyerUserId, initialMessage, type: msgType, conversationType } = parsedBody.data;
 
     const prop = await storage.getProperty(propertyId);
-    if (!prop) return res.status(404).json({ message: "Property not found" });
+    if (!prop || isDraftProperty(prop)) return res.status(404).json({ message: "Property not found" });
 
     const callerUser = await storage.getUser(userId);
     const callerRole = callerUser?.role;
@@ -367,13 +383,15 @@ router.get("/api/showing-requests", isAuthenticated, async (req: any, res) => {
     const userId = req.user.claims.sub;
     const callerUser = await storage.getUser(userId);
     const requests = await storage.getShowingRequestsForUser(userId);
-    const sanitized = requests.map(r => {
+    const sanitized = requests.filter(r => canViewProperty(r.property, userId)).map(r => {
       const isListingAgentOnThis = r.property?.agentId === userId && r.agentUserId !== userId;
+      const safeProperty = r.property?.agentId === userId ? r.property : stripConfidentialFields(r.property);
+      const safeRequest = { ...r, property: safeProperty };
       if (isListingAgentOnThis && callerUser?.role !== "admin") {
-        const { buyer, buyerUserId, ...rest } = r as any;
+        const { buyer, buyerUserId, ...rest } = safeRequest as any;
         return { ...rest, buyerUserId: "[redacted]", buyer: null };
       }
-      return r;
+      return safeRequest;
     });
     res.json(sanitized);
   } catch (err) {
@@ -396,7 +414,7 @@ router.post("/api/showing-requests", isAuthenticated, async (req: any, res) => {
       { req, event: "showing_request_created", userId, propertyId },
       async () => {
         const prop = await storage.getProperty(propertyId);
-        if (!prop) throw new Error("Property not found");
+        if (!prop || isDraftProperty(prop)) throw new Error("Property not found");
 
         const assignedAgent = await storage.resolveAndAssignAgent(userId);
         if (!assignedAgent) throw new Error("No agent assigned");
@@ -467,6 +485,7 @@ router.patch("/api/showing-requests/:id", isAuthenticated, async (req: any, res)
   if (!existing) return res.status(404).json({ message: "Showing request not found" });
 
   const prop = await storage.getProperty(existing.propertyId);
+  if (!prop || isDraftProperty(prop)) return res.status(404).json({ message: "Property not found" });
   const buyer = await storage.getUser(existing.buyerUserId);
   const currentBuyerAgentId = buyer?.assignedAgentUserId ?? null;
   const isAssignedAgent = currentBuyerAgentId === userId;

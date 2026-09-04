@@ -11,8 +11,10 @@ export interface PaginatedProperties {
   offset: number;
 }
 
+type PropertySearchStatus = "active" | "coming_soon" | "pre_market" | "off_market" | "pending" | "sold" | "archived";
+
 // GET /api/properties
-export function useProperties(filters?: SearchCriteria & { isOffMarket?: 'true' | 'false'; maxSqft?: number; propertyType?: string; sort?: string; limit?: number; offset?: number }) {
+export function useProperties(filters?: SearchCriteria & { status?: PropertySearchStatus; isOffMarket?: 'true' | 'false'; maxSqft?: number; propertyType?: string; sort?: string; limit?: number; offset?: number }) {
   return useQuery<PaginatedProperties>({
     queryKey: [api.properties.list.path, filters],
     queryFn: async () => {
@@ -89,6 +91,7 @@ export function useCreateProperty() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.properties.list.path] });
       queryClient.invalidateQueries({ queryKey: ["/api/properties/mine"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent/listings"] });
       toast({ title: "Property Listed", description: "Your property is now live!" });
     },
     onError: (err: Error) => {
@@ -117,6 +120,7 @@ export function useUpdateProperty() {
       queryClient.invalidateQueries({ queryKey: [api.properties.list.path] });
       queryClient.invalidateQueries({ queryKey: ["/api/properties/mine"] });
       queryClient.invalidateQueries({ queryKey: [api.properties.get.path, variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent/listings"] });
       toast({ title: "Property Updated", description: "Changes saved successfully." });
     },
     onError: (err: Error) => {
@@ -142,11 +146,98 @@ export function useDeleteProperty() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.properties.list.path] });
       queryClient.invalidateQueries({ queryKey: ["/api/properties/mine"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent/listings"] });
       toast({ title: "Property Deleted", description: "The listing has been removed." });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
+  });
+}
+
+// ── Agent Listings ───────────────────────────────────────────────────────────
+export function useAgentListings() {
+  return useQuery<{ created: PropertyResponse[]; attributed: PropertyResponse[] }>({
+    queryKey: ["/api/agent/listings"],
+    queryFn: async () => {
+      const res = await fetch("/api/agent/listings", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch agent listings");
+      return res.json();
+    },
+  });
+}
+
+export function useUploadPropertyPhotos() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, formData }: { id: number; formData: FormData }) => {
+      const res = await fetch(`/api/properties/${id}/photos`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      return throwOnError(res, "Failed to upload photos");
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [api.properties.get.path, variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties/mine"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent/listings"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Upload Failed", description: err.message, variant: "destructive" });
+    },
+  });
+}
+
+export function useDeletePropertyPhoto() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, url }: { id: number; url: string }) => {
+      const res = await fetch(`/api/properties/${id}/photos`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoUrl: url }),
+        credentials: "include",
+      });
+      return throwOnError(res, "Failed to delete photo");
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [api.properties.get.path, variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties/mine"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent/listings"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Delete Failed", description: err.message, variant: "destructive" });
+    },
+  });
+}
+
+export function useReorderPropertyPhotos() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, photos }: { id: number; photos: string[] }) => {
+      const res = await fetch(`/api/properties/${id}/photos/reorder`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photos }),
+        credentials: "include",
+      });
+      return throwOnError(res, "Failed to reorder photos");
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [api.properties.get.path, variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties/mine"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agent/listings"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Reorder Failed", description: err.message, variant: "destructive" });
+    },
   });
 }
 

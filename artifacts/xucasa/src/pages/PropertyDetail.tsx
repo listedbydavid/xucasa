@@ -18,6 +18,7 @@ import { SdmlsDisclaimer } from "@/components/SdmlsDisclaimer";
 import { PropertyReviewSection } from "@/components/PropertyReviewSection";
 import { AgentMLSPanel } from "@/components/AgentMLSPanel";
 import SpotlightTour from "@/components/tours/SpotlightTour";
+import { serializeJsonLd } from "@/lib/jsonLd";
 
 class SectionErrorBoundary extends Component<{ children: ReactNode; name?: string }, { hasError: boolean }> {
   constructor(props: { children: ReactNode; name?: string }) {
@@ -1387,6 +1388,7 @@ export default function PropertyDetail() {
   const [showShowingModal, setShowShowingModal] = useState(false);
   const [showRequestInfoModal, setShowRequestInfoModal] = useState(false);
   const [questionText, setQuestionText] = useState("");
+  const [guestQuestion, setGuestQuestion] = useState({ name: "", email: "", phone: "" });
   const [showingDates, setShowingDates] = useState<string[]>([""]);
   const [showingNotes, setShowingNotes] = useState("");
   const [requestInfoChecks, setRequestInfoChecks] = useState({
@@ -1410,7 +1412,14 @@ export default function PropertyDetail() {
   const { toast } = useToast();
 
   const askMutation = useMutation({
-    mutationFn: async (data: { message: string; propertyId: number }) => {
+    mutationFn: async (data: { message: string; propertyId: number; guest?: typeof guestQuestion }) => {
+      if (!isAuthenticated) {
+        const res = await apiRequest("POST", `/api/properties/${data.propertyId}/question-inquiry`, {
+          ...data.guest,
+          message: data.message,
+        });
+        return { guest: true, ...(await res.json()) };
+      }
       const res = await apiRequest("POST", "/api/conversations", {
         propertyId: data.propertyId,
         initialMessage: data.message,
@@ -1421,12 +1430,17 @@ export default function PropertyDetail() {
     onSuccess: (data: any) => {
       setShowAskModal(false);
       setQuestionText("");
+      setGuestQuestion({ name: "", email: "", phone: "" });
+      if (data?.guest) {
+        toast({ title: "Question sent", description: "The agent will contact you using the details you provided." });
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       toast({ title: "Message sent!", description: "The agent will respond in your Messages." });
       navigate(`/conversations/${data.id}`);
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to send message.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Could not send question", description: error.message || "Please try again.", variant: "destructive" });
     },
   });
 
@@ -1655,7 +1669,6 @@ export default function PropertyDetail() {
   const propertyAddress = `${property.title}, ${property.location}`;
 
   const handleAskQuestion = () => {
-    if (!isAuthenticated) { setShowAuthPrompt(true); return; }
     setShowAskModal(true);
   };
 
@@ -1675,7 +1688,7 @@ export default function PropertyDetail() {
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
+            __html: serializeJsonLd({
               "@context": "https://schema.org",
               "@type": "RealEstateListing",
               "name": property.title,
@@ -1722,6 +1735,37 @@ export default function PropertyDetail() {
             </div>
             <div className="p-5 space-y-3">
               <p className="text-sm text-muted-foreground">About: {property.title}</p>
+              {!isAuthenticated && (
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">No account needed. Tell the agent how to reach you.</p>
+                  <input
+                    value={guestQuestion.name}
+                    onChange={e => setGuestQuestion(current => ({ ...current, name: e.target.value }))}
+                    placeholder="Your name"
+                    maxLength={200}
+                    className="w-full bg-muted border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    data-testid="input-question-name"
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input
+                      type="email"
+                      value={guestQuestion.email}
+                      onChange={e => setGuestQuestion(current => ({ ...current, email: e.target.value }))}
+                      placeholder="Email"
+                      className="w-full bg-muted border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      data-testid="input-question-email"
+                    />
+                    <input
+                      type="tel"
+                      value={guestQuestion.phone}
+                      onChange={e => setGuestQuestion(current => ({ ...current, phone: e.target.value }))}
+                      placeholder="Phone (optional)"
+                      className="w-full bg-muted border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      data-testid="input-question-phone"
+                    />
+                  </div>
+                </div>
+              )}
               <textarea
                 value={questionText}
                 onChange={e => setQuestionText(e.target.value)}
@@ -1734,8 +1778,8 @@ export default function PropertyDetail() {
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
               <button onClick={() => setShowAskModal(false)} className="px-4 py-2 text-sm font-medium text-muted-foreground">Cancel</button>
               <button
-                onClick={() => askMutation.mutate({ message: questionText, propertyId: property.id })}
-                disabled={!questionText.trim() || askMutation.isPending}
+                onClick={() => askMutation.mutate({ message: questionText, propertyId: property.id, guest: guestQuestion })}
+                disabled={!questionText.trim() || askMutation.isPending || (!isAuthenticated && (!guestQuestion.name.trim() || (!guestQuestion.email.trim() && !guestQuestion.phone.trim())))}
                 className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2 rounded-lg text-sm font-bold disabled:opacity-50"
                 data-testid="button-send-question"
               >
@@ -1925,9 +1969,19 @@ export default function PropertyDetail() {
             <div>
               <div className="flex items-center gap-3 mb-3">
                 <span className={`px-3 py-1 rounded-full font-bold text-xs ${
-                  property.status === 'active' ? 'bg-green-500 text-white' : 'bg-muted text-muted-foreground'
+                  property.status === 'active' ? 'bg-green-500 text-white'
+                    : property.status === 'coming_soon' ? 'bg-blue-600 text-white'
+                    : property.status === 'pre_market' ? 'bg-violet-600 text-white'
+                    : property.status === 'off_market' ? 'bg-zinc-800 text-white'
+                    : property.status === 'pending' ? 'bg-amber-500 text-white'
+                    : 'bg-muted text-muted-foreground'
                 }`}>
-                  {property.status === 'active' ? 'For Sale' : (property.status || 'active').toUpperCase()}
+                  {property.status === 'active' ? 'For Sale'
+                    : property.status === 'coming_soon' ? 'Coming Soon'
+                    : property.status === 'pre_market' ? 'Pre-Market'
+                    : property.status === 'off_market' ? 'Off Market'
+                    : property.status === 'pending' ? 'Pending'
+                    : (property.status || 'active').replace(/_/g, ' ')}
                 </span>
                 {property.isOffMarket && (
                   <span className="bg-foreground text-background px-3 py-1 rounded-full font-bold text-xs flex items-center gap-1">

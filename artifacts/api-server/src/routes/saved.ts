@@ -22,6 +22,7 @@ import { Router } from "express";
   import { stripConfidentialFields, CONFIDENTIAL_MLS_FIELDS } from "../lib/mlsHelpers";
   import { runAgentVerificationFlow } from "../lib/agentVerification";
   import { assignPlatformAgentIfNeeded } from "../lib/assignPlatformAgent";
+  import { canViewProperty } from "../lib/propertyVisibility";
 
   const ERROR_ARCHIVE_PATH = path.join(process.cwd(), "data", "error-archive.json");
   
@@ -31,7 +32,12 @@ router.get(api.savedProperties.list.path, isAuthenticated, async (req: any, res)
   try {
     const user = req.user.claims;
     const saved = await storage.getSavedProperties(user.sub);
-    res.status(200).json(saved.map(s => ({ ...s, property: stripConfidentialFields(s.property) })));
+    res.status(200).json(saved
+      .filter(s => canViewProperty(s.property, user.sub))
+      .map(s => ({
+        ...s,
+        property: s.property.agentId === user.sub ? s.property : stripConfidentialFields(s.property),
+      })));
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
   }
@@ -41,6 +47,10 @@ router.post(api.savedProperties.create.path, isAuthenticated, async (req: any, r
   try {
     const user = req.user.claims;
     const input = api.savedProperties.create.input.parse(req.body);
+    const property = await storage.getProperty(input.propertyId);
+    if (!property || !canViewProperty(property, user.sub)) {
+      return res.status(404).json({ message: "Property not found" });
+    }
 
     // Trigger 2 — first save: silently assign platform agent if needed
     assignPlatformAgentIfNeeded(user.sub, req, "save").catch(() => {});
@@ -61,6 +71,8 @@ router.delete(api.savedProperties.delete.path, isAuthenticated, async (req: any,
     const user = req.user.claims;
     const propertyId = parseInt(req.params.propertyId);
     if (isNaN(propertyId)) return res.status(400).json({ message: "Invalid ID" });
+    const property = await storage.getProperty(propertyId);
+    if (!property || !canViewProperty(property, user.sub)) return res.status(404).json({ message: "Property not found" });
     
     await storage.removeSavedProperty(user.sub, propertyId);
     res.status(204).end();
@@ -74,6 +86,8 @@ router.patch("/api/saved-properties/:propertyId/list", isAuthenticated, async (r
     const user = req.user.claims;
     const propertyId = parseInt(req.params.propertyId);
     if (isNaN(propertyId)) return res.status(400).json({ message: "Invalid ID" });
+    const property = await storage.getProperty(propertyId);
+    if (!property || !canViewProperty(property, user.sub)) return res.status(404).json({ message: "Property not found" });
     const parsed = z.object({ listId: z.number().int().positive().nullable().optional() }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Invalid request", errors: parsed.error.flatten() });
     await storage.movePropertyToList(user.sub, propertyId, parsed.data.listId ?? null);

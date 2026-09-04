@@ -27,6 +27,7 @@ import agentRelationshipsRouter from "./agentRelationships";
 import agentClientsRouter from "./agentClients";
 import agentPublicProfilesRouter from "./agentPublicProfiles";
 import { seedChangelog } from "../lib/changelogSeed";
+import listingManagementRouter from "./listingManagement";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -73,6 +74,7 @@ export async function registerRoutes(
   app.use(agentRelationshipsRouter);   // /api/properties/:id/contact-agent, /api/agent/send-listing, /api/agents/search, /api/buyer/*
   app.use(agentPublicProfilesRouter);  // /api/agents/directory, /api/agents/:id/profile, /api/agent/public-profile
   app.use(agentClientsRouter);         // /api/agent-invite, /api/agent-clients/*
+  app.use(listingManagementRouter);     // /api/agent/listings and owned listing photo management
   app.use(buyerRouter);                // /api/buyer-interest/*, /api/buyer-profile/*, /api/swipe-interest, /api/assigned-agent
   app.use(onboardingRouter);           // /api/onboarding/*
   app.use(agentRouter);                // /api/agent/*
