@@ -341,6 +341,615 @@ export const SearchAgentsResponse = zod.object({
 
 
 /**
+ * @summary Search the verified-agent directory
+ */
+export const GetAgentDirectoryQueryParams = zod.object({
+  "q": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().optional(),
+  "offset": zod.coerce.number().optional()
+})
+
+export const GetAgentDirectoryResponse = zod.object({
+  "agents": zod.array(zod.object({
+  "id": zod.string(),
+  "displayName": zod.string().nullish(),
+  "profileImageUrl": zod.string().nullish(),
+  "brokerageName": zod.string().nullish(),
+  "licenseNumber": zod.string().nullish(),
+  "licenseState": zod.string().nullish(),
+  "currentListingsCount": zod.number(),
+  "salesYtdCount": zod.number(),
+  "salesPreviousYearCount": zod.number(),
+  "salesFiveYearsCount": zod.number(),
+  "lastMlsSyncAt": zod.coerce.date().nullish()
+})),
+  "total": zod.number(),
+  "limit": zod.number(),
+  "offset": zod.number()
+})
+
+
+/**
+ * @summary Get a verified agent's public profile
+ */
+export const GetAgentProfileParams = zod.object({
+  "agentId": zod.coerce.string()
+})
+
+export const GetAgentProfileResponse = zod.object({
+  "id": zod.string(),
+  "displayName": zod.string().nullish(),
+  "profileImageUrl": zod.string().nullish(),
+  "brokerageName": zod.string().nullish(),
+  "licenseNumber": zod.string().nullish(),
+  "licenseState": zod.string().nullish(),
+  "currentListingsCount": zod.number(),
+  "salesYtdCount": zod.number(),
+  "salesPreviousYearCount": zod.number(),
+  "salesFiveYearsCount": zod.number(),
+  "lastMlsSyncAt": zod.coerce.date().nullish()
+}).and(zod.object({
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "website": zod.string().nullish(),
+  "brokerageAddress": zod.string().nullish(),
+  "brokerageWebsite": zod.string().nullish(),
+  "brokerageLicense": zod.string().nullish(),
+  "bio": zod.string().nullish(),
+  "sourceFields": zod.record(zod.string(), zod.enum(['mls', 'override', 'account'])).optional(),
+  "periods": zod.object({
+  "currentYear": zod.number(),
+  "previousYear": zod.number(),
+  "fiveYearStart": zod.number()
+}),
+  "currentListings": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "location": zod.string(),
+  "addressCity": zod.string().nullish(),
+  "addressState": zod.string().nullish(),
+  "price": zod.number(),
+  "closePrice": zod.number().nullish(),
+  "listDate": zod.coerce.date().nullish(),
+  "closeDate": zod.coerce.date().nullish(),
+  "beds": zod.number(),
+  "baths": zod.number(),
+  "sqft": zod.number(),
+  "imageUrl": zod.string().nullish(),
+  "listingStatus": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "mlsNumber": zod.string().nullish()
+})),
+  "salesYtd": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "location": zod.string(),
+  "addressCity": zod.string().nullish(),
+  "addressState": zod.string().nullish(),
+  "price": zod.number(),
+  "closePrice": zod.number().nullish(),
+  "listDate": zod.coerce.date().nullish(),
+  "closeDate": zod.coerce.date().nullish(),
+  "beds": zod.number(),
+  "baths": zod.number(),
+  "sqft": zod.number(),
+  "imageUrl": zod.string().nullish(),
+  "listingStatus": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "mlsNumber": zod.string().nullish()
+})),
+  "salesPreviousYear": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "location": zod.string(),
+  "addressCity": zod.string().nullish(),
+  "addressState": zod.string().nullish(),
+  "price": zod.number(),
+  "closePrice": zod.number().nullish(),
+  "listDate": zod.coerce.date().nullish(),
+  "closeDate": zod.coerce.date().nullish(),
+  "beds": zod.number(),
+  "baths": zod.number(),
+  "sqft": zod.number(),
+  "imageUrl": zod.string().nullish(),
+  "listingStatus": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "mlsNumber": zod.string().nullish()
+})),
+  "salesFiveYears": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "location": zod.string(),
+  "addressCity": zod.string().nullish(),
+  "addressState": zod.string().nullish(),
+  "price": zod.number(),
+  "closePrice": zod.number().nullish(),
+  "listDate": zod.coerce.date().nullish(),
+  "closeDate": zod.coerce.date().nullish(),
+  "beds": zod.number(),
+  "baths": zod.number(),
+  "sqft": zod.number(),
+  "imageUrl": zod.string().nullish(),
+  "listingStatus": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "mlsNumber": zod.string().nullish()
+}))
+}))
+
+
+/**
+ * @summary Get the authenticated agent's editable public profile
+ */
+export const GetOwnAgentPublicProfileResponse = zod.object({
+  "userId": zod.string(),
+  "bio": zod.string().nullish(),
+  "displayNameOverride": zod.string().nullish(),
+  "emailOverride": zod.string().nullish(),
+  "phoneOverride": zod.string().nullish(),
+  "websiteOverride": zod.string().nullish(),
+  "profileImageUrlOverride": zod.string().nullish(),
+  "brokerageNameOverride": zod.string().nullish(),
+  "brokerageAddressOverride": zod.string().nullish(),
+  "brokerageWebsiteOverride": zod.string().nullish(),
+  "brokerageLicenseOverride": zod.string().nullish(),
+  "licenseOverride": zod.string().nullish(),
+  "mlsDisplayName": zod.string().nullish(),
+  "mlsEmail": zod.string().nullish(),
+  "mlsPhone": zod.string().nullish(),
+  "mlsWebsite": zod.string().nullish(),
+  "mlsProfileImageUrl": zod.string().nullish(),
+  "mlsBrokerageName": zod.string().nullish(),
+  "mlsBrokerageAddress": zod.string().nullish(),
+  "mlsBrokerageWebsite": zod.string().nullish(),
+  "mlsBrokerageLicense": zod.string().nullish(),
+  "mlsLicense": zod.string().nullish(),
+  "showEmail": zod.boolean().optional(),
+  "showPhone": zod.boolean().optional(),
+  "showWebsite": zod.boolean().optional(),
+  "showLicense": zod.boolean().optional(),
+  "showBrokerageName": zod.boolean().optional(),
+  "showBrokerageAddress": zod.boolean().optional(),
+  "showBrokerageWebsite": zod.boolean().optional(),
+  "showBrokerageLicense": zod.boolean().optional(),
+  "lastMlsSyncAt": zod.coerce.date().nullish(),
+  "importedCount": zod.number().optional(),
+  "resolvedPreview": zod.object({
+  "id": zod.string(),
+  "displayName": zod.string().nullish(),
+  "profileImageUrl": zod.string().nullish(),
+  "brokerageName": zod.string().nullish(),
+  "licenseNumber": zod.string().nullish(),
+  "licenseState": zod.string().nullish(),
+  "currentListingsCount": zod.number(),
+  "salesYtdCount": zod.number(),
+  "salesPreviousYearCount": zod.number(),
+  "salesFiveYearsCount": zod.number(),
+  "lastMlsSyncAt": zod.coerce.date().nullish()
+}).and(zod.object({
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "website": zod.string().nullish(),
+  "brokerageAddress": zod.string().nullish(),
+  "brokerageWebsite": zod.string().nullish(),
+  "brokerageLicense": zod.string().nullish(),
+  "bio": zod.string().nullish(),
+  "sourceFields": zod.record(zod.string(), zod.enum(['mls', 'override', 'account'])).optional(),
+  "periods": zod.object({
+  "currentYear": zod.number(),
+  "previousYear": zod.number(),
+  "fiveYearStart": zod.number()
+}),
+  "currentListings": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "location": zod.string(),
+  "addressCity": zod.string().nullish(),
+  "addressState": zod.string().nullish(),
+  "price": zod.number(),
+  "closePrice": zod.number().nullish(),
+  "listDate": zod.coerce.date().nullish(),
+  "closeDate": zod.coerce.date().nullish(),
+  "beds": zod.number(),
+  "baths": zod.number(),
+  "sqft": zod.number(),
+  "imageUrl": zod.string().nullish(),
+  "listingStatus": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "mlsNumber": zod.string().nullish()
+})),
+  "salesYtd": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "location": zod.string(),
+  "addressCity": zod.string().nullish(),
+  "addressState": zod.string().nullish(),
+  "price": zod.number(),
+  "closePrice": zod.number().nullish(),
+  "listDate": zod.coerce.date().nullish(),
+  "closeDate": zod.coerce.date().nullish(),
+  "beds": zod.number(),
+  "baths": zod.number(),
+  "sqft": zod.number(),
+  "imageUrl": zod.string().nullish(),
+  "listingStatus": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "mlsNumber": zod.string().nullish()
+})),
+  "salesPreviousYear": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "location": zod.string(),
+  "addressCity": zod.string().nullish(),
+  "addressState": zod.string().nullish(),
+  "price": zod.number(),
+  "closePrice": zod.number().nullish(),
+  "listDate": zod.coerce.date().nullish(),
+  "closeDate": zod.coerce.date().nullish(),
+  "beds": zod.number(),
+  "baths": zod.number(),
+  "sqft": zod.number(),
+  "imageUrl": zod.string().nullish(),
+  "listingStatus": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "mlsNumber": zod.string().nullish()
+})),
+  "salesFiveYears": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "location": zod.string(),
+  "addressCity": zod.string().nullish(),
+  "addressState": zod.string().nullish(),
+  "price": zod.number(),
+  "closePrice": zod.number().nullish(),
+  "listDate": zod.coerce.date().nullish(),
+  "closeDate": zod.coerce.date().nullish(),
+  "beds": zod.number(),
+  "baths": zod.number(),
+  "sqft": zod.number(),
+  "imageUrl": zod.string().nullish(),
+  "listingStatus": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "mlsNumber": zod.string().nullish()
+}))
+}))
+})
+
+
+/**
+ * @summary Update public-profile corrections and visibility
+ */
+export const updateOwnAgentPublicProfileBodyBioMax = 4000;
+
+export const updateOwnAgentPublicProfileBodyDisplayNameOverrideMax = 200;
+
+export const updateOwnAgentPublicProfileBodyEmailOverrideRegExp = new RegExp('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$');
+export const updateOwnAgentPublicProfileBodyPhoneOverrideMax = 50;
+
+export const updateOwnAgentPublicProfileBodyWebsiteOverrideRegExp = new RegExp('^https?:/');
+export const updateOwnAgentPublicProfileBodyProfileImageUrlOverrideRegExp = new RegExp('^https?:/');
+export const updateOwnAgentPublicProfileBodyBrokerageNameOverrideMax = 200;
+
+export const updateOwnAgentPublicProfileBodyBrokerageAddressOverrideMax = 500;
+
+export const updateOwnAgentPublicProfileBodyBrokerageWebsiteOverrideRegExp = new RegExp('^https?:/');
+export const updateOwnAgentPublicProfileBodyLicenseOverrideMax = 100;
+
+export const updateOwnAgentPublicProfileBodyBrokerageLicenseOverrideMax = 100;
+
+
+
+export const UpdateOwnAgentPublicProfileBody = zod.object({
+  "bio": zod.string().max(updateOwnAgentPublicProfileBodyBioMax).nullish(),
+  "displayNameOverride": zod.string().max(updateOwnAgentPublicProfileBodyDisplayNameOverrideMax).nullish(),
+  "emailOverride": zod.string().regex(updateOwnAgentPublicProfileBodyEmailOverrideRegExp).nullish(),
+  "phoneOverride": zod.string().max(updateOwnAgentPublicProfileBodyPhoneOverrideMax).nullish(),
+  "websiteOverride": zod.string().regex(updateOwnAgentPublicProfileBodyWebsiteOverrideRegExp).nullish(),
+  "profileImageUrlOverride": zod.string().regex(updateOwnAgentPublicProfileBodyProfileImageUrlOverrideRegExp).nullish(),
+  "brokerageNameOverride": zod.string().max(updateOwnAgentPublicProfileBodyBrokerageNameOverrideMax).nullish(),
+  "brokerageAddressOverride": zod.string().max(updateOwnAgentPublicProfileBodyBrokerageAddressOverrideMax).nullish(),
+  "brokerageWebsiteOverride": zod.string().regex(updateOwnAgentPublicProfileBodyBrokerageWebsiteOverrideRegExp).nullish(),
+  "licenseOverride": zod.string().max(updateOwnAgentPublicProfileBodyLicenseOverrideMax).nullish(),
+  "brokerageLicenseOverride": zod.string().max(updateOwnAgentPublicProfileBodyBrokerageLicenseOverrideMax).nullish(),
+  "showEmail": zod.boolean().optional(),
+  "showPhone": zod.boolean().optional(),
+  "showWebsite": zod.boolean().optional(),
+  "showLicense": zod.boolean().optional(),
+  "showBrokerageName": zod.boolean().optional(),
+  "showBrokerageAddress": zod.boolean().optional(),
+  "showBrokerageWebsite": zod.boolean().optional(),
+  "showBrokerageLicense": zod.boolean().optional()
+})
+
+export const UpdateOwnAgentPublicProfileResponse = zod.object({
+  "userId": zod.string(),
+  "bio": zod.string().nullish(),
+  "displayNameOverride": zod.string().nullish(),
+  "emailOverride": zod.string().nullish(),
+  "phoneOverride": zod.string().nullish(),
+  "websiteOverride": zod.string().nullish(),
+  "profileImageUrlOverride": zod.string().nullish(),
+  "brokerageNameOverride": zod.string().nullish(),
+  "brokerageAddressOverride": zod.string().nullish(),
+  "brokerageWebsiteOverride": zod.string().nullish(),
+  "brokerageLicenseOverride": zod.string().nullish(),
+  "licenseOverride": zod.string().nullish(),
+  "mlsDisplayName": zod.string().nullish(),
+  "mlsEmail": zod.string().nullish(),
+  "mlsPhone": zod.string().nullish(),
+  "mlsWebsite": zod.string().nullish(),
+  "mlsProfileImageUrl": zod.string().nullish(),
+  "mlsBrokerageName": zod.string().nullish(),
+  "mlsBrokerageAddress": zod.string().nullish(),
+  "mlsBrokerageWebsite": zod.string().nullish(),
+  "mlsBrokerageLicense": zod.string().nullish(),
+  "mlsLicense": zod.string().nullish(),
+  "showEmail": zod.boolean().optional(),
+  "showPhone": zod.boolean().optional(),
+  "showWebsite": zod.boolean().optional(),
+  "showLicense": zod.boolean().optional(),
+  "showBrokerageName": zod.boolean().optional(),
+  "showBrokerageAddress": zod.boolean().optional(),
+  "showBrokerageWebsite": zod.boolean().optional(),
+  "showBrokerageLicense": zod.boolean().optional(),
+  "lastMlsSyncAt": zod.coerce.date().nullish(),
+  "importedCount": zod.number().optional(),
+  "resolvedPreview": zod.object({
+  "id": zod.string(),
+  "displayName": zod.string().nullish(),
+  "profileImageUrl": zod.string().nullish(),
+  "brokerageName": zod.string().nullish(),
+  "licenseNumber": zod.string().nullish(),
+  "licenseState": zod.string().nullish(),
+  "currentListingsCount": zod.number(),
+  "salesYtdCount": zod.number(),
+  "salesPreviousYearCount": zod.number(),
+  "salesFiveYearsCount": zod.number(),
+  "lastMlsSyncAt": zod.coerce.date().nullish()
+}).and(zod.object({
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "website": zod.string().nullish(),
+  "brokerageAddress": zod.string().nullish(),
+  "brokerageWebsite": zod.string().nullish(),
+  "brokerageLicense": zod.string().nullish(),
+  "bio": zod.string().nullish(),
+  "sourceFields": zod.record(zod.string(), zod.enum(['mls', 'override', 'account'])).optional(),
+  "periods": zod.object({
+  "currentYear": zod.number(),
+  "previousYear": zod.number(),
+  "fiveYearStart": zod.number()
+}),
+  "currentListings": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "location": zod.string(),
+  "addressCity": zod.string().nullish(),
+  "addressState": zod.string().nullish(),
+  "price": zod.number(),
+  "closePrice": zod.number().nullish(),
+  "listDate": zod.coerce.date().nullish(),
+  "closeDate": zod.coerce.date().nullish(),
+  "beds": zod.number(),
+  "baths": zod.number(),
+  "sqft": zod.number(),
+  "imageUrl": zod.string().nullish(),
+  "listingStatus": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "mlsNumber": zod.string().nullish()
+})),
+  "salesYtd": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "location": zod.string(),
+  "addressCity": zod.string().nullish(),
+  "addressState": zod.string().nullish(),
+  "price": zod.number(),
+  "closePrice": zod.number().nullish(),
+  "listDate": zod.coerce.date().nullish(),
+  "closeDate": zod.coerce.date().nullish(),
+  "beds": zod.number(),
+  "baths": zod.number(),
+  "sqft": zod.number(),
+  "imageUrl": zod.string().nullish(),
+  "listingStatus": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "mlsNumber": zod.string().nullish()
+})),
+  "salesPreviousYear": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "location": zod.string(),
+  "addressCity": zod.string().nullish(),
+  "addressState": zod.string().nullish(),
+  "price": zod.number(),
+  "closePrice": zod.number().nullish(),
+  "listDate": zod.coerce.date().nullish(),
+  "closeDate": zod.coerce.date().nullish(),
+  "beds": zod.number(),
+  "baths": zod.number(),
+  "sqft": zod.number(),
+  "imageUrl": zod.string().nullish(),
+  "listingStatus": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "mlsNumber": zod.string().nullish()
+})),
+  "salesFiveYears": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "location": zod.string(),
+  "addressCity": zod.string().nullish(),
+  "addressState": zod.string().nullish(),
+  "price": zod.number(),
+  "closePrice": zod.number().nullish(),
+  "listDate": zod.coerce.date().nullish(),
+  "closeDate": zod.coerce.date().nullish(),
+  "beds": zod.number(),
+  "baths": zod.number(),
+  "sqft": zod.number(),
+  "imageUrl": zod.string().nullish(),
+  "listingStatus": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "mlsNumber": zod.string().nullish()
+}))
+}))
+})
+
+
+/**
+ * @summary Refresh MLS snapshot fields without changing overrides
+ */
+export const SyncOwnAgentPublicProfileFromMlsResponse = zod.object({
+  "userId": zod.string(),
+  "bio": zod.string().nullish(),
+  "displayNameOverride": zod.string().nullish(),
+  "emailOverride": zod.string().nullish(),
+  "phoneOverride": zod.string().nullish(),
+  "websiteOverride": zod.string().nullish(),
+  "profileImageUrlOverride": zod.string().nullish(),
+  "brokerageNameOverride": zod.string().nullish(),
+  "brokerageAddressOverride": zod.string().nullish(),
+  "brokerageWebsiteOverride": zod.string().nullish(),
+  "brokerageLicenseOverride": zod.string().nullish(),
+  "licenseOverride": zod.string().nullish(),
+  "mlsDisplayName": zod.string().nullish(),
+  "mlsEmail": zod.string().nullish(),
+  "mlsPhone": zod.string().nullish(),
+  "mlsWebsite": zod.string().nullish(),
+  "mlsProfileImageUrl": zod.string().nullish(),
+  "mlsBrokerageName": zod.string().nullish(),
+  "mlsBrokerageAddress": zod.string().nullish(),
+  "mlsBrokerageWebsite": zod.string().nullish(),
+  "mlsBrokerageLicense": zod.string().nullish(),
+  "mlsLicense": zod.string().nullish(),
+  "showEmail": zod.boolean().optional(),
+  "showPhone": zod.boolean().optional(),
+  "showWebsite": zod.boolean().optional(),
+  "showLicense": zod.boolean().optional(),
+  "showBrokerageName": zod.boolean().optional(),
+  "showBrokerageAddress": zod.boolean().optional(),
+  "showBrokerageWebsite": zod.boolean().optional(),
+  "showBrokerageLicense": zod.boolean().optional(),
+  "lastMlsSyncAt": zod.coerce.date().nullish(),
+  "importedCount": zod.number().optional(),
+  "resolvedPreview": zod.object({
+  "id": zod.string(),
+  "displayName": zod.string().nullish(),
+  "profileImageUrl": zod.string().nullish(),
+  "brokerageName": zod.string().nullish(),
+  "licenseNumber": zod.string().nullish(),
+  "licenseState": zod.string().nullish(),
+  "currentListingsCount": zod.number(),
+  "salesYtdCount": zod.number(),
+  "salesPreviousYearCount": zod.number(),
+  "salesFiveYearsCount": zod.number(),
+  "lastMlsSyncAt": zod.coerce.date().nullish()
+}).and(zod.object({
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "website": zod.string().nullish(),
+  "brokerageAddress": zod.string().nullish(),
+  "brokerageWebsite": zod.string().nullish(),
+  "brokerageLicense": zod.string().nullish(),
+  "bio": zod.string().nullish(),
+  "sourceFields": zod.record(zod.string(), zod.enum(['mls', 'override', 'account'])).optional(),
+  "periods": zod.object({
+  "currentYear": zod.number(),
+  "previousYear": zod.number(),
+  "fiveYearStart": zod.number()
+}),
+  "currentListings": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "location": zod.string(),
+  "addressCity": zod.string().nullish(),
+  "addressState": zod.string().nullish(),
+  "price": zod.number(),
+  "closePrice": zod.number().nullish(),
+  "listDate": zod.coerce.date().nullish(),
+  "closeDate": zod.coerce.date().nullish(),
+  "beds": zod.number(),
+  "baths": zod.number(),
+  "sqft": zod.number(),
+  "imageUrl": zod.string().nullish(),
+  "listingStatus": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "mlsNumber": zod.string().nullish()
+})),
+  "salesYtd": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "location": zod.string(),
+  "addressCity": zod.string().nullish(),
+  "addressState": zod.string().nullish(),
+  "price": zod.number(),
+  "closePrice": zod.number().nullish(),
+  "listDate": zod.coerce.date().nullish(),
+  "closeDate": zod.coerce.date().nullish(),
+  "beds": zod.number(),
+  "baths": zod.number(),
+  "sqft": zod.number(),
+  "imageUrl": zod.string().nullish(),
+  "listingStatus": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "mlsNumber": zod.string().nullish()
+})),
+  "salesPreviousYear": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "location": zod.string(),
+  "addressCity": zod.string().nullish(),
+  "addressState": zod.string().nullish(),
+  "price": zod.number(),
+  "closePrice": zod.number().nullish(),
+  "listDate": zod.coerce.date().nullish(),
+  "closeDate": zod.coerce.date().nullish(),
+  "beds": zod.number(),
+  "baths": zod.number(),
+  "sqft": zod.number(),
+  "imageUrl": zod.string().nullish(),
+  "listingStatus": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "mlsNumber": zod.string().nullish()
+})),
+  "salesFiveYears": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "location": zod.string(),
+  "addressCity": zod.string().nullish(),
+  "addressState": zod.string().nullish(),
+  "price": zod.number(),
+  "closePrice": zod.number().nullish(),
+  "listDate": zod.coerce.date().nullish(),
+  "closeDate": zod.coerce.date().nullish(),
+  "beds": zod.number(),
+  "baths": zod.number(),
+  "sqft": zod.number(),
+  "imageUrl": zod.string().nullish(),
+  "listingStatus": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "mlsNumber": zod.string().nullish()
+}))
+}))
+})
+
+
+/**
  * @summary Link a verified agent as the buyer's agent
  */
 export const LinkAgentBody = zod.object({

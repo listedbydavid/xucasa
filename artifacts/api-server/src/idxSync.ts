@@ -357,11 +357,11 @@ const RESO_SELECT_FIELDS = [
   "StreetNumber", "StreetName", "UnitNumber",
   "City", "StateOrProvince", "PostalCode",
   "Latitude", "Longitude", "PublicRemarks",
-  "ListDate", "AssociationFee", "MlsStatus", "StandardStatus",
+  "ListDate", "CloseDate", "ClosePrice", "AssociationFee", "MlsStatus", "StandardStatus",
   "PropertyType", "PropertySubType", "YearBuilt",
   "ListAgentFullName", "ListAgentFirstName", "ListAgentLastName",
   "ListAgentEmail", "ListAgentDirectPhone", "ListAgentOfficePhone",
-  "ListAgentMlsId", "ListAgentStateLicense",
+  "ListAgentKey", "ListAgentMlsId", "ListAgentStateLicense",
   "ListOfficeName", "ListOfficeMlsId", "ListOfficePhone",
   "CoListAgentFullName", "CoListAgentEmail", "CoListAgentDirectPhone",
   "PrivateRemarks", "ShowingInstructions",
@@ -498,7 +498,7 @@ function sanitizeTourUrl(url: string | null | undefined): string | null {
   }
 }
 
-function normaliseReso(raw: any): NormalisedListing {
+export function normaliseReso(raw: any): NormalisedListing {
   let imageUrl: string | null = null;
   let photos: string[] | null = null;
 
@@ -546,6 +546,12 @@ function normaliseReso(raw: any): NormalisedListing {
   }
 
   const coAgentName = raw.CoListAgentFullName || null;
+  const rawStatus = String(raw.StandardStatus || raw.MlsStatus || "active").toLowerCase().replace(/[\s-]+/g, "_");
+  const listingStatus = rawStatus === "coming_soon" ? "coming_soon"
+    : rawStatus === "pending" ? "pending"
+    : rawStatus === "closed" || rawStatus === "sold" ? "sold"
+    : rawStatus === "off_market" || rawStatus === "expired" || rawStatus === "cancelled" ? "off_market"
+    : "active";
 
   return {
     idxId: String(raw.ListingKey || raw.ListingId || ""),
@@ -570,10 +576,12 @@ function normaliseReso(raw: any): NormalisedListing {
     lng: raw.Longitude ? String(raw.Longitude) : null,
     imageUrl,
     photos,
-    status: "active" as const,
+    status: listingStatus,
     source: "idx" as const,
     isOffMarket: false,
     listDate: raw.ListDate ? new Date(raw.ListDate) : null,
+    closeDate: raw.CloseDate ? new Date(raw.CloseDate) : null,
+    closePrice: raw.ClosePrice ? parseInt(raw.ClosePrice, 10) || null : null,
     listingAgentName: agentName,
     listingAgentEmail: raw.ListAgentEmail || null,
     listingAgentPhone: raw.ListAgentDirectPhone || raw.ListAgentOfficePhone || null,
@@ -586,7 +594,9 @@ function normaliseReso(raw: any): NormalisedListing {
     showingContactPhone: raw.ShowingContactPhone || null,
     lockboxType: raw.LockBoxType || null,
     accessInstructions: raw.AccessCode || null,
-    listingAgentMlsId: raw.ListAgentMlsId || null,
+    // Agent verification stores RESO MemberKey, so ListAgentKey is the
+    // canonical attribution value. ListAgentMlsId is only a legacy fallback.
+    listingAgentMlsId: raw.ListAgentKey || raw.ListAgentMlsId || null,
     listingAgentLicenseNumber: raw.ListAgentStateLicense || null,
     coListingAgentName: coAgentName,
     coListingAgentEmail: raw.CoListAgentEmail || null,
@@ -687,7 +697,7 @@ async function batchUpsertListings(normalised: any[]): Promise<{
       const existing = existingMap.get(listing.idxId);
       // Always keep listingStatus in sync with status for IDX rows so the
       // transition step and buyer-side queries see a consistent value.
-      const payload = { ...listing, listingStatus: "active", idxUpdatedAt: new Date() };
+      const payload = { ...listing, listingStatus: listing.status, idxUpdatedAt: new Date() };
 
       if (existing) {
         if (payload.price !== existing.price) payload.priceUpdatedAt = new Date();
@@ -1141,6 +1151,32 @@ export async function runIdxSync(): Promise<{ added: number; updated: number; re
 
 export function isSyncInProgress() {
   return syncInProgress;
+}
+
+/**
+ * Imports only one verified agent's listing-side MLS transactions. Unlike the
+ * global sync this never performs absent-row reconciliation, so historic Closed
+ * records cannot affect manual-listing archive/matching lifecycle behavior.
+ */
+export async function importAgentResoTransactions(agentMlsId: string): Promise<number> {
+  if (!realtyFeedConfigured() || !agentMlsId) return 0;
+  const token = await getRealtyFeedToken();
+  const escapedId = sanitizeODataString(agentMlsId);
+  const fiveYearStart = new Date(Date.UTC(new Date().getUTCFullYear() - 4, 0, 1)).toISOString();
+  const filter = `(ListAgentKey eq '${escapedId}') and (StandardStatus eq 'Active' or StandardStatus eq 'Pending' or (StandardStatus eq 'Closed' and CloseDate ge ${fiveYearStart}))`;
+  let nextUrl: string | null = `${REALTYFEED_API_BASE}/Property?$filter=${encodeURIComponent(filter)}&$top=200&$select=${RESO_SELECT_FIELDS}&$expand=Media`;
+  const listings: any[] = [];
+  while (nextUrl) {
+    const response = await realtyFeedODataFetch(nextUrl, token);
+    if (!response.ok) throw new Error(`MLS transaction import failed (${response.status})`);
+    const body = await response.json() as any;
+    listings.push(...(body.value || []));
+    nextUrl = body["@odata.nextLink"] || null;
+  }
+  const normalised = listings.map(normaliseReso).filter(row => row.idxId && !row.isLease);
+  if (!normalised.length) return 0;
+  const result = await batchUpsertListings(normalised);
+  return result.added + result.updated;
 }
 
 // ── Backfill: reclassify legacy rental rows ──────────────────────────────────

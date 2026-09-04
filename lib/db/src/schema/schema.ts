@@ -53,6 +53,8 @@ export const properties = pgTable("properties", {
   mlsNumber: text("mls_number"),                        // MLS # displayed to users
   propertyType: text("property_type"),                   // SFH, Condo, Townhome, Land, Multi-Family, etc.
   listDate: timestamp("list_date"),                     // When listed on MLS
+  closeDate: timestamp("close_date"),                   // MLS close date for sold listings
+  closePrice: integer("close_price"),                   // MLS close price for sold listings
   idxUpdatedAt: timestamp("idx_updated_at"),            // Last sync from IDX
   // SDMLS 12.16(e) listing attribution
   listingBrokerage: text("listing_brokerage"),
@@ -79,6 +81,44 @@ export const properties = pgTable("properties", {
   virtualTourUrl: text("virtual_tour_url"),
   priceUpdatedAt: timestamp("price_updated_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+// MLS snapshots are deliberately separate from owner corrections. A null
+// override means "inherit"; it must never be overwritten by an MLS refresh.
+export const agentPublicProfiles = pgTable("agent_public_profiles", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  bio: text("bio"),
+  displayNameOverride: text("display_name_override"),
+  emailOverride: text("email_override"),
+  phoneOverride: text("phone_override"),
+  websiteOverride: text("website_override"),
+  profileImageUrlOverride: text("profile_image_url_override"),
+  brokerageNameOverride: text("brokerage_name_override"),
+  brokerageAddressOverride: text("brokerage_address_override"),
+  brokerageWebsiteOverride: text("brokerage_website_override"),
+  licenseOverride: text("license_override"),
+  brokerageLicenseOverride: text("brokerage_license_override"),
+  mlsDisplayName: text("mls_display_name"),
+  mlsEmail: text("mls_email"),
+  mlsPhone: text("mls_phone"),
+  mlsWebsite: text("mls_website"),
+  mlsProfileImageUrl: text("mls_profile_image_url"),
+  mlsBrokerageName: text("mls_brokerage_name"),
+  mlsBrokerageAddress: text("mls_brokerage_address"),
+  mlsBrokerageWebsite: text("mls_brokerage_website"),
+  mlsLicense: text("mls_license"),
+  mlsBrokerageLicense: text("mls_brokerage_license"),
+  showEmail: boolean("show_email").default(true).notNull(),
+  showPhone: boolean("show_phone").default(true).notNull(),
+  showWebsite: boolean("show_website").default(true).notNull(),
+  showLicense: boolean("show_license").default(true).notNull(),
+  showBrokerageName: boolean("show_brokerage_name").default(true).notNull(),
+  showBrokerageAddress: boolean("show_brokerage_address").default(true).notNull(),
+  showBrokerageWebsite: boolean("show_brokerage_website").default(true).notNull(),
+  showBrokerageLicense: boolean("show_brokerage_license").default(true).notNull(),
+  lastMlsSyncAt: timestamp("last_mls_sync_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const propertyAnalytics = pgTable("property_analytics", {
@@ -472,6 +512,7 @@ export const contactTagAssignmentsRelations = relations(contactTagAssignments, (
 
 // Insert Schemas
 export const insertPropertySchema: z.ZodTypeAny = createInsertSchema(properties).omit({ id: true, createdAt: true });
+export const insertAgentPublicProfileSchema: z.ZodTypeAny = createInsertSchema(agentPublicProfiles).omit({ createdAt: true, updatedAt: true });
 export const insertPropertyAnalyticsSchema: z.ZodTypeAny = createInsertSchema(propertyAnalytics).omit({ id: true, viewedAt: true });
 export const insertPropertyInquirySchema: z.ZodTypeAny = createInsertSchema(propertyInquiries).omit({ id: true, createdAt: true });
 export const insertSellLeadSchema: z.ZodTypeAny = createInsertSchema(sellLeads).omit({ id: true, createdAt: true });

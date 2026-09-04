@@ -1223,8 +1223,12 @@ function PriceHistorySection({ property, daysOnMarket }: { property: any; daysOn
   const listDateStr = property.listDate
     ? new Date(property.listDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : null;
+  const closeDateStr = property.closeDate
+    ? new Date(property.closeDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : null;
 
   const pricePerSqft = property.sqft > 0 ? Math.round(property.price / property.sqft) : null;
+  const soldPricePerSqft = property.sqft > 0 && property.closePrice ? Math.round(property.closePrice / property.sqft) : null;
 
   return (
     <div className="mt-10 pt-8 border-t border-border" data-testid="section-price-history">
@@ -1243,6 +1247,18 @@ function PriceHistorySection({ property, daysOnMarket }: { property: any; daysOn
             </tr>
           </thead>
           <tbody>
+            {closeDateStr && (
+              <tr className="border-b border-border/50" data-testid="row-price-history-sold">
+                <td className="py-3 pr-4 text-foreground">{closeDateStr}</td>
+                <td className="py-3 pr-4">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+                    Sold
+                  </span>
+                </td>
+                <td className="py-3 pr-4 text-right font-semibold text-foreground">${(property.closePrice || property.price || 0).toLocaleString()}</td>
+                <td className="py-3 text-right text-muted-foreground">{soldPricePerSqft ? `$${soldPricePerSqft.toLocaleString()}` : "—"}</td>
+              </tr>
+            )}
             {listDateStr && (
               <tr className="border-b border-border/50" data-testid="row-price-history-listed">
                 <td className="py-3 pr-4 text-foreground">{listDateStr}</td>
@@ -1255,7 +1271,7 @@ function PriceHistorySection({ property, daysOnMarket }: { property: any; daysOn
                 <td className="py-3 text-right text-muted-foreground">{pricePerSqft ? `$${pricePerSqft.toLocaleString()}` : '—'}</td>
               </tr>
             )}
-            {!listDateStr && (
+            {!listDateStr && !closeDateStr && (
               <tr>
                 <td colSpan={4} className="py-4 text-center text-muted-foreground text-sm">No price history available for this listing.</td>
               </tr>
@@ -1921,8 +1937,14 @@ export default function PropertyDetail() {
                 )}
               </div>
               <h1 data-tour="property-detail-header" className="text-3xl sm:text-4xl md:text-5xl font-display font-bold text-foreground mb-3">
-                ${property.price.toLocaleString()}
+                ${(property.closePrice || property.price).toLocaleString()}
               </h1>
+              {(property.status === "sold" || property.listingStatus === "sold") && property.closeDate && (
+                <p className="text-sm font-semibold text-muted-foreground mb-3" data-testid="text-last-sold">
+                  Last sold {new Date(property.closeDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                  {" "}for ${(property.closePrice || property.price).toLocaleString()}
+                </p>
+              )}
               <div className="flex items-center text-muted-foreground font-medium text-sm sm:text-lg gap-2">
                 <MapPin className="w-5 h-5 text-primary flex-shrink-0" />
                 <span className="break-words">{property.title} · {property.location}</span>

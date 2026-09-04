@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { usePreview } from "@/lib/preview-context";
-import { Search, User, LogOut, Briefcase, Layers, TrendingUp, Users, Shield, Menu, X, FileText, ChevronLeft, Wrench, Handshake } from "lucide-react";
+import { Search, User, LogOut, Briefcase, Layers, TrendingUp, Users, Shield, Menu, X, FileText, ChevronLeft, Wrench, Handshake, Contact } from "lucide-react";
 import { useState } from "react";
 import { ThemeToggle } from "./ThemeToggle";
 import { NotificationBell } from "./NotificationBell";
@@ -16,6 +16,7 @@ export function Navbar() {
   const realIsAgent = isAuthenticated && ((user as any)?.isAgent || (user as any)?.role === "agent");
   // When previewing, the effective role determines agent-only UI
   const isAgent = previewRole ? previewRole === "agent" : realIsAgent;
+  const canUseAgentDirectory = isAgent && (isPreviewActive || (user as any)?.agentVerified === true);
 
   const navLink = (href: string, icon: any, label: string, testId?: string) => {
     const Icon = icon;
@@ -50,6 +51,7 @@ export function Navbar() {
     ...(!isAuthenticated ? [{ href: "/agent", icon: Briefcase, label: "For Agents" }] : []),
     ...(isAgent ? [{ href: "/agent", icon: Briefcase, label: "Agent Dashboard", testId: "link-agent-dashboard" }] : []),
     ...(isAuthenticated ? [{ href: "/dashboard", icon: User, label: "My Account", testId: "link-my-account" }] : []),
+    ...(canUseAgentDirectory ? [{ href: "/agents", icon: Contact, label: "Agent Directory", testId: "link-agent-directory" }] : []),
     ...(isAdmin ? [{ href: "/admin", icon: Shield, label: "Admin", testId: "link-admin-nav" }] : []),
   ];
 

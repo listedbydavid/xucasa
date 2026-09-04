@@ -20,6 +20,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AgentDirectoryResponse,
+  AgentProfile,
+  AgentPublicProfileUpdate,
   ArchiveAgentListing200,
   ArchiveListingInput,
   AuthSession,
@@ -27,6 +30,7 @@ import type {
   ContactAgentResponse,
   CreatePropertyInquiry201,
   CreateTourInquiry200,
+  GetAgentDirectoryParams,
   GetListingShareUrl200,
   GetMyAgent200,
   HealthStatus,
@@ -39,6 +43,7 @@ import type {
   NotFoundResponse,
   NotificationPreferences,
   NotificationPreferencesUpdate,
+  OwnAgentPublicProfile,
   PriceDropAlertUpdate,
   PropertyInquiryInput,
   PropertyViewInput,
@@ -154,7 +159,13 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
   return withQueryKey(query, queryOptions.queryKey);
 }
-// End of generated API client.
+
+
+
+
+
+
+
 export const getLoginUrl = () => {
 
 
@@ -439,6 +450,13 @@ export function useGetNotificationPreferences<TData = Awaited<ReturnType<typeof 
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+
+
+
+
+
+
 export const getUpdateNotificationPreferencesUrl = () => {
 
 
@@ -1326,6 +1344,386 @@ export function useSearchAgents<TData = Awaited<ReturnType<typeof searchAgents>>
 
 
 
+
+export const getGetAgentDirectoryUrl = (params?: GetAgentDirectoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/agents/directory?${stringifiedParams}` : `/api/agents/directory`
+}
+
+/**
+ * @summary Search the verified-agent directory
+ */
+export const getAgentDirectory = async (params?: GetAgentDirectoryParams, options?: Parameters<typeof customFetch>[1]): Promise<AgentDirectoryResponse> => {
+
+  return customFetch<AgentDirectoryResponse>(getGetAgentDirectoryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAgentDirectoryQueryKey = (params?: GetAgentDirectoryParams,) => {
+    return [
+    `/api/agents/directory`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAgentDirectoryQueryOptions = <TData = Awaited<ReturnType<typeof getAgentDirectory>>, TError = ErrorType<UnauthorizedResponse | void>>(params?: GetAgentDirectoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentDirectory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAgentDirectoryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAgentDirectory>>> = ({ signal }) => getAgentDirectory(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAgentDirectory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAgentDirectoryQueryResult = NonNullable<Awaited<ReturnType<typeof getAgentDirectory>>>
+export type GetAgentDirectoryQueryError = ErrorType<UnauthorizedResponse | void>
+
+
+/**
+ * @summary Search the verified-agent directory
+ */
+
+export function useGetAgentDirectory<TData = Awaited<ReturnType<typeof getAgentDirectory>>, TError = ErrorType<UnauthorizedResponse | void>>(
+ params?: GetAgentDirectoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentDirectory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAgentDirectoryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAgentProfileUrl = (agentId: string,) => {
+
+
+
+
+  return `/api/agents/${agentId}/profile`
+}
+
+/**
+ * @summary Get a verified agent's public profile
+ */
+export const getAgentProfile = async (agentId: string, options?: Parameters<typeof customFetch>[1]): Promise<AgentProfile> => {
+
+  return customFetch<AgentProfile>(getGetAgentProfileUrl(agentId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAgentProfileQueryKey = (agentId: string,) => {
+    return [
+    `/api/agents/${agentId}/profile`
+    ] as const;
+    }
+
+
+export const getGetAgentProfileQueryOptions = <TData = Awaited<ReturnType<typeof getAgentProfile>>, TError = ErrorType<UnauthorizedResponse | void | NotFoundResponse>>(agentId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAgentProfileQueryKey(agentId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAgentProfile>>> = ({ signal }) => getAgentProfile(agentId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: agentId !== null && agentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAgentProfile>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAgentProfileQueryResult = NonNullable<Awaited<ReturnType<typeof getAgentProfile>>>
+export type GetAgentProfileQueryError = ErrorType<UnauthorizedResponse | void | NotFoundResponse>
+
+
+/**
+ * @summary Get a verified agent's public profile
+ */
+
+export function useGetAgentProfile<TData = Awaited<ReturnType<typeof getAgentProfile>>, TError = ErrorType<UnauthorizedResponse | void | NotFoundResponse>>(
+ agentId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgentProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAgentProfileQueryOptions(agentId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetOwnAgentPublicProfileUrl = () => {
+
+
+
+
+  return `/api/agent/public-profile`
+}
+
+/**
+ * @summary Get the authenticated agent's editable public profile
+ */
+export const getOwnAgentPublicProfile = async ( options?: Parameters<typeof customFetch>[1]): Promise<OwnAgentPublicProfile> => {
+
+  return customFetch<OwnAgentPublicProfile>(getGetOwnAgentPublicProfileUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOwnAgentPublicProfileQueryKey = () => {
+    return [
+    `/api/agent/public-profile`
+    ] as const;
+    }
+
+
+export const getGetOwnAgentPublicProfileQueryOptions = <TData = Awaited<ReturnType<typeof getOwnAgentPublicProfile>>, TError = ErrorType<UnauthorizedResponse | void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOwnAgentPublicProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOwnAgentPublicProfileQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOwnAgentPublicProfile>>> = ({ signal }) => getOwnAgentPublicProfile({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOwnAgentPublicProfile>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOwnAgentPublicProfileQueryResult = NonNullable<Awaited<ReturnType<typeof getOwnAgentPublicProfile>>>
+export type GetOwnAgentPublicProfileQueryError = ErrorType<UnauthorizedResponse | void>
+
+
+/**
+ * @summary Get the authenticated agent's editable public profile
+ */
+
+export function useGetOwnAgentPublicProfile<TData = Awaited<ReturnType<typeof getOwnAgentPublicProfile>>, TError = ErrorType<UnauthorizedResponse | void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOwnAgentPublicProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOwnAgentPublicProfileQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateOwnAgentPublicProfileUrl = () => {
+
+
+
+
+  return `/api/agent/public-profile`
+}
+
+/**
+ * @summary Update public-profile corrections and visibility
+ */
+export const updateOwnAgentPublicProfile = async (agentPublicProfileUpdate: AgentPublicProfileUpdate, options?: Parameters<typeof customFetch>[1]): Promise<OwnAgentPublicProfile> => {
+
+  return customFetch<OwnAgentPublicProfile>(getUpdateOwnAgentPublicProfileUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(agentPublicProfileUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateOwnAgentPublicProfileMutationOptions = <TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOwnAgentPublicProfile>>, TError,{data: BodyType<AgentPublicProfileUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateOwnAgentPublicProfile>>, TError,{data: BodyType<AgentPublicProfileUpdate>}, TContext> => {
+
+const mutationKey = ['updateOwnAgentPublicProfile'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateOwnAgentPublicProfile>>, {data: BodyType<AgentPublicProfileUpdate>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateOwnAgentPublicProfile(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateOwnAgentPublicProfileMutationResult = NonNullable<Awaited<ReturnType<typeof updateOwnAgentPublicProfile>>>
+    export type UpdateOwnAgentPublicProfileMutationBody = BodyType<AgentPublicProfileUpdate>
+    export type UpdateOwnAgentPublicProfileMutationError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>
+
+    /**
+ * @summary Update public-profile corrections and visibility
+ */
+export const useUpdateOwnAgentPublicProfile = <TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOwnAgentPublicProfile>>, TError,{data: BodyType<AgentPublicProfileUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateOwnAgentPublicProfile>>,
+        TError,
+        {data: BodyType<AgentPublicProfileUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateOwnAgentPublicProfileMutationOptions(options));
+    }
+
+export const getSyncOwnAgentPublicProfileFromMlsUrl = () => {
+
+
+
+
+  return `/api/agent/public-profile/sync-mls`
+}
+
+/**
+ * @summary Refresh MLS snapshot fields without changing overrides
+ */
+export const syncOwnAgentPublicProfileFromMls = async ( options?: Parameters<typeof customFetch>[1]): Promise<OwnAgentPublicProfile> => {
+
+  return customFetch<OwnAgentPublicProfile>(getSyncOwnAgentPublicProfileFromMlsUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getSyncOwnAgentPublicProfileFromMlsMutationOptions = <TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncOwnAgentPublicProfileFromMls>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof syncOwnAgentPublicProfileFromMls>>, TError,void, TContext> => {
+
+const mutationKey = ['syncOwnAgentPublicProfileFromMls'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncOwnAgentPublicProfileFromMls>>, void> = () => {
+
+
+          return  syncOwnAgentPublicProfileFromMls(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SyncOwnAgentPublicProfileFromMlsMutationResult = NonNullable<Awaited<ReturnType<typeof syncOwnAgentPublicProfileFromMls>>>
+
+    export type SyncOwnAgentPublicProfileFromMlsMutationError = ErrorType<BadRequestResponse | UnauthorizedResponse | void | NotFoundResponse>
+
+    /**
+ * @summary Refresh MLS snapshot fields without changing overrides
+ */
+export const useSyncOwnAgentPublicProfileFromMls = <TError = ErrorType<BadRequestResponse | UnauthorizedResponse | void | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncOwnAgentPublicProfileFromMls>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof syncOwnAgentPublicProfileFromMls>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSyncOwnAgentPublicProfileFromMlsMutationOptions(options));
+    }
 
 export const getLinkAgentUrl = () => {
 

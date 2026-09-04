@@ -88,6 +88,27 @@ export default function AgentDashboard() {
               )}
             </div>
             <p className="text-muted-foreground mt-2">Manage listings, clients, and open houses.</p>
+
+            {user?.agentVerified && (
+              <div className="flex flex-wrap items-center gap-3 mt-4">
+                <button
+                  onClick={() => setLocation("/agents")}
+                  className="flex items-center gap-1.5 text-sm font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-4 py-2 rounded-full transition-colors"
+                  data-testid="link-agent-directory"
+                >
+                  <Search className="w-4 h-4" />
+                  Agent Directory
+                </button>
+                <button
+                  onClick={() => setLocation("/agent/profile-settings")}
+                  className="flex items-center gap-1.5 text-sm font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-4 py-2 rounded-full transition-colors"
+                  data-testid="link-profile-settings"
+                >
+                  <ContactRound className="w-4 h-4" />
+                  Public Profile Settings
+                </button>
+              </div>
+            )}
           </div>
           {activeTab === "listings" && (
             <button

@@ -2,3 +2,4 @@
 - [xucasa cross-origin sessions](xucasa-cross-origin-sessions.md) — Browser sessions span sibling development origins and need an explicit trust boundary.
 - [Git history rewrites](git-history-rewrites.md) — Avoid tree-filter operations on `.replit`; sanitize Git objects without historical checkouts.
 - [Agent relationship authority](agent-relationship-authority.md) — buyer assignment is authoritative; client-link rows are projections, never authorization.
+- [Agent profile data authority](agent-profile-data-authority.md) — MLS snapshots, agent corrections, and visibility controls remain separate layers.

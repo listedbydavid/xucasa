@@ -103,6 +103,215 @@ export interface PublicAgent {
   agentMlsId: string | null;
 }
 
+export interface AgentPropertySummary {
+  id: number;
+  title: string;
+  location: string;
+  /** @nullable */
+  addressCity?: string | null;
+  /** @nullable */
+  addressState?: string | null;
+  price: number;
+  /** @nullable */
+  closePrice?: number | null;
+  /** @nullable */
+  listDate?: string | null;
+  /** @nullable */
+  closeDate?: string | null;
+  beds: number;
+  baths: number;
+  sqft: number;
+  /** @nullable */
+  imageUrl?: string | null;
+  listingStatus: string;
+  status: string;
+  source: string;
+  /** @nullable */
+  mlsNumber?: string | null;
+}
+
+export interface AgentDirectoryItem {
+  id: string;
+  /** @nullable */
+  displayName?: string | null;
+  /** @nullable */
+  profileImageUrl?: string | null;
+  /** @nullable */
+  brokerageName?: string | null;
+  /** @nullable */
+  licenseNumber?: string | null;
+  /** @nullable */
+  licenseState?: string | null;
+  currentListingsCount: number;
+  salesYtdCount: number;
+  salesPreviousYearCount: number;
+  salesFiveYearsCount: number;
+  /** @nullable */
+  lastMlsSyncAt?: string | null;
+}
+
+export interface AgentDirectoryResponse {
+  agents: AgentDirectoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export type AgentProfileSourceFields = {[key: string]: 'mls' | 'override' | 'account'};
+
+export type AgentProfilePeriods = {
+  currentYear: number;
+  previousYear: number;
+  fiveYearStart: number;
+};
+
+export type AgentProfile = AgentDirectoryItem & ({
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  website?: string | null;
+  /** @nullable */
+  brokerageAddress?: string | null;
+  /** @nullable */
+  brokerageWebsite?: string | null;
+  /** @nullable */
+  brokerageLicense?: string | null;
+  /** @nullable */
+  bio?: string | null;
+  sourceFields?: AgentProfileSourceFields;
+  periods: AgentProfilePeriods;
+  currentListings: AgentPropertySummary[];
+  salesYtd: AgentPropertySummary[];
+  salesPreviousYear: AgentPropertySummary[];
+  salesFiveYears: AgentPropertySummary[];
+});
+
+export interface AgentPublicProfileUpdate {
+  /**
+     * @maxLength 4000
+     * @nullable
+     */
+  bio?: string | null;
+  /**
+     * @maxLength 200
+     * @nullable
+     */
+  displayNameOverride?: string | null;
+  /**
+     * @nullable
+     * @pattern ^[^@\s]+@[^@\s]+\.[^@\s]+$
+     */
+  emailOverride?: string | null;
+  /**
+     * @maxLength 50
+     * @nullable
+     */
+  phoneOverride?: string | null;
+  /**
+     * @nullable
+     * @pattern ^https?://
+     */
+  websiteOverride?: string | null;
+  /**
+     * @nullable
+     * @pattern ^https?://
+     */
+  profileImageUrlOverride?: string | null;
+  /**
+     * @maxLength 200
+     * @nullable
+     */
+  brokerageNameOverride?: string | null;
+  /**
+     * @maxLength 500
+     * @nullable
+     */
+  brokerageAddressOverride?: string | null;
+  /**
+     * @nullable
+     * @pattern ^https?://
+     */
+  brokerageWebsiteOverride?: string | null;
+  /**
+     * @maxLength 100
+     * @nullable
+     */
+  licenseOverride?: string | null;
+  /**
+     * @maxLength 100
+     * @nullable
+     */
+  brokerageLicenseOverride?: string | null;
+  showEmail?: boolean;
+  showPhone?: boolean;
+  showWebsite?: boolean;
+  showLicense?: boolean;
+  showBrokerageName?: boolean;
+  showBrokerageAddress?: boolean;
+  showBrokerageWebsite?: boolean;
+  showBrokerageLicense?: boolean;
+}
+
+export interface OwnAgentPublicProfile {
+  userId: string;
+  /** @nullable */
+  bio?: string | null;
+  /** @nullable */
+  displayNameOverride?: string | null;
+  /** @nullable */
+  emailOverride?: string | null;
+  /** @nullable */
+  phoneOverride?: string | null;
+  /** @nullable */
+  websiteOverride?: string | null;
+  /** @nullable */
+  profileImageUrlOverride?: string | null;
+  /** @nullable */
+  brokerageNameOverride?: string | null;
+  /** @nullable */
+  brokerageAddressOverride?: string | null;
+  /** @nullable */
+  brokerageWebsiteOverride?: string | null;
+  /** @nullable */
+  brokerageLicenseOverride?: string | null;
+  /** @nullable */
+  licenseOverride?: string | null;
+  /** @nullable */
+  mlsDisplayName?: string | null;
+  /** @nullable */
+  mlsEmail?: string | null;
+  /** @nullable */
+  mlsPhone?: string | null;
+  /** @nullable */
+  mlsWebsite?: string | null;
+  /** @nullable */
+  mlsProfileImageUrl?: string | null;
+  /** @nullable */
+  mlsBrokerageName?: string | null;
+  /** @nullable */
+  mlsBrokerageAddress?: string | null;
+  /** @nullable */
+  mlsBrokerageWebsite?: string | null;
+  /** @nullable */
+  mlsBrokerageLicense?: string | null;
+  /** @nullable */
+  mlsLicense?: string | null;
+  showEmail?: boolean;
+  showPhone?: boolean;
+  showWebsite?: boolean;
+  showLicense?: boolean;
+  showBrokerageName?: boolean;
+  showBrokerageAddress?: boolean;
+  showBrokerageWebsite?: boolean;
+  showBrokerageLicense?: boolean;
+  /** @nullable */
+  lastMlsSyncAt?: string | null;
+  importedCount?: number;
+  resolvedPreview: AgentProfile;
+}
+
 export type ContactAgentResponseAgentType = typeof ContactAgentResponseAgentType[keyof typeof ContactAgentResponseAgentType];
 
 
@@ -253,6 +462,12 @@ q: string;
 
 export type SearchAgents200 = {
   agents: PublicAgent[];
+};
+
+export type GetAgentDirectoryParams = {
+q?: string;
+limit?: number;
+offset?: number;
 };
 
 export type LinkAgent200 = {

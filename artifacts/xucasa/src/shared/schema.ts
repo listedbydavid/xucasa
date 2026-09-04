@@ -53,6 +53,8 @@ export const properties = pgTable("properties", {
   mlsNumber: text("mls_number"),                        // MLS # displayed to users
   propertyType: text("property_type"),                   // SFH, Condo, Townhome, Land, Multi-Family, etc.
   listDate: timestamp("list_date"),                     // When listed on MLS
+  closeDate: timestamp("close_date"),                   // When the MLS transaction closed
+  closePrice: integer("close_price"),                   // Final MLS sale price
   idxUpdatedAt: timestamp("idx_updated_at"),            // Last sync from IDX
   // SDMLS 12.16(e) listing attribution
   listingBrokerage: text("listing_brokerage"),

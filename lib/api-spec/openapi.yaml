@@ -18,6 +18,8 @@ tags:
     description: Saved-property alert settings
   - name: agent-relationships
     description: Agent contact resolution, listing sharing, and buyer-agent linking
+  - name: agent-directory
+    description: Verified-agent directory and public profile management
 paths:
   /healthz:
     get:
@@ -440,6 +442,74 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /agents/directory:
+    get:
+      operationId: getAgentDirectory
+      tags: [agent-directory]
+      summary: Search the verified-agent directory
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: number } }
+        - { name: offset, in: query, schema: { type: number } }
+      responses:
+        "200":
+          description: Directory page
+          content: { application/json: { schema: { $ref: "#/components/schemas/AgentDirectoryResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { description: Verified agent access required }
+  /agents/{agentId}/profile:
+    get:
+      operationId: getAgentProfile
+      tags: [agent-directory]
+      summary: Get a verified agent's public profile
+      parameters:
+        - { name: agentId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Agent public profile
+          content: { application/json: { schema: { $ref: "#/components/schemas/AgentProfile" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { description: Verified agent access required }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /agent/public-profile:
+    get:
+      operationId: getOwnAgentPublicProfile
+      tags: [agent-directory]
+      summary: Get the authenticated agent's editable public profile
+      responses:
+        "200":
+          description: Editable profile
+          content: { application/json: { schema: { $ref: "#/components/schemas/OwnAgentPublicProfile" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { description: Agent access required }
+    patch:
+      operationId: updateOwnAgentPublicProfile
+      tags: [agent-directory]
+      summary: Update public-profile corrections and visibility
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AgentPublicProfileUpdate" } } }
+      responses:
+        "200":
+          description: Updated profile
+          content: { application/json: { schema: { $ref: "#/components/schemas/OwnAgentPublicProfile" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { description: Verified agent access required }
+  /agent/public-profile/sync-mls:
+    post:
+      operationId: syncOwnAgentPublicProfileFromMls
+      tags: [agent-directory]
+      summary: Refresh MLS snapshot fields without changing overrides
+      responses:
+        "200":
+          description: Synced profile
+          content: { application/json: { schema: { $ref: "#/components/schemas/OwnAgentPublicProfile" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { description: Verified agent access required }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502": { description: MLS sync unavailable }
   /buyer/link-agent:
     post:
       operationId: linkAgent
@@ -704,6 +774,129 @@ components:
         agentMlsId:
           type: ["string", "null"]
       required: [id, firstName, lastName, email, phone, profileImageUrl, brokerageName, agentMlsId]
+    AgentPropertySummary:
+      type: object
+      properties:
+        id: { type: number }
+        title: { type: string }
+        location: { type: string }
+        addressCity: { type: [string, "null"] }
+        addressState: { type: [string, "null"] }
+        price: { type: number }
+        closePrice: { type: [number, "null"] }
+        listDate: { type: [string, "null"], format: date-time }
+        closeDate: { type: [string, "null"], format: date-time }
+        beds: { type: number }
+        baths: { type: number }
+        sqft: { type: number }
+        imageUrl: { type: [string, "null"] }
+        listingStatus: { type: string }
+        status: { type: string }
+        source: { type: string }
+        mlsNumber: { type: [string, "null"] }
+      required: [id, title, location, price, beds, baths, sqft, listingStatus, status, source]
+    AgentDirectoryItem:
+      type: object
+      properties:
+        id: { type: string }
+        displayName: { type: [string, "null"] }
+        profileImageUrl: { type: [string, "null"] }
+        brokerageName: { type: [string, "null"] }
+        licenseNumber: { type: [string, "null"] }
+        licenseState: { type: [string, "null"] }
+        currentListingsCount: { type: number }
+        salesYtdCount: { type: number }
+        salesPreviousYearCount: { type: number }
+        salesFiveYearsCount: { type: number }
+        lastMlsSyncAt: { type: [string, "null"], format: date-time }
+      required: [id, currentListingsCount, salesYtdCount, salesPreviousYearCount, salesFiveYearsCount]
+    AgentDirectoryResponse:
+      type: object
+      properties:
+        agents: { type: array, items: { $ref: "#/components/schemas/AgentDirectoryItem" } }
+        total: { type: number }
+        limit: { type: number }
+        offset: { type: number }
+      required: [agents, total, limit, offset]
+    AgentProfile:
+      allOf:
+        - $ref: "#/components/schemas/AgentDirectoryItem"
+        - type: object
+          properties:
+            email: { type: [string, "null"] }
+            phone: { type: [string, "null"] }
+            website: { type: [string, "null"] }
+            brokerageAddress: { type: [string, "null"] }
+            brokerageWebsite: { type: [string, "null"] }
+            brokerageLicense: { type: [string, "null"] }
+            bio: { type: [string, "null"] }
+            sourceFields: { type: object, additionalProperties: { type: string, enum: [mls, override, account] } }
+            periods: { type: object, properties: { currentYear: { type: number }, previousYear: { type: number }, fiveYearStart: { type: number } }, required: [currentYear, previousYear, fiveYearStart] }
+            currentListings: { type: array, items: { $ref: "#/components/schemas/AgentPropertySummary" } }
+            salesYtd: { type: array, items: { $ref: "#/components/schemas/AgentPropertySummary" } }
+            salesPreviousYear: { type: array, items: { $ref: "#/components/schemas/AgentPropertySummary" } }
+            salesFiveYears: { type: array, items: { $ref: "#/components/schemas/AgentPropertySummary" } }
+          required: [periods, currentListings, salesYtd, salesPreviousYear, salesFiveYears]
+    AgentPublicProfileUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        bio: { type: [string, "null"], maxLength: 4000 }
+        displayNameOverride: { type: [string, "null"], maxLength: 200 }
+        emailOverride: { type: [string, "null"], pattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$' }
+        phoneOverride: { type: [string, "null"], maxLength: 50 }
+        websiteOverride: { type: [string, "null"], pattern: '^https?://' }
+        profileImageUrlOverride: { type: [string, "null"], pattern: '^https?://' }
+        brokerageNameOverride: { type: [string, "null"], maxLength: 200 }
+        brokerageAddressOverride: { type: [string, "null"], maxLength: 500 }
+        brokerageWebsiteOverride: { type: [string, "null"], pattern: '^https?://' }
+        licenseOverride: { type: [string, "null"], maxLength: 100 }
+        brokerageLicenseOverride: { type: [string, "null"], maxLength: 100 }
+        showEmail: { type: boolean }
+        showPhone: { type: boolean }
+        showWebsite: { type: boolean }
+        showLicense: { type: boolean }
+        showBrokerageName: { type: boolean }
+        showBrokerageAddress: { type: boolean }
+        showBrokerageWebsite: { type: boolean }
+        showBrokerageLicense: { type: boolean }
+    OwnAgentPublicProfile:
+      type: object
+      properties:
+        userId: { type: string }
+        bio: { type: [string, "null"] }
+        displayNameOverride: { type: [string, "null"] }
+        emailOverride: { type: [string, "null"] }
+        phoneOverride: { type: [string, "null"] }
+        websiteOverride: { type: [string, "null"] }
+        profileImageUrlOverride: { type: [string, "null"] }
+        brokerageNameOverride: { type: [string, "null"] }
+        brokerageAddressOverride: { type: [string, "null"] }
+        brokerageWebsiteOverride: { type: [string, "null"] }
+        brokerageLicenseOverride: { type: [string, "null"] }
+        licenseOverride: { type: [string, "null"] }
+        mlsDisplayName: { type: [string, "null"] }
+        mlsEmail: { type: [string, "null"] }
+        mlsPhone: { type: [string, "null"] }
+        mlsWebsite: { type: [string, "null"] }
+        mlsProfileImageUrl: { type: [string, "null"] }
+        mlsBrokerageName: { type: [string, "null"] }
+        mlsBrokerageAddress: { type: [string, "null"] }
+        mlsBrokerageWebsite: { type: [string, "null"] }
+        mlsBrokerageLicense: { type: [string, "null"] }
+        mlsLicense: { type: [string, "null"] }
+        showEmail: { type: boolean }
+        showPhone: { type: boolean }
+        showWebsite: { type: boolean }
+        showLicense: { type: boolean }
+        showBrokerageName: { type: boolean }
+        showBrokerageAddress: { type: boolean }
+        showBrokerageWebsite: { type: boolean }
+        showBrokerageLicense: { type: boolean }
+        lastMlsSyncAt: { type: [string, "null"], format: date-time }
+        importedCount: { type: number }
+        resolvedPreview: { $ref: "#/components/schemas/AgentProfile" }
+      required: [userId, resolvedPreview]
     ContactAgentResponse:
       type: object
       properties:

@@ -65,6 +65,9 @@ import RestartButton from "@/components/tours/RestartButton";
 import { AppDownloadBanner } from "@/components/AppDownloadBanner";
 import CreateListing from "@/pages/CreateListing";
 import EditListing from "@/pages/EditListing";
+import AgentDirectory from "@/pages/AgentDirectory";
+import AgentProfilePage from "@/pages/AgentProfilePage";
+import AgentProfileSettings from "@/pages/AgentProfileSettings";
 import { ProtectedRoute, AuthOnlyRoute } from "@/components/OnboardingGuard";
 import { PreviewProvider, usePreview } from "@/lib/preview-context";
 import { AdminPreviewBar } from "@/components/AdminPreviewBar";
@@ -90,6 +93,9 @@ function Router() {
       <Route path="/dashboard">{() => <ProtectedRoute component={Dashboard} />}</Route>
       <Route path="/conversations/:id">{() => <ProtectedRoute component={ConversationThread} />}</Route>
       <Route path="/agent">{() => <ProtectedRoute component={AgentDashboard} />}</Route>
+      <Route path="/agents">{() => <ProtectedRoute component={AgentDirectory} />}</Route>
+      <Route path="/agents/:id">{() => <ProtectedRoute component={AgentProfilePage} />}</Route>
+      <Route path="/agent/profile-settings">{() => <ProtectedRoute component={AgentProfileSettings} />}</Route>
       <Route path="/buyers">{() => <ProtectedRoute component={Buyers} />}</Route>
       <Route path="/admin">{() => <ProtectedRoute component={Admin} />}</Route>
       <Route component={NotFound} />

@@ -6,6 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './agentDirectoryItem';
+export * from './agentDirectoryResponse';
+export * from './agentProfile';
+export * from './agentProfilePeriods';
+export * from './agentProfileSourceFields';
+export * from './agentPropertySummary';
+export * from './agentPublicProfileUpdate';
 export * from './archiveAgentListing200';
 export * from './archiveListingInput';
 export * from './authSession';
@@ -16,6 +23,7 @@ export * from './contactAgentResponseAgentType';
 export * from './createPropertyInquiry201';
 export * from './createTourInquiry200';
 export * from './error';
+export * from './getAgentDirectoryParams';
 export * from './getListingShareUrl200';
 export * from './getMyAgent200';
 export * from './healthStatus';
@@ -30,6 +38,7 @@ export * from './loginRequest';
 export * from './notFoundResponse';
 export * from './notificationPreferences';
 export * from './notificationPreferencesUpdate';
+export * from './ownAgentPublicProfile';
 export * from './priceDropAlertUpdate';
 export * from './propertyInquiryInput';
 export * from './propertyViewInput';
