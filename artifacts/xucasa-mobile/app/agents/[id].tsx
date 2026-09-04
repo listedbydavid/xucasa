@@ -18,6 +18,7 @@ import type { AgentPropertySummary } from '@workspace/api-client-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColors } from '@/hooks/useColors';
 import { formatPrice } from '@/lib/api';
+import { agentPropertyRoute } from '@/lib/agentDirectoryRoutes';
 
 function PropertySummaryRow({ property }: { property: AgentPropertySummary }) {
   const colors = useColors();
@@ -27,7 +28,7 @@ function PropertySummaryRow({ property }: { property: AgentPropertySummary }) {
     <Pressable
       testID={`agent-property-${property.id}`}
       accessibilityRole="button"
-      onPress={() => router.push(`/property/${property.id}`)}
+      onPress={() => router.push(agentPropertyRoute(property.id))}
       style={({ pressed }) => [
         styles.property,
         { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.72 : 1 },

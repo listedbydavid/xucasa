@@ -17,6 +17,7 @@ import { getGetAgentDirectoryQueryKey, useGetAgentDirectory } from '@workspace/a
 import type { AgentDirectoryItem } from '@workspace/api-client-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColors } from '@/hooks/useColors';
+import { agentProfileRoute } from '@/lib/agentDirectoryRoutes';
 
 function AgentCard({ agent, onPress }: { agent: AgentDirectoryItem; onPress: () => void }) {
   const colors = useColors();
@@ -173,7 +174,7 @@ export default function AgentDirectoryScreen() {
           testID="agent-directory-list"
           data={directory.data?.agents ?? []}
           keyExtractor={(agent) => agent.id}
-          renderItem={({ item }) => <AgentCard agent={item} onPress={() => router.push(`/agents/${encodeURIComponent(item.id)}`)} />}
+          renderItem={({ item }) => <AgentCard agent={item} onPress={() => router.push(agentProfileRoute(item.id))} />}
           contentContainerStyle={[styles.list, { paddingBottom: bottomInset + 24 }]}
           keyboardShouldPersistTaps="handled"
           ListHeaderComponent={<Text style={[styles.results, { color: colors.mutedForeground }]}>{directory.data?.total ?? 0} verified agents</Text>}

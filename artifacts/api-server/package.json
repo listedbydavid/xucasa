@@ -8,6 +8,7 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "test:native-session": "node --test --experimental-strip-types src/__tests__/nativeSession.test.ts",
+    "test:agent-directory": "pnpm exec tsx --test src/__tests__/agentDirectoryJourney.integration.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

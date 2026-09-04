@@ -119,6 +119,12 @@ async function getProfile(userId: string) {
   return db.query.agentPublicProfiles.findFirst({ where: eq(agentPublicProfiles.userId, userId) });
 }
 
+export async function persistAgentMlsSnapshot(userId: string, snapshot: Record<string, unknown>) {
+  await db.insert(agentPublicProfiles)
+    .values({ userId, ...snapshot })
+    .onConflictDoUpdate({ target: agentPublicProfiles.userId, set: snapshot });
+}
+
 router.get("/api/agents/directory", isAuthenticated, async (req: any, res) => {
   const viewer = await currentUser(req, res); if (!viewer) return;
   const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100), offset = Math.max(Number(req.query.offset) || 0, 0);
@@ -190,7 +196,7 @@ router.post("/api/agent/public-profile/sync-mls", isAuthenticated, async (req: a
     if (!user.agentMlsId && member.MemberKey) await db.update(users).set({ agentMlsId: String(member.MemberKey), updatedAt: new Date() }).where(eq(users.id, user.id));
     const agentMlsId = user.agentMlsId || member.MemberKey || null;
     const snapshot = { mlsDisplayName: member.MemberFullName || null, mlsEmail: member.MemberEmail || null, mlsPhone: member.MemberDirectPhone || member.MemberMobilePhone || member.MemberOfficePhone || null, mlsWebsite: safeHttpUrl(member.MemberHomePageURL), mlsProfileImageUrl: safeHttpUrl(member.MemberPhotoURL), mlsLicense: member.MemberStateLicense || null, mlsBrokerageName: office?.OfficeName || member.OfficeName || null, mlsBrokerageAddress: office ? [office.OfficeAddress1, office.OfficeCity, office.OfficeStateOrProvince, office.OfficePostalCode].filter(Boolean).join(", ") || null : null, mlsBrokerageWebsite: safeHttpUrl(office?.OfficeURL), mlsBrokerageLicense: office?.OfficeLicense || office?.OfficeBrokerMlsId || null, lastMlsSyncAt: new Date(), updatedAt: new Date() };
-    await db.insert(agentPublicProfiles).values({ userId: user.id, ...snapshot }).onConflictDoUpdate({ target: agentPublicProfiles.userId, set: snapshot });
+    await persistAgentMlsSnapshot(user.id, snapshot);
     const importedCount = agentMlsId ? await importAgentResoTransactions(String(agentMlsId)) : 0;
     const profile = await getProfile(user.id);
     await audit({ req, event: "agent_public_profile_mls_synced", outcome: "success", userId: user.id });
