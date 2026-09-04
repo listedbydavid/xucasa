@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "xucasa",
+    "name": "Xucasa",
     "slug": "xucasa-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -15,7 +15,8 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.xucasa.app"
+      "bundleIdentifier": "com.xucasa.app",
+      "buildNumber": "1"
     },
     "android": {
       "package": "com.xucasa.app"

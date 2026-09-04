@@ -15,15 +15,21 @@
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://www.xucasa.com"
+      },
+      "ios": {
+        "buildConfiguration": "Release"
+      }
     }
   },
   "submit": {
     "production": {
       "ios": {
-        "appleId": "",
-        "ascAppId": "",
-        "appleTeamId": ""
+        "appleId": "davehussain@gmail.com",
+        "ascAppId": "6808509177",
+        "appleTeamId": "G67Y32QGU9"
       }
     }
   }
