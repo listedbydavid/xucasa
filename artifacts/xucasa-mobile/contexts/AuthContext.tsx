@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost, clearSession, storeSessionToken, type User } from '@/lib/api';
 import { retryPendingPushUnregistration, unregisterPushDevice } from '@/lib/pushNotifications';
+import { clearSessionQueryCache } from '@/lib/sessionQueryCache';
 
 interface AuthContextType {
   user: User | null;
@@ -20,17 +22,34 @@ interface AuthSessionResponse {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const activeUserId = useRef<string | null>(null);
+
+  const replaceUser = useCallback(async (nextUser: User | null) => {
+    const previousUserId = activeUserId.current;
+    if (previousUserId !== (nextUser?.id ?? null)) {
+      await clearSessionQueryCache(queryClient);
+    }
+    activeUserId.current = nextUser?.id ?? null;
+    setUser(nextUser);
+  }, [queryClient]);
+
+  const resetSessionState = useCallback(async () => {
+    activeUserId.current = null;
+    setUser(null);
+    await clearSessionQueryCache(queryClient);
+  }, [queryClient]);
 
   const refreshUser = useCallback(async () => {
     try {
       const userData = await apiGet<User>('/api/auth/user');
-      setUser(userData);
+      await replaceUser(userData);
     } catch {
-      setUser(null);
+      await resetSessionState();
     }
-  }, []);
+  }, [replaceUser, resetSessionState]);
 
   useEffect(() => {
     let mounted = true;
@@ -41,25 +60,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshUser]);
 
   const login = useCallback(async (email: string, password: string) => {
+    await resetSessionState();
     const session = await apiPost<AuthSessionResponse>('/api/auth/login', { email, password });
     await storeSessionToken(session.sessionToken);
     const userData = await apiGet<User>('/api/auth/user');
-    setUser(userData);
-  }, []);
+    await replaceUser(userData);
+  }, [replaceUser, resetSessionState]);
 
   const register = useCallback(async (email: string, password: string, firstName: string, lastName = '') => {
+    await resetSessionState();
     const session = await apiPost<AuthSessionResponse>('/api/auth/register', { email, password, firstName, lastName });
     await storeSessionToken(session.sessionToken);
     const userData = await apiGet<User>('/api/auth/user');
-    setUser(userData);
-  }, []);
+    await replaceUser(userData);
+  }, [replaceUser, resetSessionState]);
 
   const logout = useCallback(async () => {
     try { await unregisterPushDevice(); } catch {}
     try { await apiGet('/api/logout'); } catch {}
     await clearSession();
-    setUser(null);
-  }, []);
+    await resetSessionState();
+  }, [resetSessionState]);
 
   return (
     <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, register, logout, refreshUser }}>

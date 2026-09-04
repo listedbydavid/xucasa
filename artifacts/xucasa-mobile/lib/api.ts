@@ -268,10 +268,10 @@ export interface User {
   name?: string;
   firstName?: string;
   lastName?: string;
-  isAdmin?: boolean;
-  isAgent?: boolean;
   role?: string;
   agentVerified?: boolean;
+  isAdmin?: boolean;
+  isAgent?: boolean;
   profileImageUrl?: string;
 }
 

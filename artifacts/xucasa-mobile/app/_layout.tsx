@@ -48,11 +48,12 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerBackTitle: 'Back' }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="property/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="agents/index" options={{ title: 'Agent Directory', headerBackTitle: 'Back' }} />
-      <Stack.Screen name="agents/[id]" options={{ title: 'Agent Profile', headerBackTitle: 'Directory' }} />
       <Stack.Screen name="agent-profile-settings" options={{ title: 'Public Profile' }} />
       <Stack.Screen name="auth" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="conversation/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="agents/index" options={{ headerShown: false }} />
+      <Stack.Screen name="agents/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="agent-profile" options={{ headerShown: false }} />
       <Stack.Screen
         name="filters"
         options={{

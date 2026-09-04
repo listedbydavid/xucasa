@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  agentMatchesDirectoryQuery,
   agentPublicProfileUpdateSchema,
   groupAgentProperties,
   isVerifiedAgent,
@@ -50,6 +51,14 @@ test("every contact, brokerage, and license visibility flag masks public output"
   assert.equal(hidden.licenseNumber, null); assert.equal(hidden.brokerageName, null); assert.equal(hidden.brokerageAddress, null);
   assert.equal(hidden.brokerageWebsite, null); assert.equal(hidden.brokerageLicense, null);
   assert.equal(hidden.licenseState, null);
+});
+
+test("directory search cannot infer hidden license details", () => {
+  assert.equal(agentMatchesDirectoryQuery(agent, profile, "CA"), true);
+  assert.equal(agentMatchesDirectoryQuery(agent, profile, "DRE-MLS"), true);
+  assert.equal(agentMatchesDirectoryQuery(agent, { ...profile, showLicense: false }, "CA"), false);
+  assert.equal(agentMatchesDirectoryQuery(agent, { ...profile, showLicense: false }, "DRE-MLS"), false);
+  assert.equal(agentMatchesDirectoryQuery(agent, { ...profile, showLicense: false }, "MLS Agent"), true);
 });
 
 test("agent profile URLs only allow HTTP and HTTPS", () => {

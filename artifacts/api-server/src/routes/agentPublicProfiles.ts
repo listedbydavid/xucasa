@@ -74,6 +74,18 @@ export function publicAgentProfile(user: any, profile: any) {
     lastMlsSyncAt: profile?.lastMlsSyncAt ?? null,
   };
 }
+
+export function agentMatchesDirectoryQuery(user: any, profile: any, query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const publicValues = publicAgentProfile(user, profile);
+  return [
+    publicValues.displayName,
+    publicValues.brokerageName,
+    publicValues.licenseNumber,
+    publicValues.licenseState,
+  ].filter(Boolean).join(" ").toLowerCase().includes(q);
+}
 export function propertyAttributedToAgent(property: any, user: any) {
   return property.agentId === user.id ||
     (!!user.agentMlsId && property.listingAgentMlsId === user.agentMlsId) ||
@@ -116,16 +128,7 @@ router.get("/api/agents/directory", isAuthenticated, async (req: any, res) => {
   const profileByUserId = new Map(profiles.map(profile => [profile.userId, profile]));
   const selected = rows
     .map(user => ({ user, profile: profileByUserId.get(user.id) }))
-    .filter(({ user, profile }) => {
-      if (!q) return true;
-      const publicValues = publicAgentProfile(user, profile);
-      return [
-        publicValues.displayName,
-        publicValues.brokerageName,
-        publicValues.licenseNumber,
-        user.licenseState,
-      ].filter(Boolean).join(" ").toLowerCase().includes(q);
-    });
+    .filter(({ user, profile }) => agentMatchesDirectoryQuery(user, profile, q));
   const allProperties = await db.select().from(properties);
   const agents = selected.slice(offset, offset + limit).map(({ user, profile }) => {
     const grouped = groupAgentProperties(allProperties, user);

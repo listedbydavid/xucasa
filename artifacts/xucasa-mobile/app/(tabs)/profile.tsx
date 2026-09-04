@@ -38,11 +38,12 @@ interface AssignedAgent {
   profileImageUrl?: string;
 }
 
-function ProfileRow({ icon, label, value, onPress }: {
+function ProfileRow({ icon, label, value, onPress, testID }: {
   icon: string;
   label: string;
   value?: string;
   onPress?: () => void;
+  testID?: string;
 }) {
   const colors = useColors();
   const Component = onPress ? TouchableOpacity : View;
@@ -50,6 +51,7 @@ function ProfileRow({ icon, label, value, onPress }: {
     <Component
       style={[styles.row, { borderBottomColor: colors.border }]}
       onPress={onPress}
+      testID={testID}
       activeOpacity={0.7}
     >
       <View style={styles.rowIcon}>
@@ -138,6 +140,7 @@ export default function ProfileScreen() {
     .slice(0, 2)
     .join('')
     .toUpperCase();
+  const canUseAgentDirectory = user?.role === 'agent' && user.agentVerified === true;
 
   if (!isAuthenticated && !isLoading) {
     return (
@@ -257,8 +260,8 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* Agent Tools section (verified agents only) */}
-        {user?.role === 'agent' && user?.agentVerified && (
+        {/* Agent tools */}
+        {canUseAgentDirectory && (
           <>
             <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'DMSans_700Bold' }]}>
               AGENT TOOLS
@@ -266,13 +269,17 @@ export default function ProfileScreen() {
             <View style={styles.group}>
               <ProfileRow
                 icon="people-outline"
-                label="Agent directory"
+                label="Verified agent directory"
+                value="Find agents and view production"
                 onPress={() => router.push('/agents')}
+                testID="profile-agent-directory"
               />
               <ProfileRow
-                icon="card-outline"
-                label="Public profile settings"
-                onPress={() => router.push('/agent-profile-settings')}
+                icon="create-outline"
+                label="Manage public profile"
+                value="Corrections, visibility, and MLS sync"
+                onPress={() => router.push('/agent-profile')}
+                testID="profile-agent-public-profile"
               />
             </View>
           </>
