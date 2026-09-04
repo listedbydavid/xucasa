@@ -257,6 +257,27 @@ export default function ProfileScreen() {
           )}
         </View>
 
+        {/* Agent Tools section (verified agents only) */}
+        {user?.role === 'agent' && user?.agentVerified && (
+          <>
+            <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'DMSans_700Bold' }]}>
+              AGENT TOOLS
+            </Text>
+            <View style={styles.group}>
+              <ProfileRow
+                icon="people-outline"
+                label="Agent directory"
+                onPress={() => router.push('/agents')}
+              />
+              <ProfileRow
+                icon="card-outline"
+                label="Public profile settings"
+                onPress={() => router.push('/agent-profile-settings')}
+              />
+            </View>
+          </>
+        )}
+
         {/* Notifications */}
         <Text style={[styles.sectionLabel, { color: colors.mutedForeground, fontFamily: 'DMSans_700Bold' }]}>
           NOTIFICATIONS

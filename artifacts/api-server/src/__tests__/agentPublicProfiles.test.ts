@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  agentPublicProfileUpdateSchema,
   groupAgentProperties,
   isVerifiedAgent,
   propertyAttributedToAgent,
@@ -49,6 +50,14 @@ test("every contact, brokerage, and license visibility flag masks public output"
   assert.equal(hidden.licenseNumber, null); assert.equal(hidden.brokerageName, null); assert.equal(hidden.brokerageAddress, null);
   assert.equal(hidden.brokerageWebsite, null); assert.equal(hidden.brokerageLicense, null);
   assert.equal(hidden.licenseState, null);
+});
+
+test("agent profile URLs only allow HTTP and HTTPS", () => {
+  assert.equal(agentPublicProfileUpdateSchema.safeParse({ websiteOverride: "https://agent.example.com" }).success, true);
+  assert.equal(agentPublicProfileUpdateSchema.safeParse({ profileImageUrlOverride: "http://images.example.com/agent.jpg" }).success, true);
+  assert.equal(agentPublicProfileUpdateSchema.safeParse({ websiteOverride: "javascript:alert(1)" }).success, false);
+  assert.equal(agentPublicProfileUpdateSchema.safeParse({ brokerageWebsiteOverride: "httpcustom:open-native-feature" }).success, false);
+  assert.equal(publicAgentProfile(agent, { ...profile, websiteOverride: "custom-scheme:payload" }).website, null);
 });
 
 test("attribution uses only listing-side authoritative identifiers", () => {
@@ -108,6 +117,6 @@ test("sales respect YTD, previous-year, five-calendar-year and legacy date bound
 });
 
 Promise.all(pending).then(() => {
-  console.log(`\n${passed} passed, ${failed} failed (36 assertions)\n`);
+  console.log(`\n${passed} passed, ${failed} failed (41 assertions)\n`);
   if (failed) process.exit(1);
 });

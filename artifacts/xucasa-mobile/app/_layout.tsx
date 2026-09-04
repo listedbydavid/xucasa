@@ -17,15 +17,17 @@ import {
 } from '@expo-google-fonts/outfit';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { setBaseUrl } from '@workspace/api-client-react';
+import { setAuthTokenGetter, setBaseUrl } from '@workspace/api-client-react';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { getSessionToken } from '@/lib/api';
 
 // Set API base URL for the generated client.
 // Priority: EXPO_PUBLIC_API_URL (EAS/production) > EXPO_PUBLIC_DOMAIN (Replit dev preview).
 {
   const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim() || `https://${process.env.EXPO_PUBLIC_DOMAIN}`;
   setBaseUrl(apiUrl);
+  setAuthTokenGetter(getSessionToken);
 }
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -46,6 +48,9 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerBackTitle: 'Back' }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="property/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="agents/index" options={{ title: 'Agent Directory', headerBackTitle: 'Back' }} />
+      <Stack.Screen name="agents/[id]" options={{ title: 'Agent Profile', headerBackTitle: 'Directory' }} />
+      <Stack.Screen name="agent-profile-settings" options={{ title: 'Public Profile' }} />
       <Stack.Screen name="auth" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="conversation/[id]" options={{ headerShown: false }} />
       <Stack.Screen

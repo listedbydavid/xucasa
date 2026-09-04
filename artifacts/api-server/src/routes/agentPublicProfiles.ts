@@ -9,13 +9,26 @@ import { getRealtyFeedToken, importAgentResoTransactions, REALTYFEED_API_BASE, r
 
 const router = Router();
 const nullableText = (max: number) => z.string().trim().max(max).nullable().optional();
-const updateSchema = z.object({
+function safeHttpUrl(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const parsed = new URL(value.trim());
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+const nullableHttpUrl = z.string().trim().max(2048).url().refine(
+  value => safeHttpUrl(value) !== null,
+  "Only HTTP and HTTPS URLs are allowed",
+).nullable().optional();
+export const agentPublicProfileUpdateSchema = z.object({
   bio: nullableText(4000), displayNameOverride: nullableText(200),
   emailOverride: z.string().email().max(320).nullable().optional(),
-  phoneOverride: nullableText(50), websiteOverride: z.string().url().max(2048).nullable().optional(),
-  profileImageUrlOverride: z.string().url().max(2048).nullable().optional(),
+  phoneOverride: nullableText(50), websiteOverride: nullableHttpUrl,
+  profileImageUrlOverride: nullableHttpUrl,
   brokerageNameOverride: nullableText(200), brokerageAddressOverride: nullableText(500),
-  brokerageWebsiteOverride: z.string().url().max(2048).nullable().optional(), licenseOverride: nullableText(100), brokerageLicenseOverride: nullableText(100),
+  brokerageWebsiteOverride: nullableHttpUrl, licenseOverride: nullableText(100), brokerageLicenseOverride: nullableText(100),
   showEmail: z.boolean().optional(), showPhone: z.boolean().optional(), showWebsite: z.boolean().optional(),
   showLicense: z.boolean().optional(), showBrokerageName: z.boolean().optional(),
   showBrokerageAddress: z.boolean().optional(), showBrokerageWebsite: z.boolean().optional(),
@@ -50,10 +63,10 @@ export function publicAgentProfile(user: any, profile: any) {
   const r = resolveAgentPublicProfile(user, profile);
   const visible = (name: keyof typeof r, flag: string) => profile?.[flag] === false ? null : r[name].value;
   return {
-    id: user.id, displayName: r.displayName.value, profileImageUrl: r.profileImageUrl.value,
-    email: visible("email", "showEmail"), phone: visible("phone", "showPhone"), website: visible("website", "showWebsite"),
+    id: user.id, displayName: r.displayName.value, profileImageUrl: safeHttpUrl(r.profileImageUrl.value),
+    email: visible("email", "showEmail"), phone: visible("phone", "showPhone"), website: safeHttpUrl(visible("website", "showWebsite")),
     brokerageName: visible("brokerageName", "showBrokerageName"), brokerageAddress: visible("brokerageAddress", "showBrokerageAddress"),
-    brokerageWebsite: visible("brokerageWebsite", "showBrokerageWebsite"), licenseNumber: visible("license", "showLicense"),
+    brokerageWebsite: safeHttpUrl(visible("brokerageWebsite", "showBrokerageWebsite")), licenseNumber: visible("license", "showLicense"),
     brokerageLicense: visible("brokerageLicense", "showBrokerageLicense"),
     licenseState: profile?.showLicense === false ? null : user.licenseState ?? null,
     bio: profile?.bio ?? null,
@@ -140,7 +153,7 @@ router.get("/api/agent/public-profile", isAuthenticated, async (req: any, res) =
 });
 router.patch("/api/agent/public-profile", isAuthenticated, async (req: any, res) => {
   const user = await currentUser(req, res); if (!user) return;
-  const parsed = updateSchema.safeParse(req.body);
+  const parsed = agentPublicProfileUpdateSchema.safeParse(req.body);
   if (!parsed.success) { await audit({ req, event: "agent_public_profile_updated", outcome: "failure", userId: user.id, errorMessage: "Invalid profile update" }); return res.status(400).json({ message: "Invalid profile update", errors: parsed.error.flatten() }); }
   try {
     await db.insert(agentPublicProfiles).values({ userId: user.id, ...parsed.data, updatedAt: new Date() }).onConflictDoUpdate({ target: agentPublicProfiles.userId, set: { ...parsed.data, updatedAt: new Date() } });
@@ -173,7 +186,7 @@ router.post("/api/agent/public-profile/sync-mls", isAuthenticated, async (req: a
     }
     if (!user.agentMlsId && member.MemberKey) await db.update(users).set({ agentMlsId: String(member.MemberKey), updatedAt: new Date() }).where(eq(users.id, user.id));
     const agentMlsId = user.agentMlsId || member.MemberKey || null;
-    const snapshot = { mlsDisplayName: member.MemberFullName || null, mlsEmail: member.MemberEmail || null, mlsPhone: member.MemberDirectPhone || member.MemberMobilePhone || member.MemberOfficePhone || null, mlsWebsite: member.MemberHomePageURL || null, mlsProfileImageUrl: member.MemberPhotoURL || null, mlsLicense: member.MemberStateLicense || null, mlsBrokerageName: office?.OfficeName || member.OfficeName || null, mlsBrokerageAddress: office ? [office.OfficeAddress1, office.OfficeCity, office.OfficeStateOrProvince, office.OfficePostalCode].filter(Boolean).join(", ") || null : null, mlsBrokerageWebsite: office?.OfficeURL || null, mlsBrokerageLicense: office?.OfficeLicense || office?.OfficeBrokerMlsId || null, lastMlsSyncAt: new Date(), updatedAt: new Date() };
+    const snapshot = { mlsDisplayName: member.MemberFullName || null, mlsEmail: member.MemberEmail || null, mlsPhone: member.MemberDirectPhone || member.MemberMobilePhone || member.MemberOfficePhone || null, mlsWebsite: safeHttpUrl(member.MemberHomePageURL), mlsProfileImageUrl: safeHttpUrl(member.MemberPhotoURL), mlsLicense: member.MemberStateLicense || null, mlsBrokerageName: office?.OfficeName || member.OfficeName || null, mlsBrokerageAddress: office ? [office.OfficeAddress1, office.OfficeCity, office.OfficeStateOrProvince, office.OfficePostalCode].filter(Boolean).join(", ") || null : null, mlsBrokerageWebsite: safeHttpUrl(office?.OfficeURL), mlsBrokerageLicense: office?.OfficeLicense || office?.OfficeBrokerMlsId || null, lastMlsSyncAt: new Date(), updatedAt: new Date() };
     await db.insert(agentPublicProfiles).values({ userId: user.id, ...snapshot }).onConflictDoUpdate({ target: agentPublicProfiles.userId, set: snapshot });
     const importedCount = agentMlsId ? await importAgentResoTransactions(String(agentMlsId)) : 0;
     const profile = await getProfile(user.id);

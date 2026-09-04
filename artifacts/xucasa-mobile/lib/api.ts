@@ -33,7 +33,7 @@ async function getCookie(): Promise<string | null> {
   return SecureStore.getItemAsync(COOKIE_KEY);
 }
 
-async function getSessionToken(): Promise<string | null> {
+export async function getSessionToken(): Promise<string | null> {
   if (Platform.OS === 'web') return null;
   return SecureStore.getItemAsync(SESSION_TOKEN_KEY);
 }
@@ -270,6 +270,8 @@ export interface User {
   lastName?: string;
   isAdmin?: boolean;
   isAgent?: boolean;
+  role?: string;
+  agentVerified?: boolean;
   profileImageUrl?: string;
 }
 
