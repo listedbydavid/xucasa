@@ -1,0 +1,94 @@
+I'm returning after a hiatus and need a complete status report. Please run everything below and show me the full untruncated output of each step. Do not change anything.
+
+1. Recent git history:
+
+bash
+git log --oneline -15
+
+2. What tasks are currently active, in progress, or queued:
+List every task that is not yet complete with its status.
+
+3. Health checks:
+
+bash
+# TypeScript
+npx tsc --noEmit 2>&1 | grep "error TS" | wc -l
+
+# Tests
+for f in artifacts/api-server/src/__tests__/*.test.ts server/__tests__/*.test.ts; do
+  [ -f "$f" ] && echo "--- $f ---" && npx tsx "$f" 2>&1 | tail -3
+done
+
+# Server smoke tests
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/properties?limit=1"
+curl -s -o /dev/null -w "%{http_code} " -X POST "http://localhost:5000/api/buyer-interest"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/admin/stats"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/vendors"
+curl -s -o /dev/null -w "%{http_code} " "http://localhost:5000/api/agents/search?q=david"
+
+Expected: 200 401 401 200 401
+
+4. Check which key files exist:
+
+bash
+# Web app pages
+ls client/src/pages/CreateListing.tsx \
+   client/src/pages/EditListing.tsx \
+   client/src/pages/Vendors.tsx \
+   client/src/pages/Partners.tsx 2>&1
+
+# Web app components
+ls client/src/components/SendListingModal.tsx \
+   client/src/components/FindAgentModal.tsx \
+   client/src/components/AppDownloadBanner.tsx \
+   client/src/components/ImportContactsModal.tsx 2>&1
+
+# Mobile app
+ls artifacts/xucasa-mobile/app/\(tabs\)/index.tsx \
+   artifacts/xucasa-mobile/app/auth.tsx \
+   artifacts/xucasa-mobile/eas.json \
+   artifacts/xucasa-mobile/app.json 2>&1
+
+# Key backend files
+ls artifacts/api-server/src/routes/vendors.ts \
+   artifacts/api-server/src/routes/agent.ts 2>&1
+
+5. Show current eas.json and app.json:
+
+bash
+cat artifacts/xucasa-mobile/eas.json
+cat artifacts/xucasa-mobile/app.json
+
+6. Check database tables:
+
+sql
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+ORDER BY table_name;
+
+7. Check if EXPO_PUBLIC_API_URL is configured:
+
+bash
+echo "EXPO_PUBLIC_API_URL = ${EXPO_PUBLIC_API_URL:-NOT SET}"
+
+8. Show the mobile app route structure:
+
+bash
+find artifacts/xucasa-mobile/app -name "*.tsx" | sort
+
+9. Check GitHub sync status:
+
+bash
+git remote -v | grep github
+git log --oneline -3
+git status
+
+10. Summarize in plain English:
+
+What was the last thing completed before the hiatus?
+What is currently unfinished or in progress?
+What are the top 3 things that should be done next based on the current state of the codebase?
+Is the EAS build configured and ready to run once an Expo token is provided?
+
+Show everything. Do not truncate. Do not change anything.

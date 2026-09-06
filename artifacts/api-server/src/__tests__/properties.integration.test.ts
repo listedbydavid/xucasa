@@ -16,6 +16,12 @@ const USER_IDS = Object.values(IDS);
 let baseUrl = "";
 let server: ReturnType<typeof createServer>;
 let listingId = 0;
+const TEST_TIMEOUT = { timeout: 30_000 };
+const runnerTimeout = setTimeout(() => {
+  console.error("properties.integration.test.ts exceeded the 30-second runner timeout");
+  process.exit(1);
+}, TEST_TIMEOUT.timeout);
+runnerTimeout.unref();
 
 async function cleanup() {
   const profiles = await db.select({ id: buyerProfiles.id }).from(buyerProfiles).where(inArray(buyerProfiles.userId, USER_IDS));
@@ -126,7 +132,7 @@ before(async () => {
   const address = server.address();
   assert.ok(address && typeof address !== "string");
   baseUrl = `http://127.0.0.1:${address.port}`;
-});
+}, TEST_TIMEOUT);
 
 after(async () => {
   if (server) {
@@ -137,9 +143,9 @@ after(async () => {
   }
   await cleanup();
   await pool.end();
-});
+}, TEST_TIMEOUT);
 
-test("manual listing creation requires a verified agent", async () => {
+test("manual listing creation requires a verified agent", TEST_TIMEOUT, async () => {
   const result = await jsonRequest("/api/properties", {
     method: "POST",
     userId: IDS.unverified,
@@ -148,7 +154,7 @@ test("manual listing creation requires a verified agent", async () => {
   assert.equal(result.status, 403);
 });
 
-test("owner draft is private, confidential, and publishable as coming soon", async () => {
+test("owner draft is private, confidential, and publishable as coming soon", TEST_TIMEOUT, async () => {
   const created = await jsonRequest("/api/properties", {
     method: "POST",
     userId: IDS.owner,
@@ -313,7 +319,7 @@ test("owner draft is private, confidential, and publishable as coming soon", asy
   await db.delete(buyerProfiles).where(eq(buyerProfiles.id, buyerProfile.id));
 });
 
-test("owner can upload, validate order, and remove an optimized photo", async () => {
+test("owner can upload, validate order, and remove an optimized photo", TEST_TIMEOUT, async () => {
   const madePrivate = await jsonRequest(`/api/properties/${listingId}`, {
     method: "PUT",
     userId: IDS.owner,
@@ -375,7 +381,7 @@ test("owner can upload, validate order, and remove an optimized photo", async ()
   assert.deepEqual(removed.body.photos, []);
 });
 
-test("public listing questions are accepted and rate limited", async () => {
+test("public listing questions are accepted and rate limited", TEST_TIMEOUT, async () => {
   const statuses: number[] = [];
   for (let index = 0; index < 9; index++) {
     const result = await jsonRequest(`/api/properties/${listingId}/question-inquiry`, {
@@ -392,7 +398,7 @@ test("public listing questions are accepted and rate limited", async () => {
   assert.equal(statuses[8], 429);
 });
 
-test("owner can delete a manual listing", async () => {
+test("owner can delete a manual listing", TEST_TIMEOUT, async () => {
   const denied = await jsonRequest(`/api/properties/${listingId}`, { method: "DELETE", userId: IDS.other });
   assert.equal(denied.status, 403);
 
