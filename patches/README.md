@@ -26,6 +26,11 @@ permitted parameter encoding remain valid.
 Run `pnpm --filter @workspace/scripts test:dependency-security`.
 The regression tests resolve packages through the actual Expo/Metro consumers.
 They check normal behavior and the advisory's malformed input cases.
+RSA tests use a low-exponent key, matching the signature-forgery advisory.
+They also verify that actual consumer paths contain the patch hashes recorded in
+the lockfile. If this check fails after a checkout or task merge, run
+`pnpm install --frozen-lockfile` before starting the app; existing `node_modules`
+may still contain unpatched copies even when the committed lockfile is correct.
 
 Version-only dependency scanners still report these two upstream versions:
 local patches do not change their published version numbers. These are patched

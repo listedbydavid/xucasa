@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -76,7 +77,8 @@ test("braces guards caller-supplied deep and cyclic ASTs", () => {
   }
 });
 
-const keys = forge.pki.rsa.generateKeyPair({ bits: 1024, e: 0x10001 });
+// The advisory specifically concerns low-exponent RSA keys.
+const keys = forge.pki.rsa.generateKeyPair({ bits: 1024, e: 3 });
 const digest = forge.md.sha256.create().update("security regression");
 const digestBytes = digest.digest().getBytes();
 const { asn1 } = forge;
@@ -126,4 +128,23 @@ test("security patches are registered for fresh and frozen installs", () => {
   const workspace = readFileSync(new URL("../../pnpm-workspace.yaml", import.meta.url), "utf8");
   assert.match(workspace, /braces@3\.0\.3: patches\/braces@3\.0\.3\.patch/);
   assert.match(workspace, /node-forge@1\.4\.0: patches\/node-forge@1\.4\.0\.patch/);
+});
+
+test("actual consumers load the exact security patches recorded in the lockfile", () => {
+  const lockfile = readFileSync(new URL("../../pnpm-lock.yaml", import.meta.url), "utf8");
+  for (const [name, version, consumer] of [
+    ["braces", "3.0.3", micromatchRequire],
+    ["node-forge", "1.4.0", cliRequire],
+  ]) {
+    const patch = readFileSync(new URL(
+      `../../patches/${name}@${version}.patch`, import.meta.url,
+    ));
+    const hash = createHash("sha256").update(patch).digest("hex");
+    const entry = `${name}@${version}:\n    hash: ${hash}\n    path: patches/${name}@${version}.patch`;
+    assert.ok(lockfile.includes(entry), `${name}: lockfile must match patch contents`);
+    assert.ok(
+      consumer.resolve(name).includes(`${name}@${version}_patch_hash=${hash}/`),
+      `${name}: consumer must load the patched copy, not a stale installation`,
+    );
+  }
 });
