@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Platform,
   Pressable,
   StyleSheet,
@@ -21,7 +22,7 @@ import {
   useSyncOwnAgentPublicProfileFromMls,
   useUpdateOwnAgentPublicProfile,
 } from '@workspace/api-client-react';
-import type { AgentPublicProfileUpdate, OwnAgentPublicProfile } from '@workspace/api-client-react';
+import type { AgentProfile, AgentPublicProfileUpdate, OwnAgentPublicProfile } from '@workspace/api-client-react';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useAuth } from '@/contexts/AuthContext';
 import { useColors } from '@/hooks/useColors';
@@ -87,6 +88,113 @@ function initialForm(profile: OwnAgentPublicProfile): AgentPublicProfileUpdate {
   };
 }
 
+function currentPublicPreview(profile: OwnAgentPublicProfile, form: AgentPublicProfileUpdate): AgentProfile {
+  const base = profile.resolvedPreview;
+  const value = (
+    override: StringField,
+    mls: keyof OwnAgentPublicProfile,
+    fallback: string | null | undefined,
+  ) => {
+    const correction = form[override];
+    if (typeof correction === 'string' && correction.trim()) return correction.trim();
+    const verified = profile[mls];
+    return typeof verified === 'string' && verified.trim() ? verified : fallback ?? null;
+  };
+  const visible = (flag: VisibilityField, next: string | null) => form[flag] === false ? null : next;
+
+  return {
+    ...base,
+    displayName: value('displayNameOverride', 'mlsDisplayName', base.displayName),
+    profileImageUrl: value('profileImageUrlOverride', 'mlsProfileImageUrl', base.profileImageUrl),
+    email: visible('showEmail', value('emailOverride', 'mlsEmail', base.email)),
+    phone: visible('showPhone', value('phoneOverride', 'mlsPhone', base.phone)),
+    website: visible('showWebsite', value('websiteOverride', 'mlsWebsite', base.website)),
+    brokerageName: visible('showBrokerageName', value('brokerageNameOverride', 'mlsBrokerageName', base.brokerageName)),
+    brokerageAddress: visible('showBrokerageAddress', value('brokerageAddressOverride', 'mlsBrokerageAddress', base.brokerageAddress)),
+    brokerageWebsite: visible('showBrokerageWebsite', value('brokerageWebsiteOverride', 'mlsBrokerageWebsite', base.brokerageWebsite)),
+    licenseNumber: visible('showLicense', value('licenseOverride', 'mlsLicense', base.licenseNumber)),
+    licenseState: form.showLicense === false ? null : base.licenseState,
+    brokerageLicense: visible('showBrokerageLicense', value('brokerageLicenseOverride', 'mlsBrokerageLicense', base.brokerageLicense)),
+    bio: form.bio?.trim() || null,
+  };
+}
+
+function PublicOutputPreview({ agent }: { agent: AgentProfile }) {
+  const colors = useColors();
+  const details = [
+    agent.licenseNumber || agent.licenseState
+      ? { label: 'Agent license', value: [agent.licenseNumber, agent.licenseState].filter(Boolean).join(' · ') }
+      : null,
+    agent.brokerageLicense ? { label: 'Brokerage license', value: agent.brokerageLicense } : null,
+    agent.brokerageAddress ? { label: 'Office address', value: agent.brokerageAddress } : null,
+    agent.brokerageWebsite ? { label: 'Brokerage website', value: agent.brokerageWebsite } : null,
+  ].filter((detail): detail is { label: string; value: string } => detail !== null);
+
+  return (
+    <View testID="own-agent-profile-preview" style={[styles.previewCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.previewLabelRow}>
+        <View style={[styles.previewIcon, { backgroundColor: colors.secondary }]}>
+          <Ionicons name="eye-outline" size={17} color={colors.primary} />
+        </View>
+        <View style={styles.previewLabelText}>
+          <Text style={[styles.previewTitle, { color: colors.foreground }]}>Public output</Text>
+          <Text style={[styles.previewHint, { color: colors.mutedForeground }]}>Live preview · changes are not saved yet</Text>
+        </View>
+      </View>
+
+      <View style={[styles.previewProfile, { borderTopColor: colors.border }]}>
+        {agent.profileImageUrl ? (
+          <Image source={{ uri: agent.profileImageUrl }} style={styles.previewAvatar} />
+        ) : (
+          <View style={[styles.previewAvatar, styles.previewAvatarFallback, { backgroundColor: colors.muted }]}>
+            <Text style={[styles.previewInitial, { color: colors.mutedForeground }]}>{agent.displayName?.charAt(0).toUpperCase() || 'A'}</Text>
+          </View>
+        )}
+        <Text style={[styles.previewName, { color: colors.foreground }]}>{agent.displayName || 'Agent'}</Text>
+        {agent.brokerageName ? <Text style={[styles.previewBrokerage, { color: colors.mutedForeground }]}>{agent.brokerageName}</Text> : null}
+
+        {(agent.email || agent.phone || agent.website) ? (
+          <View style={styles.previewContacts}>
+            {agent.email ? <PreviewContact icon="mail-outline" value={agent.email} /> : null}
+            {agent.phone ? <PreviewContact icon="call-outline" value={agent.phone} /> : null}
+            {agent.website ? <PreviewContact icon="globe-outline" value="Website" /> : null}
+          </View>
+        ) : (
+          <Text style={[styles.previewEmpty, { color: colors.mutedForeground }]}>No public contact details</Text>
+        )}
+
+        {details.length ? (
+          <View style={[styles.previewDetails, { borderTopColor: colors.border }]}>
+            <Text style={[styles.previewSectionTitle, { color: colors.foreground }]}>Professional details</Text>
+            {details.map((detail) => (
+              <View key={detail.label} style={styles.previewDetail}>
+                <Text style={[styles.previewDetailLabel, { color: colors.mutedForeground }]}>{detail.label}</Text>
+                <Text style={[styles.previewDetailValue, { color: colors.foreground }]}>{detail.value}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        {agent.bio ? (
+          <View style={[styles.previewDetails, { borderTopColor: colors.border }]}>
+            <Text style={[styles.previewSectionTitle, { color: colors.foreground }]}>About</Text>
+            <Text style={[styles.previewBio, { color: colors.mutedForeground }]}>{agent.bio}</Text>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function PreviewContact({ icon, value }: { icon: keyof typeof Ionicons.glyphMap; value: string }) {
+  const colors = useColors();
+  return (
+    <View style={[styles.previewContact, { borderColor: colors.border, backgroundColor: colors.background }]}>
+      <Ionicons name={icon} size={16} color={colors.primary} />
+      <Text style={[styles.previewContactText, { color: colors.foreground }]} numberOfLines={1}>{value}</Text>
+    </View>
+  );
+}
+
 function Editor({ profile }: { profile: OwnAgentPublicProfile }) {
   const colors = useColors();
   const router = useRouter();
@@ -141,6 +249,7 @@ function Editor({ profile }: { profile: OwnAgentPublicProfile }) {
 
   const topInset = Platform.OS === 'web' ? 67 : insets.top;
   const bottomInset = Platform.OS === 'web' ? 34 : insets.bottom;
+  const preview = currentPublicPreview(profile, form);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -204,6 +313,8 @@ function Editor({ profile }: { profile: OwnAgentPublicProfile }) {
         </View>
         <FormSection title="Contact details" fields={CONTACT_FIELDS} profile={profile} form={form} setForm={setForm} />
         <FormSection title="Brokerage information" fields={BROKERAGE_FIELDS} profile={profile} form={form} setForm={setForm} />
+
+        <PublicOutputPreview agent={preview} />
 
         <Pressable
           testID="own-agent-profile-save"
@@ -370,6 +481,28 @@ const styles = StyleSheet.create({
   bioInput: { minHeight: 120, borderWidth: 1, borderRadius: 12, padding: 12, fontFamily: 'DMSans_400Regular', fontSize: 14 },
   reset: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 9 },
   resetText: { fontFamily: 'DMSans_700Bold', fontSize: 12 },
+  previewCard: { marginTop: 30, borderWidth: 1, borderRadius: 18, overflow: 'hidden' },
+  previewLabelRow: { padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  previewIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  previewLabelText: { flex: 1 },
+  previewTitle: { fontFamily: 'Outfit_700Bold', fontSize: 18 },
+  previewHint: { fontFamily: 'DMSans_400Regular', fontSize: 11, marginTop: 1 },
+  previewProfile: { borderTopWidth: StyleSheet.hairlineWidth, alignItems: 'center', padding: 18 },
+  previewAvatar: { width: 78, height: 78, borderRadius: 39 },
+  previewAvatarFallback: { alignItems: 'center', justifyContent: 'center' },
+  previewInitial: { fontFamily: 'Outfit_700Bold', fontSize: 30 },
+  previewName: { fontFamily: 'Outfit_700Bold', fontSize: 24, textAlign: 'center', marginTop: 11 },
+  previewBrokerage: { fontFamily: 'DMSans_500Medium', fontSize: 14, textAlign: 'center', marginTop: 2 },
+  previewContacts: { width: '100%', gap: 7, marginTop: 15 },
+  previewContact: { height: 40, borderWidth: 1, borderRadius: 11, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  previewContactText: { flex: 1, fontFamily: 'DMSans_500Medium', fontSize: 13 },
+  previewEmpty: { fontFamily: 'DMSans_400Regular', fontSize: 12, marginTop: 15 },
+  previewDetails: { width: '100%', borderTopWidth: StyleSheet.hairlineWidth, marginTop: 18, paddingTop: 15 },
+  previewSectionTitle: { fontFamily: 'Outfit_700Bold', fontSize: 17, marginBottom: 5 },
+  previewDetail: { paddingTop: 8 },
+  previewDetailLabel: { fontFamily: 'DMSans_500Medium', fontSize: 10, textTransform: 'uppercase' },
+  previewDetailValue: { fontFamily: 'DMSans_500Medium', fontSize: 14, marginTop: 2 },
+  previewBio: { fontFamily: 'DMSans_400Regular', fontSize: 14, lineHeight: 20 },
   saveButton: { minHeight: 48, borderRadius: 24, paddingHorizontal: 24, marginTop: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   saveText: { fontFamily: 'DMSans_700Bold', fontSize: 15 },
   gateTitle: { fontFamily: 'Outfit_700Bold', fontSize: 22, textAlign: 'center' },
