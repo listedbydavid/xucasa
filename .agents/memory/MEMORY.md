@@ -4,3 +4,4 @@
 - [Agent relationship authority](agent-relationship-authority.md) — buyer assignment is authoritative; client-link rows are projections, never authorization.
 - [Agent profile data authority](agent-profile-data-authority.md) — MLS snapshots, agent corrections, and visibility controls remain separate layers.
 - [Private listing visibility](private-listing-visibility.md) — draft privacy applies to every property-derived route and asset, not only listing detail/search.
+- [Dependency audit limits](dependency-audit-limits.md) — version-only scans include archived locks and still flag locally patched upstream versions.
