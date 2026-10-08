@@ -16,9 +16,7 @@
     },
     "production": {
       "autoIncrement": true,
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://www.xucasa.com"
-      },
+      "environment": "production",
       "ios": {
         "buildConfiguration": "Release"
       }
